@@ -223,6 +223,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jclass connect_info_class = E->GetObjectClass(env, connect_info_obj);
 	jboolean ps5 = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "ps5", "Z"));
 	jboolean decoder_low_latency = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLowLatencyEnabled", "Z"));
+	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
 	jbyteArray morning_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "morning", "[B"));
@@ -231,6 +232,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 
 	ChiakiConnectInfo connect_info = { 0 };
 	connect_info.ps5 = ps5;
+	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 
 	const char *str_borrow = E->GetStringUTFChars(env, host_string, NULL);
 	connect_info.host = host_str = strdup(str_borrow);
