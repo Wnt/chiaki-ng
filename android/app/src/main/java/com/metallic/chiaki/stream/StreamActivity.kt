@@ -207,7 +207,12 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onDestroy()
 		controlsJob?.cancel()
-		debandRenderer?.release()
+		debandRenderer?.let { renderer ->
+			// GL teardown must happen on the GL thread, while the context is current
+			binding.debandSurfaceView.queueEvent { renderer.releaseGl() }
+			renderer.release()
+		}
+		debandRenderer = null
 	}
 
 	private fun reconnect()

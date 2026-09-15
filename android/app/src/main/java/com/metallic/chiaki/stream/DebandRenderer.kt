@@ -351,13 +351,35 @@ class DebandRenderer(
         frameAvailable = true
     }
 
+    /**
+     * Releases the SurfaceTexture and its Surface. Safe to call from any thread.
+     */
     fun release() {
         surface?.release()
+        surface = null
         surfaceTexture?.release()
-        if (copyProgram != 0) GLES30.glDeleteProgram(copyProgram)
-        if (effectProgram != 0) GLES30.glDeleteProgram(effectProgram)
+        surfaceTexture = null
+    }
+
+    /**
+     * Deletes the GL objects. MUST run on the GLSurfaceView's GL thread with a
+     * current EGL context -- call it via GLSurfaceView.queueEvent, never directly
+     * from the main thread, where these calls have no current context and fail.
+     */
+    fun releaseGl() {
+        if (copyProgram != 0) {
+            GLES30.glDeleteProgram(copyProgram)
+            copyProgram = 0
+        }
+        if (effectProgram != 0) {
+            GLES30.glDeleteProgram(effectProgram)
+            effectProgram = 0
+        }
         GLES30.glDeleteTextures(2, intArrayOf(oesTextureId, fboTextureId), 0)
         GLES30.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+        oesTextureId = 0
+        fboTextureId = 0
+        fboId = 0
     }
 
     private fun createProgram(vertexSource: String, fragmentSource: String): Int {
