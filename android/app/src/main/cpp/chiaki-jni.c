@@ -161,6 +161,12 @@ typedef struct android_chiaki_session_t
 	void *audio_output;
 } AndroidChiakiSession;
 
+static ChiakiErrorCode android_chiaki_video_decoder_request_idr(void *user)
+{
+	AndroidChiakiSession *session = user;
+	return chiaki_session_request_idr(&session->session);
+}
+
 static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 {
 	AndroidChiakiSession *session = user;
@@ -223,6 +229,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jclass connect_info_class = E->GetObjectClass(env, connect_info_obj);
 	jboolean ps5 = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "ps5", "Z"));
 	jboolean decoder_low_latency = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLowLatencyEnabled", "Z"));
+	jboolean decoder_late_frame_recovery = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLateFrameRecoveryEnabled", "Z"));
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
 		E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
@@ -289,14 +296,13 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	session->log = log;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
-			decoder_low_latency, real_video_timestamps);
+			decoder_low_latency, real_video_timestamps, decoder_late_frame_recovery);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
 		session = NULL;
 		goto beach;
 	}
-
 	err = android_chiaki_audio_decoder_init(&session->audio_decoder, log);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
@@ -321,6 +327,8 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 		session = NULL;
 		goto beach;
 	}
+	android_chiaki_video_decoder_set_request_idr_cb(&session->video_decoder,
+			android_chiaki_video_decoder_request_idr, session);
 
 	session->java_session = E->NewGlobalRef(env, java_session);
 	session->java_session_class = E->NewGlobalRef(env, E->GetObjectClass(env, session->java_session));
