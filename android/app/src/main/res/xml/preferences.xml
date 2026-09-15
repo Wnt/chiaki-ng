@@ -40,6 +40,13 @@
             app:icon="@drawable/ic_gamepad" />
 
         <SwitchPreference
+            app:key="preferences_coalesce_touch_redraw_enabled"
+            app:title="Coalesce touch control redraws"
+            app:summary="Redraw the stick/touchpad overlay at most once per vsync and request unbuffered touch dispatch (experimental)"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_gamepad" />
+
+        <SwitchPreference
             app:key="@string/preferences_motion_enabled_key"
             app:title="@string/preferences_motion_enabled_title"
             app:summary="@string/preferences_motion_enabled_summary"

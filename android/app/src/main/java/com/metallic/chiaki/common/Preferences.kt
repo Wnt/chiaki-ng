@@ -139,6 +139,14 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(touchscreenTouchpadEnabledKey, value).apply() }
 
+	// PLE-12: coalesce touch-controls redraws to once per vsync via postInvalidateOnAnimation,
+	// and request unbuffered input dispatch, instead of invalidating on every touch sample.
+	// Default false preserves today's per-sample invalidate() behaviour.
+	val coalesceTouchRedrawEnabledKey get() = "preferences_coalesce_touch_redraw_enabled"
+	var coalesceTouchRedrawEnabled
+		get() = sharedPreferences.getBoolean(coalesceTouchRedrawEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(coalesceTouchRedrawEnabledKey, value).apply() }
+
 	// Mapping Keys
 	fun getMappingKey(buttonName: String) = "mapping_$buttonName"
 	
