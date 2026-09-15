@@ -29,6 +29,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.buttonHapticEnabledKey -> preferences.buttonHapticEnabled
 		preferences.debandingEnabledKey -> preferences.debandingEnabled
 		preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled
+		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
@@ -46,6 +47,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.buttonHapticEnabledKey -> preferences.buttonHapticEnabled = value
 			preferences.debandingEnabledKey -> preferences.debandingEnabled = value
 			preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled = value
+			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value

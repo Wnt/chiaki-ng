@@ -2,6 +2,8 @@ package com.metallic.chiaki.session
 
 import android.content.Context
 import android.hardware.*
+import android.os.Handler
+import android.os.Looper
 import android.view.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
@@ -12,15 +14,28 @@ import com.metallic.chiaki.lib.ControllerState
 
 class StreamInput(val context: Context, val preferences: Preferences)
 {
+	companion object
+	{
+		private const val FRAME_FALLBACK_DELAY_MS = 16L
+	}
+
 	var controllerStateChangedCallback: ((ControllerState) -> Unit)? = null
+	private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+	private var displayRotation = currentDisplayRotation()
+	private val coalesceControllerInput = preferences.controllerInputCoalescingEnabled
+	private val mainHandler = Handler(Looper.getMainLooper())
+	private var controllerStateDirty = false
+	private var controllerStateFlushScheduled = false
+	private var frameCallbacksRunning = false
+
+	private val frameCallback = Choreographer.FrameCallback { flushControllerState() }
+	private val frameFallback = Runnable { flushControllerState() }
 
 	val controllerState: ControllerState get()
 	{
 		val controllerState = sensorControllerState or keyControllerState or motionControllerState
 
-		val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-		@Suppress("DEPRECATION")
-		when(windowManager.defaultDisplay.rotation)
+		when(displayRotation)
 		{
 			Surface.ROTATION_90 -> {
 				controllerState.accelX *= -1.0f
@@ -109,14 +124,74 @@ class StreamInput(val context: Context, val preferences: Preferences)
 		}
 	}
 
+	private val coalescingLifecycleObserver = object: LifecycleObserver {
+		@OnLifecycleEvent(Lifecycle.Event.ON_RESUME)
+		fun onResume()
+		{
+			frameCallbacksRunning = true
+		}
+
+		@OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+		fun onPause()
+		{
+			frameCallbacksRunning = false
+			if(controllerStateFlushScheduled)
+			{
+				Choreographer.getInstance().removeFrameCallback(frameCallback)
+				mainHandler.postDelayed(frameFallback, FRAME_FALLBACK_DELAY_MS)
+			}
+		}
+	}
+
 	fun observe(lifecycleOwner: LifecycleOwner)
 	{
 		if(preferences.motionEnabled)
 			lifecycleOwner.lifecycle.addObserver(motionLifecycleObserver)
+		if(coalesceControllerInput)
+			lifecycleOwner.lifecycle.addObserver(coalescingLifecycleObserver)
+	}
+
+	@Suppress("DEPRECATION")
+	private fun currentDisplayRotation() = windowManager.defaultDisplay.rotation
+
+	fun refreshDisplayRotation()
+	{
+		displayRotation = currentDisplayRotation()
 	}
 
 	private fun controllerStateUpdated()
 	{
+		if(!coalesceControllerInput)
+		{
+			controllerStateChangedCallback?.let { it(controllerState) }
+			return
+		}
+
+		controllerStateDirty = true
+		if(Looper.myLooper() == Looper.getMainLooper())
+			scheduleControllerStateFlush()
+		else
+			mainHandler.post { scheduleControllerStateFlush() }
+	}
+
+	private fun scheduleControllerStateFlush()
+	{
+		if(controllerStateFlushScheduled)
+			return
+		controllerStateFlushScheduled = true
+		if(frameCallbacksRunning)
+			Choreographer.getInstance().postFrameCallback(frameCallback)
+		else
+			mainHandler.postDelayed(frameFallback, FRAME_FALLBACK_DELAY_MS)
+	}
+
+	private fun flushControllerState()
+	{
+		mainHandler.removeCallbacks(frameFallback)
+		controllerStateFlushScheduled = false
+		if(!controllerStateDirty)
+			return
+		controllerStateDirty = false
 		controllerStateChangedCallback?.let { it(controllerState) }
 	}
 

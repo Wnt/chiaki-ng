@@ -5,10 +5,13 @@ package com.metallic.chiaki.touchcontrols
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.AttributeSet
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import com.metallic.chiaki.R
+import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.lib.ControllerState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +77,9 @@ class TouchpadView @JvmOverloads constructor(
 
 	private var buttonHeld = false
 
+	private val coalesceRedraw = Preferences(context).coalesceTouchRedrawEnabled
+	private var redrawPending = false
+
 	init
 	{
 		context.theme.obtainStyledAttributes(attrs, R.styleable.TouchpadView, 0, 0).apply {
@@ -84,8 +90,23 @@ class TouchpadView @JvmOverloads constructor(
 		isClickable = true
 	}
 
+	private fun requestRedraw()
+	{
+		if(!coalesceRedraw)
+		{
+			invalidate()
+			return
+		}
+		if(!redrawPending)
+		{
+			redrawPending = true
+			postInvalidateOnAnimation()
+		}
+	}
+
 	override fun onDraw(canvas: Canvas)
 	{
+		redrawPending = false
 		super.onDraw(canvas)
 		if(pointerTouches.values.find { !it.lifted } == null)
 			return
@@ -107,6 +128,8 @@ class TouchpadView @JvmOverloads constructor(
 		when(event.actionMasked)
 		{
 			MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+				if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+					requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_POINTER)
 				state.startTouch(touchX(event, event.actionIndex), touchY(event, event.actionIndex))?.let {
 					haptics.trigger()
 					val touch = Touch(it, event.getX(event.actionIndex), event.getY(event.actionIndex))
@@ -161,7 +184,7 @@ class TouchpadView @JvmOverloads constructor(
 
 	private fun triggerStateChanged()
 	{
-		invalidate()
+		requestRedraw()
 		_controllerState.value = state.copy()
 	}
 }

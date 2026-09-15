@@ -5,6 +5,7 @@ package com.metallic.chiaki.stream
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.AlertDialog
+import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.opengl.GLSurfaceView
@@ -259,6 +260,12 @@ class StreamActivity : AppCompatActivity()
 			binding.debandSurfaceView.onPause()
 		}
 		viewModel.session.pause()
+	}
+
+	override fun onConfigurationChanged(newConfig: Configuration)
+	{
+		super.onConfigurationChanged(newConfig)
+		viewModel.input.refreshDisplayRotation()
 	}
 
 	override fun onDestroy()
