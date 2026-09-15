@@ -9,6 +9,7 @@ import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.opengl.GLSurfaceView
 import android.os.*
+import android.util.Log
 import android.view.*
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlin.math.abs
 import kotlin.math.min
 
 private sealed class DialogContents
@@ -55,6 +57,7 @@ class StreamActivity : AppCompatActivity()
 	private lateinit var viewModel: StreamViewModel
 	private lateinit var binding: ActivityStreamBinding
 	private lateinit var insetsController: WindowInsetsControllerCompat
+	private var originalPreferredDisplayModeId: Int? = null
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -79,6 +82,7 @@ class StreamActivity : AppCompatActivity()
 		setContentView(binding.root)
 
 		WindowCompat.setDecorFitsSystemWindows(window, false)
+		configureDisplayRefreshRate(Preferences(this).displayRefreshRateMode, connectInfo.videoProfile.maxFPS.toFloat())
 		insetsController = WindowCompat.getInsetsController(window, window.decorView)
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
@@ -167,8 +171,53 @@ class StreamActivity : AppCompatActivity()
 			// Straight to SurfaceView, no shader stage
 			binding.surfaceView.visibility = View.VISIBLE
 			binding.debandSurfaceView.visibility = View.GONE
-			viewModel.session.attachToSurfaceView(binding.surfaceView)
+			val frameRate = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+				viewModel.connectInfo.videoProfile.maxFPS.toFloat()
+			else
+				null
+			viewModel.session.attachToSurfaceView(binding.surfaceView, frameRate)
 		}
+	}
+
+	@Suppress("DEPRECATION")
+	private fun configureDisplayRefreshRate(mode: Preferences.DisplayRefreshRateMode, streamFrameRate: Float)
+	{
+		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT)
+			return
+
+		val display = windowManager.defaultDisplay
+		val currentMode = display.mode
+		val modesAtCurrentResolution = display.supportedModes.filter {
+			it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight
+		}
+		val targetMode = when(mode)
+		{
+			Preferences.DisplayRefreshRateMode.MATCH_STREAM -> modesAtCurrentResolution
+				.filter { abs(it.refreshRate - streamFrameRate) < 0.5f }
+				.minByOrNull { abs(it.refreshRate - streamFrameRate) }
+			Preferences.DisplayRefreshRateMode.HIGHEST -> modesAtCurrentResolution.maxByOrNull { it.refreshRate }
+			Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT -> null
+		}
+		if(targetMode == null)
+		{
+			Log.w("StreamActivity", "No display mode for $mode at ${currentMode.physicalWidth}x${currentMode.physicalHeight}")
+			return
+		}
+
+		val attributes = window.attributes
+		originalPreferredDisplayModeId = attributes.preferredDisplayModeId
+		attributes.preferredDisplayModeId = targetMode.modeId
+		window.attributes = attributes
+		Log.i("StreamActivity", "Requested display mode ${targetMode.modeId}: ${targetMode.physicalWidth}x${targetMode.physicalHeight}@${targetMode.refreshRate}")
+	}
+
+	private fun restoreDisplayRefreshRate()
+	{
+		val modeId = originalPreferredDisplayModeId ?: return
+		val attributes = window.attributes
+		attributes.preferredDisplayModeId = modeId
+		window.attributes = attributes
+		originalPreferredDisplayModeId = null
 	}
 
 	override fun onAttachFragment(fragment: Fragment)
@@ -205,6 +254,7 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		restoreDisplayRefreshRate()
 		super.onDestroy()
 		controlsJob?.cancel()
 		debandRenderer?.let { renderer ->

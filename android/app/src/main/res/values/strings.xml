@@ -80,6 +80,7 @@
     <string name="preferences_registered_hosts_summary">Currently registered: %d</string>
     <string name="preferences_resolution_title">Resolution</string>
     <string name="preferences_fps_title">FPS</string>
+    <string name="preferences_display_refresh_rate_title">Display refresh rate</string>
     <string name="preferences_bitrate_title">Bitrate</string>
     <string name="preferences_codec_title">Codec</string>
     <string name="preferences_log_verbose_title">Verbose Logging</string>
@@ -90,6 +91,9 @@
     <string name="preferences_resolution_title_1080p">1080p</string>
     <string name="preferences_fps_title_30">30</string>
     <string name="preferences_fps_title_60">60</string>
+    <string name="preferences_display_refresh_rate_title_system_default">System default</string>
+    <string name="preferences_display_refresh_rate_title_match_stream">Match stream rate</string>
+    <string name="preferences_display_refresh_rate_title_highest">Highest refresh rate</string>
     <string name="preferences_bitrate_auto">Auto (%d)</string>
     <string name="preferences_codec_title_h264">H264</string>
     <string name="preferences_codec_title_h265">H265 (PS5 only)</string>
@@ -129,6 +133,7 @@
     <string name="preferences_swap_cross_moon_key">swap_cross_moon</string>
     <string name="preferences_resolution_key">stream_resolution</string>
     <string name="preferences_fps_key">stream_fps</string>
+    <string name="preferences_display_refresh_rate_key">stream_display_refresh_rate</string>
     <string name="preferences_bitrate_key">stream_bitrate</string>
     <string name="preferences_codec_key">stream_codec</string>
     <string name="preferences_debanding_key">stream_debanding</string>

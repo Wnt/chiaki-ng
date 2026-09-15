@@ -3,6 +3,7 @@
 package com.metallic.chiaki.session
 
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.util.Log
 import android.view.*
 import androidx.lifecycle.LiveData
@@ -94,12 +95,13 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 		}
 	}
 
-	fun attachToSurfaceView(surfaceView: SurfaceView)
+	fun attachToSurfaceView(surfaceView: SurfaceView, frameRate: Float?)
 	{
 		surfaceView.holder.addCallback(object: SurfaceHolder.Callback {
 			override fun surfaceCreated(holder: SurfaceHolder)
 			{
 				val surface = holder.surface
+				applyFrameRate(surface, frameRate)
 				this@StreamSession.surface = surface
 				session?.setSurface(surface)
 			}
@@ -108,6 +110,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 
 			override fun surfaceDestroyed(holder: SurfaceHolder)
 			{
+				clearFrameRate(holder.surface, frameRate)
 				this@StreamSession.surface = null
 				session?.setSurface(null)
 			}
@@ -115,8 +118,51 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 		
 		val surface = surfaceView.holder.surface
 		if (surface?.isValid == true) {
+			applyFrameRate(surface, frameRate)
 			this.surface = surface
 			session?.setSurface(surface)
+		}
+	}
+
+	private fun applyFrameRate(surface: Surface, frameRate: Float?)
+	{
+		if(frameRate == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return
+		try
+		{
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+				surface.setFrameRate(
+					frameRate,
+					Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+					Surface.CHANGE_FRAME_RATE_ALWAYS
+				)
+			else
+				surface.setFrameRate(frameRate, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+		}
+		catch(e: RuntimeException)
+		{
+			Log.w("StreamSession", "Failed to request surface frame rate $frameRate", e)
+		}
+	}
+
+	private fun clearFrameRate(surface: Surface, frameRate: Float?)
+	{
+		if(frameRate == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R)
+			return
+		try
+		{
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+				surface.setFrameRate(
+					0f,
+					Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+					Surface.CHANGE_FRAME_RATE_ALWAYS
+				)
+			else
+				surface.setFrameRate(0f, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+		}
+		catch(e: RuntimeException)
+		{
+			Log.w("StreamSession", "Failed to clear surface frame rate", e)
 		}
 	}
 
