@@ -82,6 +82,8 @@ class StreamActivity : AppCompatActivity()
 		setContentView(binding.root)
 
 		WindowCompat.setDecorFitsSystemWindows(window, false)
+		if(Preferences(this).streamWindowOptimizationsEnabled)
+			configureWindowOptimizations()
 		configureDisplayRefreshRate(Preferences(this).displayRefreshRateMode, connectInfo.videoProfile.maxFPS.toFloat())
 		insetsController = WindowCompat.getInsetsController(window, window.decorView)
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -180,6 +182,16 @@ class StreamActivity : AppCompatActivity()
 	}
 
 	@Suppress("DEPRECATION")
+	private fun configureWindowOptimizations()
+	{
+		val attributes = window.attributes
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+			attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+			attributes.preferMinimalPostProcessing = true
+		window.attributes = attributes
+	}
+
 	private fun configureDisplayRefreshRate(mode: Preferences.DisplayRefreshRateMode, streamFrameRate: Float)
 	{
 		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT)
