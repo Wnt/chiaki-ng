@@ -96,6 +96,13 @@
             app:title="@string/preferences_codec_title"
             app:summary="%s"
             app:icon="@drawable/ic_codec"/>
+
+        <SwitchPreference
+            app:key="@string/preferences_decoder_low_latency_enabled_key"
+            app:title="@string/preferences_decoder_low_latency_enabled_title"
+            app:summary="@string/preferences_decoder_low_latency_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
     </PreferenceCategory>
 
     <PreferenceCategory

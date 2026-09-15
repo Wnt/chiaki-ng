@@ -119,6 +119,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(debandingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(debandingEnabledKey, value).apply() }
 
+	val decoderLowLatencyEnabledKey get() = resources.getString(R.string.preferences_decoder_low_latency_enabled_key)
+	var decoderLowLatencyEnabled
+		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
