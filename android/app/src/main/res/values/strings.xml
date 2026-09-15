@@ -90,6 +90,8 @@
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
     <string name="preferences_packet_loss_max_percent_summary">Cap the packet loss reported to the console every 200ms (0-100). Lower values trade occasional artifacts for a steadier bitrate on lossy Wi-Fi.</string>
     <string name="preferences_packet_loss_max_percent_value">%d%%</string>
+    <string name="preferences_takion_video_packet_reordering_disabled_title">Immediate video packet delivery</string>
+    <string name="preferences_takion_video_packet_reordering_disabled_summary">Bypass the 16 ms network reorder queue and let frame FEC handle missing packets (re-connect required)</string>
     <string name="preferences_controller_input_coalescing_enabled_title">Vsync-paced controller input</string>
     <string name="preferences_controller_input_coalescing_enabled_summary">Merge controller updates into one native call per display frame (applies to the next stream)</string>
     <string name="preferences_feedback_reduced_interval_enabled_title">Reduced feedback interval (experimental)</string>
@@ -152,6 +154,7 @@
     <string name="preferences_real_video_timestamps_key">stream_real_video_timestamps</string>
     <string name="preferences_decoder_low_latency_enabled_key">stream_decoder_low_latency</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
+    <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>
     <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>
     <string name="preferences_debanding_key">stream_debanding</string>
