@@ -40,6 +40,41 @@ CHIAKI_DEFINE_SEQNUM(16, int32_t)
 CHIAKI_DEFINE_SEQNUM(32, int64_t)
 #undef CHIAKI_DEFINE_SEQNUM
 
+/**
+ * State for extending a monotonically increasing 16-bit serial number to a
+ * 64-bit counter. The 16-bit source wraps every 65536 values. Consecutive
+ * inputs may be equal or skip values, but forward gaps must be smaller than
+ * the RFC 1982 half range (32768).
+ */
+typedef struct chiaki_seq_num_16_unwrapper_t
+{
+	ChiakiSeqNum16 previous;
+	uint64_t value;
+	bool initialized;
+} ChiakiSeqNum16Unwrapper;
+
+static inline void chiaki_seq_num_16_unwrapper_init(ChiakiSeqNum16Unwrapper *unwrapper)
+{
+	unwrapper->previous = 0;
+	unwrapper->value = 0;
+	unwrapper->initialized = false;
+}
+
+static inline uint64_t chiaki_seq_num_16_unwrap(ChiakiSeqNum16Unwrapper *unwrapper, ChiakiSeqNum16 value)
+{
+	if(!unwrapper->initialized)
+	{
+		unwrapper->value = value;
+		unwrapper->initialized = true;
+	}
+	else
+	{
+		unwrapper->value += (ChiakiSeqNum16)(value - unwrapper->previous);
+	}
+	unwrapper->previous = value;
+	return unwrapper->value;
+}
+
 #ifdef __cplusplus
 }
 #endif
