@@ -12,18 +12,55 @@
 
 #define INPUT_BUFFER_TIMEOUT_MS 10
 
+#define DECODER_CONFIGURE_TIER_COUNT 4
+
+extern media_status_t AMediaCodec_getName_weak(AMediaCodec *codec, char **out_name)
+		__asm__("AMediaCodec_getName") __attribute__((weak));
+extern void AMediaCodec_releaseName_weak(AMediaCodec *codec, char *name)
+		__asm__("AMediaCodec_releaseName") __attribute__((weak));
+
 static void *android_chiaki_video_decoder_output_thread_func(void *user);
 
-ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height, ChiakiCodec codec)
+ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
+		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled)
 {
 	decoder->log = log;
 	decoder->codec = NULL;
 	decoder->timestamp_cur = 0;
 	decoder->target_width = target_width;
 	decoder->target_height = target_height;
+	decoder->target_fps = target_fps;
 	decoder->target_codec = codec;
+	decoder->low_latency_enabled = low_latency_enabled;
 	decoder->shutdown_output = false;
 	return chiaki_mutex_init(&decoder->codec_mutex, false);
+}
+
+static AMediaFormat *create_decoder_format(const AndroidChiakiVideoDecoder *decoder, const char *mime, int tier, bool qti_decoder)
+{
+	AMediaFormat *format = AMediaFormat_new();
+	if(!format)
+		return NULL;
+
+	AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
+	AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, decoder->target_width);
+	AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, decoder->target_height);
+
+	if(tier <= 2)
+	{
+		AMediaFormat_setInt32(format, "frame-rate", decoder->target_fps);
+		if(qti_decoder)
+			AMediaFormat_setInt32(format, "vendor.qti-ext-dec-picture-order.enable", 1);
+	}
+	if(tier <= 1)
+	{
+		AMediaFormat_setInt32(format, "operating-rate", decoder->target_fps * 4);
+		AMediaFormat_setInt32(format, "priority", 1);
+	}
+	if(tier == 0)
+		AMediaFormat_setInt32(format, "low-latency", 1);
+
+	return format;
 }
 
 static void kill_decoder(AndroidChiakiVideoDecoder *decoder)
@@ -97,21 +134,47 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		goto error_surface;
 	}
 
-	AMediaFormat *format = AMediaFormat_new();
-	AMediaFormat_setString(format, AMEDIAFORMAT_KEY_MIME, mime);
-	AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_WIDTH, decoder->target_width);
-	AMediaFormat_setInt32(format, AMEDIAFORMAT_KEY_HEIGHT, decoder->target_height);
+	char *decoder_name_allocated = NULL;
+	const char *decoder_name = "unknown (API < 28)";
+	if(AMediaCodec_getName_weak && AMediaCodec_releaseName_weak
+			&& AMediaCodec_getName_weak(decoder->codec, &decoder_name_allocated) == AMEDIA_OK
+			&& decoder_name_allocated)
+		decoder_name = decoder_name_allocated;
+	CHIAKI_LOGI(decoder->log, "Video decoder component: %s", decoder_name);
 
-	media_status_t r = AMediaCodec_configure(decoder->codec, format, decoder->window, NULL, 0);
-	if(r != AMEDIA_OK)
+	bool qti_decoder = strncmp(decoder_name, "c2.qti.", strlen("c2.qti.")) == 0;
+	int first_tier = decoder->low_latency_enabled ? 0 : 3;
+	media_status_t r = AMEDIA_ERROR_UNKNOWN;
+	AMediaFormat *format = NULL;
+	int configured_tier = -1;
+	for(int tier = first_tier; tier < DECODER_CONFIGURE_TIER_COUNT; tier++)
 	{
-		CHIAKI_LOGE(decoder->log, "AMediaCodec_configure() failed: %d", (int)r);
+		format = create_decoder_format(decoder, mime, tier, qti_decoder);
+		if(!format)
+			break;
+		r = AMediaCodec_configure(decoder->codec, format, decoder->window, NULL, 0);
 		AMediaFormat_delete(format);
+		format = NULL;
+		if(r == AMEDIA_OK)
+		{
+			configured_tier = tier;
+			break;
+		}
+		CHIAKI_LOGW(decoder->log, "AMediaCodec_configure() tier %d failed for %s: %d", tier, decoder_name, (int)r);
+	}
+	if(configured_tier < 0)
+	{
+		CHIAKI_LOGE(decoder->log, "AMediaCodec_configure() failed for %s after fallback: %d", decoder_name, (int)r);
+		if(decoder_name_allocated)
+			AMediaCodec_releaseName_weak(decoder->codec, decoder_name_allocated);
 		goto error_codec;
 	}
+	CHIAKI_LOGI(decoder->log, "AMediaCodec_configure() succeeded for %s at tier %d%s", decoder_name, configured_tier,
+			decoder->low_latency_enabled ? "" : " (low-latency setting disabled)");
+	if(decoder_name_allocated)
+		AMediaCodec_releaseName_weak(decoder->codec, decoder_name_allocated);
 
 	r = AMediaCodec_start(decoder->codec);
-	AMediaFormat_delete(format);
 	if(r != AMEDIA_OK)
 	{
 		CHIAKI_LOGE(decoder->log, "AMediaCodec_start() failed: %d", (int)r);
