@@ -3,6 +3,7 @@
 
 #include <chiaki/config.h>
 #include <chiaki/log.h>
+#include <chiaki/seqnum.h>
 
 #include <ilclient.h>
 
@@ -27,7 +28,7 @@ typedef struct chiaki_pi_decoder_t
 CHIAKI_EXPORT ChiakiErrorCode chiaki_pi_decoder_init(ChiakiPiDecoder *decoder, ChiakiLog *log);
 CHIAKI_EXPORT void chiaki_pi_decoder_fini(ChiakiPiDecoder *decoder);
 CHIAKI_EXPORT void chiaki_pi_decoder_set_params(ChiakiPiDecoder *decoder, int x, int y, int w, int h, bool visible);
-CHIAKI_EXPORT bool chiaki_pi_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, void *user);
+CHIAKI_EXPORT bool chiaki_pi_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 
 #ifdef __cplusplus
 }

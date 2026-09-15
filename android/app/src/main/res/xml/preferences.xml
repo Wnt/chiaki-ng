@@ -40,6 +40,13 @@
             app:icon="@drawable/ic_gamepad" />
 
         <SwitchPreference
+            app:key="preferences_coalesce_touch_redraw_enabled"
+            app:title="Coalesce touch control redraws"
+            app:summary="Redraw the stick/touchpad overlay at most once per vsync and request unbuffered touch dispatch (experimental)"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_gamepad" />
+
+        <SwitchPreference
             app:key="@string/preferences_motion_enabled_key"
             app:title="@string/preferences_motion_enabled_title"
             app:summary="@string/preferences_motion_enabled_summary"
@@ -98,11 +105,24 @@
             app:icon="@drawable/ic_codec"/>
 
         <SwitchPreference
+            app:key="@string/preferences_real_video_timestamps_key"
+            app:title="@string/preferences_real_video_timestamps_title"
+            app:summary="@string/preferences_real_video_timestamps_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
+
+        <SwitchPreference
             app:key="@string/preferences_decoder_low_latency_enabled_key"
             app:title="@string/preferences_decoder_low_latency_enabled_title"
             app:summary="@string/preferences_decoder_low_latency_enabled_summary"
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
+
+        <EditTextPreference
+            app:key="@string/preferences_packet_loss_max_percent_key"
+            app:title="@string/preferences_packet_loss_max_percent_title"
+            app:summary="@string/preferences_packet_loss_max_percent_summary"
+            app:icon="@drawable/ic_bitrate"/>
 
         <SwitchPreference
             app:key="@string/preferences_controller_input_coalescing_enabled_key"
@@ -183,6 +203,12 @@
             app:key="@string/preferences_debanding_key"
             app:title="@string/preferences_debanding_title"
             app:summary="@string/preferences_debanding_summary"
+            app:icon="@drawable/ic_resolution" />
+        <SwitchPreference
+            app:key="@string/preferences_debanding_render_when_dirty_key"
+            app:title="@string/preferences_debanding_render_when_dirty_title"
+            app:summary="@string/preferences_debanding_render_when_dirty_summary"
+            app:dependency="@string/preferences_debanding_key"
             app:icon="@drawable/ic_resolution" />
     </PreferenceCategory>
 

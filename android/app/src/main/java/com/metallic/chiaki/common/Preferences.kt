@@ -56,6 +56,7 @@ class Preferences(context: Context)
 		val displayRefreshRateModeAll = DisplayRefreshRateMode.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
+		const val packetLossMaxPercentDefault = 5
 	}
 
 	internal val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -119,6 +120,18 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(debandingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(debandingEnabledKey, value).apply() }
 
+	// Default false: keeps today's RENDERMODE_CONTINUOUSLY behavior unless a user opts in,
+	// so the change can be A/B tested rather than silently altering the deband render cadence.
+	val debandRenderWhenDirtyEnabledKey get() = resources.getString(R.string.preferences_debanding_render_when_dirty_key)
+	var debandRenderWhenDirtyEnabled
+		get() = sharedPreferences.getBoolean(debandRenderWhenDirtyEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(debandRenderWhenDirtyEnabledKey, value).apply() }
+
+	val realVideoTimestampsKey get() = resources.getString(R.string.preferences_real_video_timestamps_key)
+	var realVideoTimestamps
+		get() = sharedPreferences.getBoolean(realVideoTimestampsKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(realVideoTimestampsKey, value).apply() }
+
 	val decoderLowLatencyEnabledKey get() = resources.getString(R.string.preferences_decoder_low_latency_enabled_key)
 	var decoderLowLatencyEnabled
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
@@ -138,6 +151,14 @@ class Preferences(context: Context)
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(touchscreenTouchpadEnabledKey, value).apply() }
+
+	// PLE-12: coalesce touch-controls redraws to once per vsync via postInvalidateOnAnimation,
+	// and request unbuffered input dispatch, instead of invalidating on every touch sample.
+	// Default false preserves today's per-sample invalidate() behaviour.
+	val coalesceTouchRedrawEnabledKey get() = "preferences_coalesce_touch_redraw_enabled"
+	var coalesceTouchRedrawEnabled
+		get() = sharedPreferences.getBoolean(coalesceTouchRedrawEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(coalesceTouchRedrawEnabledKey, value).apply() }
 
 	// Mapping Keys
 	fun getMappingKey(buttonName: String) = "mapping_$buttonName"
@@ -237,6 +258,13 @@ class Preferences(context: Context)
 	val bitrateAuto get() = videoProfileDefaultBitrate.bitrate
 	private val _bitrateAutoFlow by lazy { MutableStateFlow(bitrateAuto) }
 	val bitrateAutoFlow: StateFlow<Int> get() = _bitrateAutoFlow.asStateFlow()
+
+	fun validatePacketLossMaxPercent(percent: Int) = max(0, min(100, percent))
+	val packetLossMaxPercentKey get() = resources.getString(R.string.preferences_packet_loss_max_percent_key)
+	var packetLossMaxPercent
+		get() = validatePacketLossMaxPercent(sharedPreferences.getInt(packetLossMaxPercentKey, packetLossMaxPercentDefault))
+		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
+	val packetLossMax get() = packetLossMaxPercent / 100.0
 
 	val codecKey get() = resources.getString(R.string.preferences_codec_key)
 	var codec

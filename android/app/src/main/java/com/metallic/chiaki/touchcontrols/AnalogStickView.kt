@@ -8,10 +8,13 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.AttributeSet
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import com.metallic.chiaki.R
+import com.metallic.chiaki.common.Preferences
 import kotlin.math.abs
 
 class AnalogStickView @JvmOverloads constructor(
@@ -45,6 +48,9 @@ class AnalogStickView @JvmOverloads constructor(
 
 	private val clipBoundsTmp = Rect()
 
+	private val coalesceRedraw = Preferences(context).coalesceTouchRedrawEnabled
+	private var redrawPending = false
+
 	init
 	{
 		context.theme.obtainStyledAttributes(attrs, R.styleable.AnalogStickView, 0, 0).apply {
@@ -56,8 +62,23 @@ class AnalogStickView @JvmOverloads constructor(
 		}
 	}
 
+	private fun requestRedraw()
+	{
+		if(!coalesceRedraw)
+		{
+			invalidate()
+			return
+		}
+		if(!redrawPending)
+		{
+			redrawPending = true
+			postInvalidateOnAnimation()
+		}
+	}
+
 	override fun onDraw(canvas: Canvas)
 	{
+		redrawPending = false
 		super.onDraw(canvas)
 
 		val center = center
@@ -84,7 +105,7 @@ class AnalogStickView @JvmOverloads constructor(
 			center = null
 			state = Vector(0f, 0f)
 			handlePosition = Vector(0f, 0f)
-			invalidate()
+			requestRedraw()
 			return
 		}
 
@@ -111,11 +132,13 @@ class AnalogStickView @JvmOverloads constructor(
 			state = Vector(0f, 0f)
 		}
 
-		invalidate()
+		requestRedraw()
 	}
 
 	override fun onTouchEvent(event: MotionEvent): Boolean
 	{
+		if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+			requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_POINTER)
 		touchTracker.touchEvent(event)
 		return true
 	}
