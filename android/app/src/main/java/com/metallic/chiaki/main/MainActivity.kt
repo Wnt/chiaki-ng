@@ -182,7 +182,8 @@ class MainActivity : AppCompatActivity()
 			fun connect() {
 				val preferences = Preferences(this)
 				val connectInfo = ConnectInfo(host.isPS5, host.host, registeredHost.rpRegistKey, registeredHost.rpKey,
-					preferences.videoProfile, preferences.decoderLowLatencyEnabled, preferences.packetLossMax)
+					preferences.videoProfile, preferences.decoderLowLatencyEnabled, preferences.packetLossMax,
+					preferences.takionVideoPacketReorderingDisabled)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
 					startActivity(it)

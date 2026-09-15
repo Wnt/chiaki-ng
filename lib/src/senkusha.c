@@ -156,6 +156,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 	takion_info.disable_audio_video = false;
 	takion_info.enable_dualsense = session->connect_info.enable_dualsense;
 	takion_info.protocol_version = 7;
+	takion_info.disable_video_packet_reordering = false;
 
 	takion_info.cb = senkusha_takion_cb;
 	takion_info.cb_user = senkusha;
