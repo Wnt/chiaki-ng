@@ -21,7 +21,7 @@ class DiscoveryManager;
 static void Discovery(ChiakiDiscoveryHost *, void *);
 static void InitAudioCB(int16_t *buf, size_t buf_size, void *user);
 static void HapticsFrameCb(unsigned int channels, unsigned int rate, void *user);
-static bool VideoCB(uint8_t *buf, size_t buf_size, void *user);
+static bool VideoCB(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 static void AudioCB(int16_t *buf, size_t samples_count, void *user);
 static void EventCB(ChiakiEvent *event, void *user);
 static void RegistEventCB(ChiakiRegistEvent *event, void *user);

@@ -120,15 +120,33 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(debandingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(debandingEnabledKey, value).apply() }
 
+	val realVideoTimestampsKey get() = resources.getString(R.string.preferences_real_video_timestamps_key)
+	var realVideoTimestamps
+		get() = sharedPreferences.getBoolean(realVideoTimestampsKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(realVideoTimestampsKey, value).apply() }
+
 	val decoderLowLatencyEnabledKey get() = resources.getString(R.string.preferences_decoder_low_latency_enabled_key)
 	var decoderLowLatencyEnabled
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
 
+	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
+	var controllerInputCoalescingEnabled
+		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(controllerInputCoalescingEnabledKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(touchscreenTouchpadEnabledKey, value).apply() }
+
+	// PLE-12: coalesce touch-controls redraws to once per vsync via postInvalidateOnAnimation,
+	// and request unbuffered input dispatch, instead of invalidating on every touch sample.
+	// Default false preserves today's per-sample invalidate() behaviour.
+	val coalesceTouchRedrawEnabledKey get() = "preferences_coalesce_touch_redraw_enabled"
+	var coalesceTouchRedrawEnabled
+		get() = sharedPreferences.getBoolean(coalesceTouchRedrawEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(coalesceTouchRedrawEnabledKey, value).apply() }
 
 	// Mapping Keys
 	fun getMappingKey(buttonName: String) = "mapping_$buttonName"

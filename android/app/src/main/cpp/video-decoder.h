@@ -7,6 +7,7 @@
 
 #include <chiaki/thread.h>
 #include <chiaki/log.h>
+#include <chiaki/seqnum.h>
 
 typedef struct AMediaCodec AMediaCodec;
 typedef struct ANativeWindow ANativeWindow;
@@ -18,6 +19,9 @@ typedef struct android_chiaki_video_decoder_t
 	AMediaCodec *codec;
 	ANativeWindow *window;
 	uint64_t timestamp_cur;
+	unsigned int fps;
+	bool real_pts_enabled;
+	ChiakiSeqNum16Unwrapper frame_index_unwrapper;
 	ChiakiThread output_thread;
 	bool shutdown_output;
 	int32_t target_width;
@@ -28,9 +32,9 @@ typedef struct android_chiaki_video_decoder_t
 } AndroidChiakiVideoDecoder;
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
-		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled);
+		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface);
-bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user);
+bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 
 #endif

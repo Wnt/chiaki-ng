@@ -19,7 +19,7 @@ data class StreamStateCreateError(val error: CreateError): StreamState()
 data class StreamStateQuit(val reason: QuitReason, val reasonString: String?): StreamState()
 data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
-class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val input: StreamInput)
+class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean, val input: StreamInput)
 {
 	var session: Session? = null
 		private set
@@ -60,7 +60,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 			return
 		try
 		{
-			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose)
+			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose, realVideoTimestamps)
 			_state.value = StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
