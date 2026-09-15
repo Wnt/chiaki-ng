@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
 #include "chiaki/feedback.h"
+#include <chiaki/config.h>
 #include <chiaki/takion.h>
 #include <chiaki/congestioncontrol.h>
 #include <chiaki/random.h>
@@ -190,6 +191,61 @@ static ChiakiErrorCode takion_recv_message_cookie_ack(ChiakiTakion *takion);
 static void takion_handle_packet_av(ChiakiTakion *takion, uint8_t base_type, uint8_t *buf, size_t buf_size);
 static ChiakiErrorCode takion_read_extra_sock_messages(ChiakiTakion *takion);
 
+#if CHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING
+#define TAKION_TUNED_RCVBUF (1024 * 1024) // >= 1 MB, see PLE-10
+#define TAKION_DSCP_EF 0xb8 // DSCP EF (Expedited Forwarding), already shifted into the IP_TOS/IPV6_TCLASS byte
+
+// Best-effort: raises SO_RCVBUF above the small TAKION_A_RWND-sized kernel buffer and marks
+// outgoing Takion packets with DSCP EF, so a scheduling hiccup on the Takion thread is less
+// likely to drop packets and force FEC recovery. Never fails takion_connect(); only logs.
+static void takion_tune_socket(ChiakiTakion *takion)
+{
+	const int rcvbuf_val = TAKION_TUNED_RCVBUF;
+	int r = setsockopt(takion->sock, SOL_SOCKET, SO_RCVBUF, (const CHIAKI_SOCKET_BUF_TYPE)&rcvbuf_val, sizeof(rcvbuf_val));
+	if(r < 0)
+	{
+		CHIAKI_LOGW(takion->log, "Takion failed to setsockopt SO_RCVBUF to %d: " CHIAKI_SOCKET_ERROR_FMT, rcvbuf_val, CHIAKI_SOCKET_ERROR_VALUE);
+	}
+	else
+	{
+		int effective_rcvbuf = 0;
+		socklen_t effective_rcvbuf_len = sizeof(effective_rcvbuf);
+		if(getsockopt(takion->sock, SOL_SOCKET, SO_RCVBUF, (CHIAKI_SOCKET_BUF_TYPE)&effective_rcvbuf, &effective_rcvbuf_len) == 0)
+		{
+			if(effective_rcvbuf < rcvbuf_val)
+				CHIAKI_LOGW(takion->log, "Takion SO_RCVBUF clamped by kernel to %d bytes (requested %d)", effective_rcvbuf, rcvbuf_val);
+			else
+				CHIAKI_LOGI(takion->log, "Takion effective SO_RCVBUF is %d bytes", effective_rcvbuf);
+		}
+		else
+			CHIAKI_LOGW(takion->log, "Takion failed to getsockopt SO_RCVBUF: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+	}
+
+	struct sockaddr_storage sa;
+	socklen_t sa_len = sizeof(sa);
+	if(getsockname(takion->sock, (struct sockaddr *)&sa, &sa_len) < 0)
+	{
+		CHIAKI_LOGW(takion->log, "Takion failed to getsockname for DSCP marking: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+		return;
+	}
+
+	if(sa.ss_family == AF_INET)
+	{
+		const int tos_val = TAKION_DSCP_EF;
+		if(setsockopt(takion->sock, IPPROTO_IP, IP_TOS, (const CHIAKI_SOCKET_BUF_TYPE)&tos_val, sizeof(tos_val)) < 0)
+			CHIAKI_LOGW(takion->log, "Takion failed to setsockopt IP_TOS: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+	}
+#ifdef IPV6_TCLASS
+	else if(sa.ss_family == AF_INET6)
+	{
+		const int tclass_val = TAKION_DSCP_EF;
+		if(setsockopt(takion->sock, IPPROTO_IPV6, IPV6_TCLASS, (const CHIAKI_SOCKET_BUF_TYPE)&tclass_val, sizeof(tclass_val)) < 0)
+			CHIAKI_LOGW(takion->log, "Takion failed to setsockopt IPV6_TCLASS: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+	}
+#endif
+}
+#endif
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, ChiakiTakionConnectInfo *info, chiaki_socket_t *sock)
 {
 	ChiakiErrorCode ret = CHIAKI_ERR_SUCCESS;
@@ -265,6 +321,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 			ret = CHIAKI_ERR_NETWORK;
 			goto error_sock;
 		}
+#if CHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING
+		takion_tune_socket(takion);
+#endif
 
 #if defined(__APPLE__) && TARGET_OS_OSX
 		SInt32 majorVersion;
@@ -353,6 +412,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 			ret = CHIAKI_ERR_NETWORK;
 			goto error_sock;
 		}
+#if CHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING
+		takion_tune_socket(takion);
+#endif
 		if(info->ip_dontfrag)
 		{
 #if defined(__APPLE__) && TARGET_OS_OSX
