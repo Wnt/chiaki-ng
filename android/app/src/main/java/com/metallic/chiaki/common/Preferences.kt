@@ -142,6 +142,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(threadPriorityBoostEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(threadPriorityBoostEnabledKey, value).apply() }
 
+	val takionVideoPacketReorderingDisabledKey get() = resources.getString(R.string.preferences_takion_video_packet_reordering_disabled_key)
+	var takionVideoPacketReorderingDisabled
+		get() = sharedPreferences.getBoolean(takionVideoPacketReorderingDisabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(takionVideoPacketReorderingDisabledKey, value).apply() }
+
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
@@ -151,6 +156,11 @@ class Preferences(context: Context)
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(touchscreenTouchpadEnabledKey, value).apply() }
+
+	val streamWindowOptimizationsEnabledKey get() = "preferences_stream_window_optimizations_enabled"
+	var streamWindowOptimizationsEnabled
+		get() = sharedPreferences.getBoolean(streamWindowOptimizationsEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(streamWindowOptimizationsEnabledKey, value).apply() }
 
 	// PLE-12: coalesce touch-controls redraws to once per vsync via postInvalidateOnAnimation,
 	// and request unbuffered input dispatch, instead of invalidating on every touch sample.

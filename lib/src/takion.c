@@ -254,6 +254,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->close_socket = info->close_socket;
 	takion->version = info->protocol_version;
 	takion->disable_audio_video = info->disable_audio_video;
+	takion->disable_video_packet_reordering = info->disable_video_packet_reordering;
 
 	switch(takion->version)
 	{
@@ -294,7 +295,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->postponed_packets_count = 0;
 	takion->enable_dualsense = info->enable_dualsense;
 
-	CHIAKI_LOGI(takion->log, "Takion connecting (version %u)", (unsigned int)info->protocol_version);
+	CHIAKI_LOGI(takion->log, "Takion connecting (version %u, video packet reordering %s)",
+		(unsigned int)info->protocol_version,
+		takion->disable_video_packet_reordering ? "disabled" : "enabled");
 	bool mac_dontfrag = true;
 
 	ChiakiErrorCode err = chiaki_stop_pipe_init(&takion->stop_pipe);
@@ -996,6 +999,17 @@ static void takion_av_drop(uint64_t seq_num, void *elem_user, void *cb_user)
 	free(entry);
 }
 
+static void takion_dispatch_av_packet(ChiakiTakion *takion, ChiakiTakionAVPacket *packet)
+{
+	if(!takion->cb)
+		return;
+
+	ChiakiTakionEvent event = { 0 };
+	event.type = CHIAKI_TAKION_EVENT_TYPE_AV;
+	event.av = packet;
+	takion->cb(&event, takion->cb_user);
+}
+
 /**
  * Pull and dispatch all in-order entries from the given AV queue.
  * If the head packet is missing, wait up to TAKION_AV_REORDER_TIMEOUT_US before
@@ -1016,13 +1030,7 @@ static void takion_av_queue_flush_with_timeout(ChiakiTakion *takion, ChiakiReord
 		while(chiaki_reorder_queue_pull(queue, &seq_num, (void **)&entry))
 		{
 			made_progress = true;
-			if(takion->cb)
-			{
-				ChiakiTakionEvent event = { 0 };
-				event.type = CHIAKI_TAKION_EVENT_TYPE_AV;
-				event.av = &entry->packet;
-				takion->cb(&event, takion->cb_user);
-			}
+			takion_dispatch_av_packet(takion, &entry->packet);
 			free(entry->buf);
 			free(entry);
 		}
@@ -1716,15 +1724,9 @@ static void takion_handle_packet_av(ChiakiTakion *takion, uint8_t base_type, uin
 	}
 
 	bool is_video = (base_type == TAKION_PACKET_TYPE_VIDEO);
-	if(!is_video)
+	if(!is_video || takion->disable_video_packet_reordering)
 	{
-		if(takion->cb)
-		{
-			ChiakiTakionEvent event = { 0 };
-			event.type = CHIAKI_TAKION_EVENT_TYPE_AV;
-			event.av = &packet;
-			takion->cb(&event, takion->cb_user);
-		}
+		takion_dispatch_av_packet(takion, &packet);
 		free(buf);
 		return;
 	}
@@ -1742,13 +1744,7 @@ static void takion_handle_packet_av(ChiakiTakion *takion, uint8_t base_type, uin
 		if(chiaki_reorder_queue_init_16(queue, size_exp, queue_begin) != CHIAKI_ERR_SUCCESS)
 		{
 			// Fallback: dispatch immediately without reordering
-			if(takion->cb)
-			{
-				ChiakiTakionEvent event = { 0 };
-				event.type = CHIAKI_TAKION_EVENT_TYPE_AV;
-				event.av = &packet;
-				takion->cb(&event, takion->cb_user);
-			}
+			takion_dispatch_av_packet(takion, &packet);
 			free(buf);
 			return;
 		}
