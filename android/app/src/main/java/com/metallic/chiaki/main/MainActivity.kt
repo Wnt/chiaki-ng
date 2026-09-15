@@ -209,6 +209,8 @@ class MainActivity : AppCompatActivity()
 			Intent(this, RegistActivity::class.java).let {
 				it.putExtra(RegistActivity.EXTRA_HOST, host.host)
 				it.putExtra(RegistActivity.EXTRA_BROADCAST, false)
+				if(Preferences(this).psnSignInEnabled && host is DiscoveredDisplayHost)
+					it.putExtra(RegistActivity.EXTRA_CONSOLE_IS_PS5, host.isPS5)
 				if(host is ManualDisplayHost)
 					it.putExtra(RegistActivity.EXTRA_ASSIGN_MANUAL_HOST_ID, host.manualHost.id)
 				startActivity(it)

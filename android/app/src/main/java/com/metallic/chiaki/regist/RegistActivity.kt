@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import com.metallic.chiaki.R
+import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.RevealActivity
 import com.metallic.chiaki.databinding.ActivityRegistBinding
 import com.metallic.chiaki.lib.RegistInfo
@@ -24,14 +25,19 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		const val EXTRA_HOST = "regist_host"
 		const val EXTRA_BROADCAST = "regist_broadcast"
 		const val EXTRA_ASSIGN_MANUAL_HOST_ID = "assign_manual_host_id"
+		const val EXTRA_CONSOLE_IS_PS5 = "regist_console_is_ps5"
 
 		private const val PIN_LENGTH = 8
 
 		private const val REQUEST_REGIST = 1
+		private const val REQUEST_PSN_LOGIN = 2
 	}
 
 	private lateinit var viewModel: RegistViewModel
 	private lateinit var binding: ActivityRegistBinding
+	private lateinit var preferences: Preferences
+	private var manualAccountIdVisible = false
+	private var currentAccountId: String? = null
 
 	override val revealWindow: Window get() = window
 	override val revealIntent: Intent get() = intent
@@ -45,11 +51,33 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		handleReveal()
 
 		viewModel = ViewModelProvider(this).get(RegistViewModel::class.java)
+		preferences = Preferences(this)
+		if(preferences.psnSignInEnabled && intent.hasExtra(EXTRA_CONSOLE_IS_PS5))
+		{
+			viewModel.ps4Version.value = if(intent.getBooleanExtra(EXTRA_CONSOLE_IS_PS5, false))
+				RegistViewModel.ConsoleVersion.PS5
+			else
+				RegistViewModel.ConsoleVersion.PS4_GE_8
+		}
 
 		binding.hostEditText.setText(intent.getStringExtra(EXTRA_HOST) ?: "255.255.255.255")
 		binding.broadcastCheckBox.isChecked = intent.getBooleanExtra(EXTRA_BROADCAST, true)
 
 		binding.registButton.setOnClickListener { doRegist() }
+		binding.psnSignInButton.setOnClickListener {
+			startActivityForResult(Intent(this, PsnLoginActivity::class.java), REQUEST_PSN_LOGIN)
+		}
+		binding.psnManualEntryButton.setOnClickListener {
+			manualAccountIdVisible = !manualAccountIdVisible
+			updatePsnControls(viewModel.ps4Version.value ?: RegistViewModel.ConsoleVersion.PS5)
+			if(manualAccountIdVisible)
+				binding.psnIdEditText.requestFocus()
+		}
+		if(preferences.psnSignInEnabled)
+		{
+			currentAccountId = preferences.psnAccountId
+			binding.psnIdEditText.setText(currentAccountId)
+		}
 
 		binding.ps4VersionRadioGroup.check(when(viewModel.ps4Version.value ?: RegistViewModel.ConsoleVersion.PS5) {
 			RegistViewModel.ConsoleVersion.PS5 -> R.id.ps5RadioButton
@@ -59,7 +87,8 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		})
 
 		binding.ps4VersionRadioGroup.setOnCheckedChangeListener { _, checkedId ->
-			viewModel.ps4Version.value = when(checkedId)
+			val previousVersion = viewModel.ps4Version.value ?: RegistViewModel.ConsoleVersion.PS5
+			val newVersion = when(checkedId)
 			{
 				R.id.ps5RadioButton -> RegistViewModel.ConsoleVersion.PS5
 				R.id.ps4VersionGE8RadioButton -> RegistViewModel.ConsoleVersion.PS4_GE_8
@@ -67,10 +96,21 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 				R.id.ps4VersionLT7RadioButton -> RegistViewModel.ConsoleVersion.PS4_LT_7
 				else -> RegistViewModel.ConsoleVersion.PS5
 			}
+			if(preferences.psnSignInEnabled)
+			{
+				if(previousVersion == RegistViewModel.ConsoleVersion.PS4_LT_7 && newVersion != RegistViewModel.ConsoleVersion.PS4_LT_7)
+					binding.psnIdEditText.setText(currentAccountId)
+				else if(previousVersion != RegistViewModel.ConsoleVersion.PS4_LT_7 && newVersion == RegistViewModel.ConsoleVersion.PS4_LT_7)
+				{
+					currentAccountId = binding.psnIdEditText.text?.toString()?.takeIf { it.isNotBlank() }
+					binding.psnIdEditText.setText("")
+				}
+			}
+			viewModel.ps4Version.value = newVersion
 		}
 
 		viewModel.ps4Version.observe(this, Observer {
-			binding.psnAccountIdHelpGroup.visibility = if(it == RegistViewModel.ConsoleVersion.PS4_LT_7) View.GONE else View.VISIBLE
+			updatePsnControls(it)
 			binding.psnIdTextInputLayout.hint = getString(when(it!!)
 			{
 				RegistViewModel.ConsoleVersion.PS4_LT_7 -> R.string.hint_regist_psn_online_id
@@ -79,6 +119,20 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 			binding.pinHelpBeforeTextView.setText(if(it.isPS5) R.string.regist_pin_instructions_ps5_before else R.string.regist_pin_instructions_ps4_before)
 			binding.pinHelpNavigationTextView.setText(if(it.isPS5) R.string.regist_pin_instructions_ps5_navigation else R.string.regist_pin_instructions_ps4_navigation)
 		})
+	}
+
+	private fun updatePsnControls(version: RegistViewModel.ConsoleVersion)
+	{
+		val modernConsole = version != RegistViewModel.ConsoleVersion.PS4_LT_7
+		val signInEnabled = preferences.psnSignInEnabled && modernConsole
+		val hasAccountId = !binding.psnIdEditText.text.isNullOrBlank()
+		binding.psnSignInButton.visibility = if(signInEnabled) View.VISIBLE else View.GONE
+		binding.psnManualEntryButton.visibility = if(signInEnabled) View.VISIBLE else View.GONE
+		binding.psnManualEntryButton.setText(if(manualAccountIdVisible) R.string.action_psn_hide_manual else R.string.action_psn_enter_manually)
+		binding.psnAccountIdStatusTextView.visibility = if(signInEnabled && hasAccountId) View.VISIBLE else View.GONE
+		binding.psnAccountIdHelpGroup.visibility = if(modernConsole && (!signInEnabled || manualAccountIdVisible)) View.VISIBLE else View.GONE
+		binding.psnIdTextInputLayout.visibility = if(!modernConsole || !signInEnabled || manualAccountIdVisible || hasAccountId) View.VISIBLE else View.GONE
+		binding.psnIdEditText.isEnabled = !signInEnabled || manualAccountIdVisible
 	}
 
 	private fun doRegist()
@@ -120,6 +174,11 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 
 		if(!hostValid || !psnIdValid || !pinValid)
 			return
+		if(preferences.psnSignInEnabled && psnAccountId != null)
+		{
+			currentAccountId = Base64.encodeToString(psnAccountId, Base64.NO_WRAP)
+			preferences.psnAccountId = currentAccountId
+		}
 
 		val target = when(ps4Version)
 		{
@@ -144,5 +203,13 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		super.onActivityResult(requestCode, resultCode, data)
 		if(requestCode == REQUEST_REGIST && resultCode == RESULT_OK)
 			finish()
+		else if(requestCode == REQUEST_PSN_LOGIN && resultCode == RESULT_OK)
+		{
+			val accountId = data?.getStringExtra(PsnLoginActivity.EXTRA_ACCOUNT_ID) ?: preferences.psnAccountId
+			currentAccountId = accountId
+			binding.psnIdEditText.setText(accountId)
+			manualAccountIdVisible = false
+			updatePsnControls(viewModel.ps4Version.value ?: RegistViewModel.ConsoleVersion.PS5)
+		}
 	}
 }

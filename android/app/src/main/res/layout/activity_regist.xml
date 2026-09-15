@@ -101,11 +101,42 @@
                         android:layout_weight="1"/>
             </RadioGroup>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/psnSignInButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/action_psn_sign_in"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/ps4VersionRadioGroup"
+                style="@style/MageTheme.Button" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/psnAccountIdStatusTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/psn_account_id_saved"
+                android:textAppearance="?attr/textAppearanceBody1"
+                android:visibility="gone"
+                app:layout_constraintTop_toBottomOf="@id/psnSignInButton" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/psnManualEntryButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_psn_enter_manually"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/psnAccountIdStatusTextView" />
+
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/psnAccountIdHelpTextView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:layout_constraintTop_toBottomOf="@id/ps4VersionRadioGroup"
+                app:layout_constraintTop_toBottomOf="@id/psnManualEntryButton"
                 android:text="@string/regist_psn_account_id_help"
                 android:gravity="center_horizontal"
                 android:textAppearance="?attr/textAppearanceBody1"
