@@ -71,7 +71,8 @@ data class ConnectInfo(
 	val morning: ByteArray,
 	val videoProfile: ConnectVideoProfile,
 	val decoderLowLatencyEnabled: Boolean,
-	val packetLossMax: Double
+	val packetLossMax: Double,
+	val takionVideoPacketReorderingDisabled: Boolean
 ): Parcelable
 
 private class ChiakiNative

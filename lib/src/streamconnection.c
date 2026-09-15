@@ -166,6 +166,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	takion_info.enable_crypt = true;
 	takion_info.enable_dualsense = session->connect_info.enable_dualsense;
 	takion_info.protocol_version = chiaki_target_is_ps5(session->target) ? 12 : 9;
+	takion_info.disable_video_packet_reordering = session->connect_info.disable_video_packet_reordering;
 
 	takion_info.cb = stream_connection_takion_cb;
 	takion_info.cb_user = stream_connection;
