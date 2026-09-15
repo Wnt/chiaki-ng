@@ -236,7 +236,10 @@ CHIAKI_EXPORT void chiaki_pi_decoder_set_params(ChiakiPiDecoder *decoder, int x,
 		CHIAKI_LOGE(decoder->log, "OMX_SetParameter failed for display params");
 }
 
-CHIAKI_EXPORT bool chiaki_pi_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, void *user)
+CHIAKI_EXPORT bool chiaki_pi_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user)
 {
+	(void)frame_index;
+	(void)frames_lost;
+	(void)frame_recovered;
 	return push_buffer(user, buf, buf_size);
 }

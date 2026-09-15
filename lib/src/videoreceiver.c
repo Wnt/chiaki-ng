@@ -138,7 +138,7 @@ CHIAKI_EXPORT void chiaki_video_receiver_av_packet(ChiakiVideoReceiver *video_re
 		ChiakiVideoProfile *profile = video_receiver->profiles + video_receiver->profile_cur;
 		CHIAKI_LOGI(video_receiver->log, "Switched to profile %d, resolution: %ux%u", video_receiver->profile_cur, profile->width, profile->height);
 		if(video_receiver->session->video_sample_cb)
-			video_receiver->session->video_sample_cb(profile->header, profile->header_sz, 0, false, video_receiver->session->video_sample_cb_user);
+			video_receiver->session->video_sample_cb(profile->header, profile->header_sz, frame_index, 0, false, video_receiver->session->video_sample_cb_user);
 		if(!chiaki_bitstream_header(&video_receiver->bitstream, profile->header, profile->header_sz))
 			CHIAKI_LOGW(video_receiver->log, "Failed to parse video header");
 	}
@@ -294,7 +294,7 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 
 	if(succ && video_receiver->session->video_sample_cb)
 	{
-		bool cb_succ = video_receiver->session->video_sample_cb(frame, frame_size, video_receiver->frames_lost, recovered, video_receiver->session->video_sample_cb_user);
+		bool cb_succ = video_receiver->session->video_sample_cb(frame, frame_size, (ChiakiSeqNum16)video_receiver->frame_index_cur, video_receiver->frames_lost, recovered, video_receiver->session->video_sample_cb_user);
 		chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
 		video_receiver->frames_lost = 0;
 		chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);

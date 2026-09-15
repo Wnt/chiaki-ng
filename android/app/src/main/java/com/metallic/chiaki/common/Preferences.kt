@@ -119,6 +119,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(debandingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(debandingEnabledKey, value).apply() }
 
+	val realVideoTimestampsKey get() = resources.getString(R.string.preferences_real_video_timestamps_key)
+	var realVideoTimestamps
+		get() = sharedPreferences.getBoolean(realVideoTimestampsKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(realVideoTimestampsKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
