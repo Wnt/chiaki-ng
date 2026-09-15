@@ -223,6 +223,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jclass connect_info_class = E->GetObjectClass(env, connect_info_obj);
 	jboolean ps5 = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "ps5", "Z"));
 	jboolean decoder_low_latency = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLowLatencyEnabled", "Z"));
+	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
 	jbyteArray morning_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "morning", "[B"));
@@ -272,6 +273,8 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	connect_info.video_profile.codec = (ChiakiCodec)target_value;
 
 	connect_info.video_profile_auto_downgrade = true;
+	connect_info.packet_loss_max = (double)packet_loss_max;
+	CHIAKI_LOGI(log, "Configured packet loss reported max: %.1f%%", connect_info.packet_loss_max * 100.0);
 
 	session = CHIAKI_NEW(AndroidChiakiSession);
 	if(!session)

@@ -60,6 +60,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.fpsKey -> preferences.fps.value
 		key == preferences.displayRefreshRateModeKey -> preferences.displayRefreshRateMode.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
+		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.codecKey -> preferences.codec.value
 		key.startsWith("mapping_") -> preferences.sharedPreferences.getString(key, defValue)
 		else -> defValue
@@ -85,6 +86,10 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 				preferences.displayRefreshRateMode = mode
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
+			key == preferences.packetLossMaxPercentKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.packetLossMaxPercent = it }
+			}
 			key == preferences.codecKey ->
 			{
 				val codec = Preferences.Codec.values().firstOrNull { it.value == value } ?: return
@@ -146,6 +151,17 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		viewModel.bitrateAuto.observe(this, Observer {
 			bitratePreference?.summaryProvider = bitrateSummaryProvider
 		})
+
+		val packetLossMaxPercentPreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_packet_loss_max_percent_key))
+		packetLossMaxPercentPreference?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_packet_loss_max_percent_value, preferences.packetLossMaxPercent)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.packetLossMaxPercent.toString())
+			}
+		}
 
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_codec_key))?.let {
 			it.entryValues = Preferences.codecAll.map { codec -> codec.value }.toTypedArray()
