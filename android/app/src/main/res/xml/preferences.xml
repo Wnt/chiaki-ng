@@ -170,6 +170,12 @@
             app:title="@string/preferences_debanding_title"
             app:summary="@string/preferences_debanding_summary"
             app:icon="@drawable/ic_resolution" />
+        <SwitchPreference
+            app:key="@string/preferences_debanding_render_when_dirty_key"
+            app:title="@string/preferences_debanding_render_when_dirty_title"
+            app:summary="@string/preferences_debanding_render_when_dirty_summary"
+            app:dependency="@string/preferences_debanding_key"
+            app:icon="@drawable/ic_resolution" />
     </PreferenceCategory>
 
     <PreferenceCategory
