@@ -21,7 +21,8 @@ import kotlin.random.Random
  * with a GLSL debanding effect.
  */
 class DebandRenderer(
-    private val onSurfaceReady: (Surface) -> Unit
+    private val onSurfaceReady: (Surface) -> Unit,
+    private val onRequestRender: () -> Unit = {}
 ) : GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
     companion object {
@@ -349,6 +350,7 @@ class DebandRenderer(
 
     override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
         frameAvailable = true
+        onRequestRender()
     }
 
     /**

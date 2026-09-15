@@ -120,6 +120,13 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(debandingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(debandingEnabledKey, value).apply() }
 
+	// Default false: keeps today's RENDERMODE_CONTINUOUSLY behavior unless a user opts in,
+	// so the change can be A/B tested rather than silently altering the deband render cadence.
+	val debandRenderWhenDirtyEnabledKey get() = resources.getString(R.string.preferences_debanding_render_when_dirty_key)
+	var debandRenderWhenDirtyEnabled
+		get() = sharedPreferences.getBoolean(debandRenderWhenDirtyEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(debandRenderWhenDirtyEnabledKey, value).apply() }
+
 	val realVideoTimestampsKey get() = resources.getString(R.string.preferences_real_video_timestamps_key)
 	var realVideoTimestamps
 		get() = sharedPreferences.getBoolean(realVideoTimestampsKey, false)

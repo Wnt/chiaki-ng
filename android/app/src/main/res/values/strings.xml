@@ -107,7 +107,9 @@
     <string name="preferences_codec_title_h264">H264</string>
     <string name="preferences_codec_title_h265">H265 (PS5 only)</string>
     <string name="preferences_debanding_title">Debanding</string>
-    <string name="preferences_debanding_summary">Apply GLSL shader to reduce color banding in video (re-connect required)</string>
+    <string name="preferences_debanding_summary">Apply GLSL shader to reduce color banding in video (re-connect required). Debanding forfeits the direct decoder-to-display path and adds one GPU copy, increasing latency.</string>
+    <string name="preferences_debanding_render_when_dirty_title">Render only on new frame</string>
+    <string name="preferences_debanding_render_when_dirty_summary">Redraw the debanding shader only when a new decoded frame arrives instead of every display refresh, reducing GPU load and power use.</string>
     <string name="preferences_psn_sign_in_enabled_title">PSN Sign-In Registration</string>
     <string name="preferences_psn_sign_in_enabled_summary">Use the in-app PSN sign-in and prefill discovered console details</string>
     <string name="preferences_swap_cross_moon_title">Swap Cross/Moon and Box/Pyramid Buttons</string>
@@ -150,6 +152,7 @@
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>
     <string name="preferences_debanding_key">stream_debanding</string>
+    <string name="preferences_debanding_render_when_dirty_key">stream_debanding_render_when_dirty</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
 </resources>

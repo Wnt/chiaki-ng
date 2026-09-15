@@ -156,16 +156,22 @@ class StreamActivity : AppCompatActivity()
 			binding.surfaceView.visibility = View.GONE
 			binding.debandSurfaceView.visibility = View.VISIBLE
 
-			debandRenderer = DebandRenderer { surface ->
-				viewModel.session.attachToSurface(surface)
-			}
+			debandRenderer = DebandRenderer(
+				onSurfaceReady = { surface -> viewModel.session.attachToSurface(surface) },
+				onRequestRender = { binding.debandSurfaceView.requestRender() }
+			)
 
 			binding.debandSurfaceView.setEGLContextClientVersion(3)
 			binding.debandSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
 			binding.debandSurfaceView.holder.setFormat(PixelFormat.RGBA_8888)
 			binding.debandSurfaceView.setRenderer(debandRenderer)
 			debandRenderer?.sharpness = prefs.sharpnessIntensity
-			binding.debandSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+			// Default (flag off) keeps continuous rendering; the flag lets an A/B test measure
+			// GPU/power savings from rendering only when the decoder delivers a new frame.
+			binding.debandSurfaceView.renderMode = if(prefs.debandRenderWhenDirtyEnabled)
+				GLSurfaceView.RENDERMODE_WHEN_DIRTY
+			else
+				GLSurfaceView.RENDERMODE_CONTINUOUSLY
 		}
 		else
 		{
@@ -240,6 +246,9 @@ class StreamActivity : AppCompatActivity()
 		hideSystemUI()
 		if (Preferences(this).debandingEnabled) {
 			binding.debandSurfaceView.onResume()
+			// In RENDERMODE_WHEN_DIRTY, onResume() alone won't redraw the last frame; force one
+			// so the surface isn't left blank until the next decoded frame arrives.
+			binding.debandSurfaceView.requestRender()
 		}
 		viewModel.session.resume()
 	}
