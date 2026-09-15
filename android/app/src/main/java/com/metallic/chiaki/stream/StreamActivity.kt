@@ -6,6 +6,8 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.AlertDialog
 import android.graphics.Matrix
+import android.graphics.PixelFormat
+import android.opengl.GLSurfaceView
 import android.os.*
 import android.view.*
 import android.widget.EditText
@@ -30,8 +32,9 @@ import com.metallic.chiaki.lib.ConnectVideoProfile
 import com.metallic.chiaki.session.*
 import com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment
 import com.metallic.chiaki.touchcontrols.TouchControlsFragment
-import com.metallic.chiaki.touchcontrols.TouchpadOnlyFragment
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlin.math.min
@@ -91,32 +94,29 @@ class StreamActivity : AppCompatActivity()
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
 			if(binding.onScreenControlsSwitch.isChecked != it)
 				binding.onScreenControlsSwitch.isChecked = it
-			if(binding.onScreenControlsSwitch.isChecked)
-				binding.touchpadOnlySwitch.isChecked = false
 		})
 		binding.onScreenControlsSwitch.setOnCheckedChangeListener { _, isChecked ->
 			viewModel.setOnScreenControlsEnabled(isChecked)
 			showOverlay()
 		}
 
-		viewModel.touchpadOnlyEnabled.observe(this, Observer {
-			if(binding.touchpadOnlySwitch.isChecked != it)
-				binding.touchpadOnlySwitch.isChecked = it
-			if(binding.touchpadOnlySwitch.isChecked)
-				binding.onScreenControlsSwitch.isChecked = false
-		})
-		binding.touchpadOnlySwitch.setOnCheckedChangeListener { _, isChecked ->
-			viewModel.setTouchpadOnlyEnabled(isChecked)
-			showOverlay()
-		}
 
 		binding.displayModeToggle.addOnButtonCheckedListener { _, _, _ ->
 			adjustStreamViewAspect()
 			showOverlay()
 		}
 
-		//viewModel.session.attachToTextureView(textureView)
-		viewModel.session.attachToSurfaceView(binding.surfaceView)
+// Setup video output based on debanding preference
+		setupVideoOutput()
+		
+		val prefs = Preferences(this)
+		if (prefs.touchscreenTouchpadEnabled) {
+			binding.streamTouchpadView.visibility = View.VISIBLE
+			binding.streamTouchpadView.controllerState
+				.onEach { streamTouchpadState.value = it }
+				.launchIn(lifecycleScope)
+		}
+
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
 		adjustStreamViewAspect()
 
@@ -137,6 +137,39 @@ class StreamActivity : AppCompatActivity()
 	}
 
 	private var controlsJob: Job? = null
+	private var debandRenderer: DebandRenderer? = null
+	private val streamTouchpadState = MutableStateFlow(com.metallic.chiaki.lib.ControllerState())
+
+	private fun setupVideoOutput()
+	{
+		val prefs = Preferences(this)
+		viewModel.session.detachSurface()
+
+		if(prefs.debandingEnabled)
+		{
+			// Decode into a SurfaceTexture consumed by the deband/RCAS GL renderer
+			binding.surfaceView.visibility = View.GONE
+			binding.debandSurfaceView.visibility = View.VISIBLE
+
+			debandRenderer = DebandRenderer { surface ->
+				viewModel.session.attachToSurface(surface)
+			}
+
+			binding.debandSurfaceView.setEGLContextClientVersion(3)
+			binding.debandSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+			binding.debandSurfaceView.holder.setFormat(PixelFormat.RGBA_8888)
+			binding.debandSurfaceView.setRenderer(debandRenderer)
+			debandRenderer?.sharpness = prefs.sharpnessIntensity
+			binding.debandSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+		}
+		else
+		{
+			// Straight to SurfaceView, no shader stage
+			binding.surfaceView.visibility = View.VISIBLE
+			binding.debandSurfaceView.visibility = View.GONE
+			viewModel.session.attachToSurfaceView(binding.surfaceView)
+		}
+	}
 
 	override fun onAttachFragment(fragment: Fragment)
 	{
@@ -144,12 +177,10 @@ class StreamActivity : AppCompatActivity()
 		if(fragment is TouchControlsFragment)
 		{
 			controlsJob?.cancel()
-			controlsJob = fragment.controllerState
+			controlsJob = combine(fragment.controllerState, streamTouchpadState) { a, b -> a or b }
 				.onEach { viewModel.input.touchControllerState = it }
 				.launchIn(lifecycleScope)
 			fragment.onScreenControlsEnabled = viewModel.onScreenControlsEnabled
-			if(fragment is TouchpadOnlyFragment)
-				fragment.touchpadOnlyEnabled = viewModel.touchpadOnlyEnabled
 		}
 	}
 
@@ -157,12 +188,18 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onResume()
 		hideSystemUI()
+		if (Preferences(this).debandingEnabled) {
+			binding.debandSurfaceView.onResume()
+		}
 		viewModel.session.resume()
 	}
 
 	override fun onPause()
 	{
 		super.onPause()
+		if (Preferences(this).debandingEnabled) {
+			binding.debandSurfaceView.onPause()
+		}
 		viewModel.session.pause()
 	}
 
@@ -170,6 +207,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onDestroy()
 		controlsJob?.cancel()
+		debandRenderer?.release()
 	}
 
 	private fun reconnect()
