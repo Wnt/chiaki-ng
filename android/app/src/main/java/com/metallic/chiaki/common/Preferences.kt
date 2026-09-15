@@ -64,6 +64,16 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(discoveryEnabledKey, true)
 		set(value) { sharedPreferences.edit().putBoolean(discoveryEnabledKey, value).apply() }
 
+	val psnSignInEnabledKey get() = resources.getString(R.string.preferences_psn_sign_in_enabled_key)
+	var psnSignInEnabled
+		get() = sharedPreferences.getBoolean(psnSignInEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(psnSignInEnabledKey, value).apply() }
+
+	private val psnAccountIdKey get() = resources.getString(R.string.preferences_psn_account_id_key)
+	var psnAccountId: String?
+		get() = sharedPreferences.getString(psnAccountIdKey, null)
+		set(value) { sharedPreferences.edit().putString(psnAccountIdKey, value).apply() }
+
 	val onScreenControlsEnabledKey get() = resources.getString(R.string.preferences_on_screen_controls_enabled_key)
 	var onScreenControlsEnabled
 		get() = sharedPreferences.getBoolean(onScreenControlsEnabledKey, true)

@@ -34,7 +34,7 @@
     <string name="regist_option_ps4_ge_8">PS4 ≥ 8.0</string>
     <string name="regist_option_ps5">PS5</string>
     <string name="regist_psn_account_id_help">About obtaining your Account ID, see</string>
-    <string name="regist_psn_account_id_help_url">https://git.sr.ht/~thestr4ng3r/chiaki/tree/master/item/README.md#obtaining-your-psn-accountid</string>
+    <string name="regist_psn_account_id_help_url">https://streetpea.github.io/chiaki-ng/setup/configuration/#registering-your-playstation</string>
     <string name="hint_regist_psn_online_id">PSN Online ID (username, case-sensitive)</string>
     <string name="hint_regist_psn_account_id">PSN Account ID (8 bytes, base64)</string>
     <string name="hint_regist_pin">PIN</string>
@@ -42,6 +42,13 @@
     <string name="entered_host_invalid">Please enter a valid host name</string>
     <string name="regist_psn_online_id_invalid">Please enter a valid PSN ID</string>
     <string name="regist_psn_account_id_invalid">Please enter a valid 8-byte Account ID in Base64</string>
+    <string name="action_psn_sign_in">Sign in with PSN</string>
+    <string name="action_psn_enter_manually">Enter account ID manually</string>
+    <string name="action_psn_hide_manual">Hide manual entry</string>
+    <string name="psn_account_id_saved">PSN account ID saved</string>
+    <string name="psn_login_failed">PSN sign-in failed</string>
+    <string name="psn_login_redirect_invalid">Sony returned an invalid sign-in redirect</string>
+    <string name="action_retry">Retry</string>
     <string name="regist_pin_invalid">Please enter a valid %d-digit PIN</string>
     <string name="action_share_log">Share Log</string>
     <string name="action_export_settings">Export Settings</string>
@@ -88,6 +95,8 @@
     <string name="preferences_codec_title_h265">H265 (PS5 only)</string>
     <string name="preferences_debanding_title">Debanding</string>
     <string name="preferences_debanding_summary">Apply GLSL shader to reduce color banding in video (re-connect required)</string>
+    <string name="preferences_psn_sign_in_enabled_title">PSN Sign-In Registration</string>
+    <string name="preferences_psn_sign_in_enabled_summary">Use the in-app PSN sign-in and prefill discovered console details</string>
     <string name="preferences_swap_cross_moon_title">Swap Cross/Moon and Box/Pyramid Buttons</string>
     <string name="preferences_swap_cross_moon_summary">Swap face buttons if default mapping is incorrect (e.g. for 8BitDo controllers)</string>
     <string name="preferences_rumble_enabled_title">Rumble</string>
@@ -123,4 +132,6 @@
     <string name="preferences_bitrate_key">stream_bitrate</string>
     <string name="preferences_codec_key">stream_codec</string>
     <string name="preferences_debanding_key">stream_debanding</string>
+    <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
+    <string name="preferences_psn_account_id_key">psn_account_id</string>
 </resources>
