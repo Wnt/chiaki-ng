@@ -206,7 +206,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 	(*global_vm)->DetachCurrentThread(global_vm);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result, jobject connect_info_obj, jstring log_file_str, jboolean log_verbose, jobject java_session)
+JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result, jobject connect_info_obj, jstring log_file_str, jboolean log_verbose, jboolean real_video_timestamps, jobject java_session)
 {
 	AndroidChiakiSession *session = NULL;
 	ChiakiLog *log = malloc(sizeof(ChiakiLog));
@@ -282,7 +282,8 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	memset(session, 0, sizeof(AndroidChiakiSession));
 	session->log = log;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
-			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264, decoder_low_latency);
+			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
+			decoder_low_latency, real_video_timestamps);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);

@@ -118,7 +118,7 @@ class IO
 		~IO();
 		bool isFirst = true;
 		void SetMesaConfig();
-		bool VideoCB(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user);
+		bool VideoCB(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 		void InitAudioCB(unsigned int channels, unsigned int rate);
 		void AudioCB(int16_t *buf, size_t samples_count);
 		bool InitVideo(int video_width, int video_height, int screen_width, int screen_height);

@@ -205,9 +205,10 @@ void IO::DumpProgramError(GLuint prog, const char *func, const char *file, int l
 	}
 #endif
 
-bool IO::VideoCB(uint8_t *buf, size_t buf_size, int32_t frames_lost, bool frame_recovered, void *user)
+bool IO::VideoCB(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user)
 {
 	// callback function to decode video buffer
+	(void)frame_index;
 
 	AVPacket* packet = av_packet_alloc();
 	packet->data = buf;

@@ -98,6 +98,13 @@
             app:icon="@drawable/ic_codec"/>
 
         <SwitchPreference
+            app:key="@string/preferences_real_video_timestamps_key"
+            app:title="@string/preferences_real_video_timestamps_title"
+            app:summary="@string/preferences_real_video_timestamps_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
+
+        <SwitchPreference
             app:key="@string/preferences_decoder_low_latency_enabled_key"
             app:title="@string/preferences_decoder_low_latency_enabled_title"
             app:summary="@string/preferences_decoder_low_latency_enabled_summary"
