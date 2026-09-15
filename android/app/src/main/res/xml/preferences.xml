@@ -118,6 +118,13 @@
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_decoder_input_thread_enabled_key"
+			app:title="@string/preferences_decoder_input_thread_enabled_title"
+			app:summary="@string/preferences_decoder_input_thread_enabled_summary"
+			app:defaultValue="false"
+			app:icon="@drawable/ic_fps" />
+
         <EditTextPreference
             app:key="@string/preferences_packet_loss_max_percent_key"
             app:title="@string/preferences_packet_loss_max_percent_title"

@@ -206,7 +206,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 	(*global_vm)->DetachCurrentThread(global_vm);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result, jobject connect_info_obj, jstring log_file_str, jboolean log_verbose, jboolean real_video_timestamps, jobject java_session)
+JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result, jobject connect_info_obj, jstring log_file_str, jboolean log_verbose, jboolean real_video_timestamps, jboolean decoder_input_thread, jobject java_session)
 {
 	AndroidChiakiSession *session = NULL;
 	ChiakiLog *log = malloc(sizeof(ChiakiLog));
@@ -286,7 +286,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	session->log = log;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
-			decoder_low_latency, real_video_timestamps);
+			decoder_low_latency, real_video_timestamps, decoder_input_thread);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -413,6 +413,17 @@ JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlon
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
 	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface);
+}
+
+JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj, jlong ptr)
+{
+	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
+	AndroidChiakiVideoStats stats;
+	android_chiaki_video_decoder_get_stats(&session->video_decoder, &stats);
+
+	jclass stats_class = E->FindClass(env, BASE_PACKAGE"/VideoStats");
+	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(J)V");
+	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetControllerState)(JNIEnv *env, jobject obj, jlong ptr, jobject controller_state_java)

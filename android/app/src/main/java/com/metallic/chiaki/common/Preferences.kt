@@ -137,6 +137,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
 
+	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
+	var decoderInputThreadEnabled
+		get() = sharedPreferences.getBoolean(decoderInputThreadEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(decoderInputThreadEnabledKey, value).apply() }
+
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)

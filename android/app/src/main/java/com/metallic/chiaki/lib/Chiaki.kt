@@ -74,6 +74,10 @@ data class ConnectInfo(
 	val packetLossMax: Double
 ): Parcelable
 
+data class VideoStats(
+	val decoderInputFramesDropped: Long
+)
+
 private class ChiakiNative
 {
 	data class CreateResult(var errorCode: Int, var ptr: Long)
@@ -87,12 +91,13 @@ private class ChiakiNative
 		@JvmStatic external fun quitReasonToString(value: Int): String
 		@JvmStatic external fun quitReasonIsError(value: Int): Boolean
 		@JvmStatic external fun videoProfilePreset(resolutionPreset: Int, fpsPreset: Int, codec: Codec): ConnectVideoProfile
-		@JvmStatic external fun sessionCreate(result: CreateResult, connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean, javaSession: Session)
+		@JvmStatic external fun sessionCreate(result: CreateResult, connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean, decoderInputThread: Boolean, javaSession: Session)
 		@JvmStatic external fun sessionFree(ptr: Long)
 		@JvmStatic external fun sessionStart(ptr: Long): Int
 		@JvmStatic external fun sessionStop(ptr: Long): Int
 		@JvmStatic external fun sessionJoin(ptr: Long): Int
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?)
+		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
 		@JvmStatic external fun sessionSetLoginPin(ptr: Long, pin: String)
 		@JvmStatic external fun discoveryServiceCreate(result: CreateResult, options: DiscoveryServiceOptions, javaService: DiscoveryService)
@@ -322,7 +327,7 @@ data class RumbleEvent(val left: UByte, val right: UByte): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
-class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean = false)
+class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean = false, decoderInputThread: Boolean = false)
 {
 	interface EventCallback
 	{
@@ -335,7 +340,7 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	init
 	{
 		val result = ChiakiNative.CreateResult(0, 0)
-		ChiakiNative.sessionCreate(result, connectInfo, logFile, logVerbose, realVideoTimestamps, this)
+		ChiakiNative.sessionCreate(result, connectInfo, logFile, logVerbose, realVideoTimestamps, decoderInputThread, this)
 		val errorCode = ErrorCode(result.errorCode)
 		if(!errorCode.isSuccess)
 			throw CreateError(errorCode)
@@ -383,6 +388,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	{
 		ChiakiNative.sessionSetSurface(nativePtr, surface)
 	}
+
+	fun getVideoStats() = ChiakiNative.sessionGetVideoStats(nativePtr)
 
 	fun setControllerState(controllerState: ControllerState)
 	{
