@@ -83,6 +83,8 @@
     <string name="preferences_display_refresh_rate_title">Display refresh rate</string>
     <string name="preferences_bitrate_title">Bitrate</string>
     <string name="preferences_codec_title">Codec</string>
+    <string name="preferences_decoder_low_latency_enabled_title">Low-latency decoder</string>
+    <string name="preferences_decoder_low_latency_enabled_summary">Request reduced decoder buffering and fall back automatically if unsupported (re-connect required)</string>
     <string name="preferences_log_verbose_title">Verbose Logging</string>
     <string name="preferences_log_verbose_summary">Warning: This logs a LOT! Don\'t enable for regular use.</string>
     <string name="preferences_resolution_title_360p">360p</string>
@@ -136,6 +138,7 @@
     <string name="preferences_display_refresh_rate_key">stream_display_refresh_rate</string>
     <string name="preferences_bitrate_key">stream_bitrate</string>
     <string name="preferences_codec_key">stream_codec</string>
+    <string name="preferences_decoder_low_latency_enabled_key">stream_decoder_low_latency</string>
     <string name="preferences_debanding_key">stream_debanding</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
