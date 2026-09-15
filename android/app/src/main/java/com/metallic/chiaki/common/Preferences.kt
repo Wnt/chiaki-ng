@@ -33,6 +33,13 @@ class Preferences(context: Context)
 		FPS_60("60", R.string.preferences_fps_title_60, VideoFPSPreset.FPS_60)
 	}
 
+	enum class DisplayRefreshRateMode(val value: String, @StringRes val title: Int)
+	{
+		SYSTEM_DEFAULT("system_default", R.string.preferences_display_refresh_rate_title_system_default),
+		MATCH_STREAM("match_stream", R.string.preferences_display_refresh_rate_title_match_stream),
+		HIGHEST("highest", R.string.preferences_display_refresh_rate_title_highest)
+	}
+
 	enum class Codec(val value: String, @StringRes val title: Int, val codec: com.metallic.chiaki.lib.Codec)
 	{
 		CODEC_H264("h264", R.string.preferences_codec_title_h264, com.metallic.chiaki.lib.Codec.CODEC_H264),
@@ -45,6 +52,8 @@ class Preferences(context: Context)
 		val resolutionAll = Resolution.values()
 		val fpsDefault = FPS.FPS_60
 		val fpsAll = FPS.values()
+		val displayRefreshRateModeDefault = DisplayRefreshRateMode.SYSTEM_DEFAULT
+		val displayRefreshRateModeAll = DisplayRefreshRateMode.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 	}
@@ -197,6 +206,13 @@ class Preferences(context: Context)
 			FPS.values().firstOrNull { it.value == value }
 		}  ?: fpsDefault
 		set(value) { sharedPreferences.edit().putString(fpsKey, value.value).apply() }
+
+	val displayRefreshRateModeKey get() = resources.getString(R.string.preferences_display_refresh_rate_key)
+	var displayRefreshRateMode
+		get() = sharedPreferences.getString(displayRefreshRateModeKey, displayRefreshRateModeDefault.value)?.let { value ->
+			DisplayRefreshRateMode.values().firstOrNull { it.value == value }
+		} ?: displayRefreshRateModeDefault
+		set(value) { sharedPreferences.edit().putString(displayRefreshRateModeKey, value.value).apply() }
 
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)

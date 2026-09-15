@@ -56,6 +56,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 	{
 		key == preferences.resolutionKey -> preferences.resolution.value
 		key == preferences.fpsKey -> preferences.fps.value
+		key == preferences.displayRefreshRateModeKey -> preferences.displayRefreshRateMode.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.codecKey -> preferences.codec.value
 		key.startsWith("mapping_") -> preferences.sharedPreferences.getString(key, defValue)
@@ -75,6 +76,11 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val fps = Preferences.FPS.values().firstOrNull { it.value == value } ?: return
 				preferences.fps = fps
+			}
+			key == preferences.displayRefreshRateModeKey ->
+			{
+				val mode = Preferences.DisplayRefreshRateMode.values().firstOrNull { it.value == value } ?: return
+				preferences.displayRefreshRateMode = mode
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
 			key == preferences.codecKey ->
@@ -116,6 +122,11 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_fps_key))?.let {
 			it.entryValues = Preferences.fpsAll.map { fps -> fps.value }.toTypedArray()
 			it.entries = Preferences.fpsAll.map { fps -> getString(fps.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_display_refresh_rate_key))?.let {
+			it.entryValues = Preferences.displayRefreshRateModeAll.map { mode -> mode.value }.toTypedArray()
+			it.entries = Preferences.displayRefreshRateModeAll.map { mode -> getString(mode.title) }.toTypedArray()
 		}
 
 		val bitratePreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_bitrate_key))

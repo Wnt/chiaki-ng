@@ -80,6 +80,12 @@
             app:summary="%s"
             app:icon="@drawable/ic_fps"/>
 
+        <ListPreference
+            app:key="@string/preferences_display_refresh_rate_key"
+            app:title="@string/preferences_display_refresh_rate_title"
+            app:summary="%s"
+            app:icon="@drawable/ic_fps"/>
+
         <EditTextPreference
             app:key="@string/preferences_bitrate_key"
             app:title="@string/preferences_bitrate_title"
