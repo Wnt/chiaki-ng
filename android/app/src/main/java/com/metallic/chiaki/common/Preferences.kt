@@ -124,6 +124,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
 
+	val threadPriorityBoostEnabledKey get() = resources.getString(R.string.preferences_thread_priority_boost_enabled_key)
+	var threadPriorityBoostEnabled
+		get() = sharedPreferences.getBoolean(threadPriorityBoostEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(threadPriorityBoostEnabledKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)

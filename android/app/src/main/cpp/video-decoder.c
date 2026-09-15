@@ -252,6 +252,8 @@ static void *android_chiaki_video_decoder_output_thread_func(void *user)
 {
 	AndroidChiakiVideoDecoder *decoder = user;
 
+	chiaki_thread_set_affinity(CHIAKI_THREAD_NAME_VIDEO_DECODER);
+
 	while(1)
 	{
 		AMediaCodecBufferInfo info;
