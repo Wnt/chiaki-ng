@@ -26,10 +26,13 @@ typedef struct android_chiaki_video_decoder_t
 	bool shutdown_output;
 	int32_t target_width;
 	int32_t target_height;
+	int32_t target_fps;
 	ChiakiCodec target_codec;
+	bool low_latency_enabled;
 } AndroidChiakiVideoDecoder;
 
-ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height, ChiakiCodec codec, unsigned int fps, bool real_pts_enabled);
+ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
+		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
