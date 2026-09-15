@@ -118,6 +118,12 @@
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
 
+        <EditTextPreference
+            app:key="@string/preferences_packet_loss_max_percent_key"
+            app:title="@string/preferences_packet_loss_max_percent_title"
+            app:summary="@string/preferences_packet_loss_max_percent_summary"
+            app:icon="@drawable/ic_bitrate"/>
+
         <SwitchPreference
             app:key="@string/preferences_controller_input_coalescing_enabled_key"
             app:title="@string/preferences_controller_input_coalescing_enabled_title"

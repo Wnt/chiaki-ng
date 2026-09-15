@@ -56,6 +56,7 @@ class Preferences(context: Context)
 		val displayRefreshRateModeAll = DisplayRefreshRateMode.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
+		const val packetLossMaxPercentDefault = 5
 	}
 
 	internal val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -245,6 +246,13 @@ class Preferences(context: Context)
 	val bitrateAuto get() = videoProfileDefaultBitrate.bitrate
 	private val _bitrateAutoFlow by lazy { MutableStateFlow(bitrateAuto) }
 	val bitrateAutoFlow: StateFlow<Int> get() = _bitrateAutoFlow.asStateFlow()
+
+	fun validatePacketLossMaxPercent(percent: Int) = max(0, min(100, percent))
+	val packetLossMaxPercentKey get() = resources.getString(R.string.preferences_packet_loss_max_percent_key)
+	var packetLossMaxPercent
+		get() = validatePacketLossMaxPercent(sharedPreferences.getInt(packetLossMaxPercentKey, packetLossMaxPercentDefault))
+		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
+	val packetLossMax get() = packetLossMaxPercent / 100.0
 
 	val codecKey get() = resources.getString(R.string.preferences_codec_key)
 	var codec
