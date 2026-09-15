@@ -142,6 +142,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(takionVideoPacketReorderingDisabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(takionVideoPacketReorderingDisabledKey, value).apply() }
 
+	val decoderLateFrameRecoveryEnabledKey get() = resources.getString(R.string.preferences_decoder_late_frame_recovery_enabled_key)
+	var decoderLateFrameRecoveryEnabled
+		get() = sharedPreferences.getBoolean(decoderLateFrameRecoveryEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(decoderLateFrameRecoveryEnabledKey, value).apply() }
+
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
