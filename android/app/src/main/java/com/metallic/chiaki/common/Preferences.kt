@@ -434,7 +434,7 @@ class Preferences(context: Context)
 
 	val decoderOperatingRateDefaultKey get() = resources.getString(R.string.preferences_decoder_operating_rate_default_key)
 	var decoderOperatingRateDefault
-		get() = sharedPreferences.getBoolean(decoderOperatingRateDefaultKey, false)
+		get() = sharedPreferences.getBoolean(decoderOperatingRateDefaultKey, true)
 		set(value) { sharedPreferences.edit().putBoolean(decoderOperatingRateDefaultKey, value).apply() }
 
 	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 960 (default on;
