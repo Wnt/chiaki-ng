@@ -103,8 +103,9 @@ internal class NetworkQualityClassifier
 		val packetLoss = if(packetTotal > 0L)
 			stats.takionPacketsLost * 100.0 / packetTotal else 0.0
 		val sample = NetworkQualitySample(
-			rttMillis = (if(stats.connectionQualityValid && stats.liveRttMicros > 0L)
-				stats.liveRttMicros else stats.rttMicros) / 1000.0,
+			// PLE-343: only round trips we measured ourselves. The console's rtt field is
+			// not a network RTT (193 -> 68 ms decaying on a 3.8 ms LAN) and never drives the badge.
+			rttMillis = stats.measuredRttMicros / 1000.0,
 			jitterMillis = stats.videoPacketJitterMicros / 1000.0,
 			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0)
 		)

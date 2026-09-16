@@ -742,7 +742,10 @@ ctrl_failed:
 	}
 
 	if(err == CHIAKI_ERR_SUCCESS)
+	{
+		session->rtt_us_measured = true;
 		CHIAKI_LOGI(session->log, "Senkusha completed successfully");
+	}
 	else if(err == CHIAKI_ERR_CANCELED)
 		QUIT(quit_ctrl);
 	else
@@ -751,6 +754,7 @@ ctrl_failed:
 		session->mtu_in = 1454;
 		session->mtu_out = 1454;
 		session->rtt_us = 1000;
+		session->rtt_us_measured = false;
 		session->dontfrag = false;
 	}
 #endif
