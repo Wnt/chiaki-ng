@@ -75,6 +75,102 @@ class PsnUdpPuncherTest
 		assertEquals(listOf(threads.first()), threads.onCallerThread())
 	}
 
+	/**
+	 * PLE-313: upstream keeps one sid and hashed id per PSN session, lists STUN, STATIC, LOCAL, and names
+	 * in each OFFER the console sid it knew when building it: none for control, control's for data.
+	 */
+	@Test fun offersShareTheSessionIdentityAndNameThePreviousConsoleSid() = runBlocking {
+		val stun = fakeStun(answers = 2)
+		try
+		{
+			val puncher = DatagramPsnHolePuncher(stunServers = listOf(InetSocketAddress("127.0.0.1", stun.first.localPort)))
+			val control = puncher.prepare(consoleOffer(sid = 4567, port = 1), "12345678901234567").use { it.offer }
+			val data = puncher.prepare(consoleOffer(sid = 5678, port = 1), "12345678901234567").use { it.offer }
+			assertEquals(0, control.peerSid)
+			assertEquals(4567, data.peerSid)
+			assertEquals(control.sid, data.sid)
+			assertEquals(control.localHashedId, data.localHashedId)
+			assertEquals(listOf("STUN", "STATIC", "LOCAL"), control.candidate.map { it.type })
+			assertEquals(2, control.natType)
+		}
+		finally { stun.first.close(); stun.second.join(2_000) }
+	}
+
+	/**
+	 * PLE-313: the console checks our address as well as answering ours, and gives up on the exchange
+	 * if those checks go unanswered. The punch must answer the console's follow-up request after its
+	 * own check succeeded, and report the console candidate with the candidate of ours it reached.
+	 */
+	@Test fun punchAnswersTheConsolesFollowUpChecksAndMapsTheCandidate() = runBlocking {
+		val stun = fakeStun(answers = 1)
+		val console = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
+		val consoleHash = ByteArray(20) { 9 }
+		val responsesToConsole = java.util.concurrent.atomic.AtomicInteger()
+		val consoleThread = thread(name = "fake-console", isDaemon = true) {
+			runCatching {
+				console.soTimeout = 5_000
+				val packet = DatagramPacket(ByteArray(1500), 1500)
+				console.receive(packet)
+				val request = packet.data.copyOf(packet.length)
+				val phone = packet.socketAddress
+				val consoleRequest = { id: Byte -> PsnCandidateHandshake.request(consoleHash, request.copyOfRange(0x04, 0x18), 4567, 0, ByteArray(5) { id }) }
+				console.send(DatagramPacket(consoleRequest(1), 88, phone))
+				val response = PsnCandidateHandshake.response(request, consoleHash, request.copyOfRange(0x04, 0x18), 4567, 0)
+				console.send(DatagramPacket(response, 88, phone))
+				Thread.sleep(200)
+				console.send(DatagramPacket(consoleRequest(2), 88, phone))
+				while(true)
+				{
+					console.receive(packet)
+					if(PsnCandidateHandshake.isResponse(packet.data.copyOf(packet.length))) responsesToConsole.incrementAndGet()
+				}
+			}
+		}
+		try
+		{
+			val puncher = DatagramPsnHolePuncher(stunServers = listOf(InetSocketAddress("127.0.0.1", stun.first.localPort)))
+			puncher.prepare(consoleOffer(sid = 4567, port = console.localPort, hash = consoleHash), "12345678901234567").use { preparation ->
+				val ourLocal = preparation.offer.candidate.first { it.type == "LOCAL" }
+				val punched = preparation.punch()
+				try
+				{
+					assertEquals(PsnCandidate("LOCAL", "127.0.0.1", ourLocal.addr, console.localPort, ourLocal.port), punched.candidate)
+					assertEquals(2, responsesToConsole.get())
+				}
+				finally { punched.socket.close() }
+			}
+		}
+		finally
+		{
+			console.close()
+			stun.first.close()
+			consoleThread.join(2_000)
+			stun.second.join(2_000)
+		}
+	}
+
+	private fun consoleOffer(sid: Int, port: Int, hash: ByteArray = ByteArray(20)) = PsnConnectionRequest(
+		sid = sid, peerSid = 0, skey = Base64.Default.encode(ByteArray(16)),
+		candidate = listOf(PsnCandidate("LOCAL", "127.0.0.1", port = port)),
+		localHashedId = Base64.Default.encode(hash)
+	)
+
+	private fun fakeStun(answers: Int): Pair<DatagramSocket, Thread>
+	{
+		val stun = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
+		return stun to thread(name = "fake-stun", isDaemon = true) {
+			val packet = DatagramPacket(ByteArray(64), 64)
+			runCatching {
+				repeat(answers) {
+					stun.receive(packet)
+					val transactionId = packet.data.copyOfRange(8, 20)
+					val source = packet.socketAddress as InetSocketAddress
+					stun.send(DatagramPacket(bindingResponse(transactionId, source), 32, source))
+				}
+			}
+		}
+	}
+
 	/** A STUN binding success with one XOR-MAPPED-ADDRESS of 127.0.0.1:45678, whatever the request came from. */
 	private fun bindingResponse(transactionId: ByteArray, @Suppress("UNUSED_PARAMETER") source: InetSocketAddress): ByteArray =
 		ByteBuffer.allocate(32).order(ByteOrder.BIG_ENDIAN).apply {

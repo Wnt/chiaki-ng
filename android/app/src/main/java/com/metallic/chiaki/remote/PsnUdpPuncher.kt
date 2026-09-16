@@ -22,7 +22,16 @@ data class PsnPunchedSocket(val socket: DatagramSocket, val candidate: PsnCandid
 interface PsnPunchPreparation : Closeable
 {
 	val offer: PsnConnectionRequest
+
+	/**
+	 * Finds the console candidate that answers and keeps answering the console's own checks until it
+	 * goes quiet. The returned candidate is the console's, with mappedAddr/mappedPort naming the
+	 * candidate of ours it reached: that is what ACCEPT carries (upstream `check_candidates`).
+	 */
 	suspend fun punch(): PsnPunchedSocket
+
+	/** Answers the console's checks that follow the ACCEPT exchange, before native takes the socket. */
+	suspend fun settle() = Unit
 }
 
 interface PsnHolePuncher
@@ -112,8 +121,9 @@ object PsnCandidateHandshake
 	}
 
 	fun isRequest(packet: ByteArray): Boolean = packet.size == SIZE && type(packet) == REQUEST
+	fun isResponse(packet: ByteArray): Boolean = packet.size == SIZE && type(packet) == RESPONSE
 	fun isResponse(packet: ByteArray, requestId: ByteArray): Boolean =
-		packet.size == SIZE && type(packet) == RESPONSE && packet.copyOfRange(0x4b, 0x50).contentEquals(requestId)
+		isResponse(packet) && packet.copyOfRange(0x4b, 0x50).contentEquals(requestId)
 
 	private fun packet(type: Int, local: ByteArray, peer: ByteArray, localSid: Int, peerSid: Int, requestId: ByteArray): ByteArray
 	{
@@ -136,6 +146,10 @@ object PsnCandidateHandshake
  * resolves the name in the constructor, and this puncher is constructed on the main thread
  * (`AndroidPsnRemoteClient.controller()`), where Android throws NetworkOnMainThreadException for a DNS
  * lookup (PLE-312). Any address given here must be unresolved or literal.
+ *
+ * One instance serves one PSN session. Like upstream `holepunch.c`, the session keeps one sid and one
+ * hashed id for both the control and the data round, and an OFFER names the console sid known when it
+ * was built: 0 for control, the control round's console sid for data (PLE-313).
  */
 class DatagramPsnHolePuncher(
 	private val random: SecureRandom = SecureRandom(),
@@ -147,6 +161,10 @@ class DatagramPsnHolePuncher(
 	)
 ) : PsnHolePuncher
 {
+	private val localSid by lazy { random.nextInt(0x10000) }
+	private val localHash by lazy { ByteArray(20).also(random::nextBytes) }
+	private var knownConsoleSid = 0
+
 	override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation = withContext(Dispatchers.IO) {
 		val socket = DatagramSocket(null).apply {
 			reuseAddress = true
@@ -157,22 +175,20 @@ class DatagramPsnHolePuncher(
 			val mapping = discoverMapping(socket)
 			val localAddress = socket.localAddress.takeUnless { it.isAnyLocalAddress } as? Inet4Address
 				?: routeAddress(resolve(stunServers.first()))
-			val sid = random.nextInt(0x10000)
-			val localHash = ByteArray(20).also(random::nextBytes)
-			val candidates = listOf(
-				PsnCandidate("LOCAL", localAddress.hostAddress ?: "0.0.0.0", port = socket.localPort),
-				PsnCandidate("STUN", mapping.address.hostAddress ?: "0.0.0.0", port = mapping.port),
-				PsnCandidate("STATIC", mapping.address.hostAddress ?: "0.0.0.0", port = socket.localPort)
-			)
+			val stun = PsnCandidate("STUN", mapping.address.hostAddress ?: "0.0.0.0", port = mapping.port)
+			val local = PsnCandidate("LOCAL", localAddress.hostAddress ?: "0.0.0.0", port = socket.localPort)
+			// Upstream's order: the STUN candidate first, so a console behind a symmetric NAT tries it first.
+			val candidates = listOf(stun, PsnCandidate("STATIC", stun.addr, port = socket.localPort), local)
 			val offer = PsnConnectionRequest(
-				sid = sid,
-				peerSid = peer.sid,
+				sid = localSid,
+				peerSid = knownConsoleSid,
 				skey = Base64.Default.encode(ByteArray(16)),
 				candidate = candidates,
 				localPeerAddr = PsnPeerAddress(accountId, "REMOTE_PLAY"),
 				localHashedId = Base64.Default.encode(localHash)
 			)
-			Preparation(socket, offer, peer, localHash, random)
+			knownConsoleSid = peer.sid
+			Preparation(socket, offer, peer, localHash, random, local, stun)
 		}
 		catch(error: Throwable)
 		{
@@ -214,70 +230,132 @@ class DatagramPsnHolePuncher(
 		}
 	}
 
-	private class Preparation(
+	internal class Preparation(
 		private val socket: DatagramSocket,
 		override val offer: PsnConnectionRequest,
 		private val peer: PsnConnectionRequest,
 		private val localHash: ByteArray,
-		private val random: SecureRandom
+		private val random: SecureRandom,
+		private val localCandidate: PsnCandidate,
+		private val remoteCandidate: PsnCandidate
 	) : PsnPunchPreparation
 	{
 		private var transferred = false
+		private val buffer = DatagramPacket(ByteArray(1500), 1500)
+
+		private val peerHash: ByteArray by lazy {
+			val hash = runCatching { Base64.Default.decode(peer.localHashedId) }
+				.getOrElse { throw PsnRemoteProtocolException("Invalid console hashed ID", it) }
+			if(hash.size != 20) throw PsnRemoteProtocolException("Console hashed ID is not 20 bytes")
+			hash
+		}
 
 		override suspend fun punch(): PsnPunchedSocket = withContext(Dispatchers.IO) {
-			val peerHash = runCatching { Base64.Default.decode(peer.localHashedId) }
-				.getOrElse { throw PsnRemoteProtocolException("Invalid console hashed ID", it) }
-			if(peerHash.size != 20) throw PsnRemoteProtocolException("Console hashed ID is not 20 bytes")
-			val destinations = peer.candidate.mapNotNull { candidate ->
+			val known = peer.candidate.mapNotNull { candidate ->
 				runCatching { candidate to InetSocketAddress(InetAddress.getByName(candidate.addr), candidate.port) }.getOrNull()
 			}
-			if(destinations.isEmpty()) throw PsnUnsupportedNatException("Console did not advertise a usable IPv4 candidate")
-			val requestIds = List(3) { ByteArray(5).also(random::nextBytes) }
-			val requests = requestIds.map { PsnCandidateHandshake.request(localHash, peerHash, offer.sid, peer.sid, it) }
-			val receive = DatagramPacket(ByteArray(PsnCandidateHandshake.SIZE), PsnCandidateHandshake.SIZE)
-			var responseIndex = 0
-			for(attempt in 0 until 20)
-			{
-				val request = requests[responseIndex]
+			if(known.isEmpty()) throw PsnUnsupportedNatException("Console did not advertise a usable IPv4 candidate")
+			val destinations = known.toMutableList()
+			val requestId = ByteArray(5).also(random::nextBytes)
+			val request = PsnCandidateHandshake.request(localHash, peerHash, offer.sid, peer.sid, requestId)
+			var responded = false
+			repeat(SELECT_CANDIDATE_TRIES) {
 				for((_, address) in destinations) socket.send(DatagramPacket(request, request.size, address))
-				socket.soTimeout = 500
-				try
+				val deadline = System.nanoTime() + SELECT_CANDIDATE_TIMEOUT_MS * 1_000_000L
+				while(true)
 				{
-					socket.receive(receive)
-					val bytes = receive.data.copyOf(receive.length)
+					val bytes = receive(((deadline - System.nanoTime()) / 1_000_000L).toInt()) ?: break
+					val source = buffer.socketAddress as InetSocketAddress
+					var candidate = destinations.firstOrNull { it.second == source }?.first
+					if(candidate == null)
+					{
+						// A reply from an address the console did not advertise: its NAT mapped it elsewhere.
+						if(destinations.size - known.size >= EXTRA_CANDIDATE_ADDRESSES) continue
+						candidate = PsnCandidate("DERIVED", source.address.hostAddress ?: continue, port = source.port)
+						destinations += candidate to source
+						if(PsnCandidateHandshake.isRequest(bytes))
+							socket.send(DatagramPacket(request, request.size, source))
+					}
 					if(PsnCandidateHandshake.isRequest(bytes))
 					{
-						val response = PsnCandidateHandshake.response(
-							bytes, localHash, peerHash, offer.sid, peer.sid, receive.socketAddress as InetSocketAddress
-						)
-						socket.send(DatagramPacket(response, response.size, receive.socketAddress))
+						respond(bytes, source)
+						responded = true
 						continue
 					}
-					if(PsnCandidateHandshake.isResponse(bytes, requestIds[responseIndex]))
-					{
-						if(responseIndex < requests.lastIndex)
-						{
-							responseIndex++
-							val next = requests[responseIndex]
-							socket.send(DatagramPacket(next, next.size, receive.socketAddress))
-							continue
-						}
-						val selected = peer.candidate.firstOrNull {
-							it.addr == receive.address.hostAddress && it.port == receive.port
-						} ?: PsnCandidate("DERIVED", receive.address.hostAddress ?: throw PsnRemoteProtocolException("Candidate source had no address"), port = receive.port)
-						socket.connect(receive.socketAddress)
-						transferred = true
-						return@withContext PsnPunchedSocket(socket, selected)
-					}
+					if(!PsnCandidateHandshake.isResponse(bytes, requestId)) continue
+					socket.connect(source)
+					// The console checks our address too; it must be answered before ACCEPT or it gives up.
+					val followedUp = answerFollowUps()
+					if(!followedUp && !responded)
+						throw PsnUnsupportedNatException("The console answered but never reached this device over UDP")
+					transferred = true
+					return@withContext PsnPunchedSocket(socket, withMapping(candidate, source))
 				}
-				catch(_: SocketTimeoutException) { }
 			}
 			throw PsnUnsupportedNatException("No console candidate completed the UDP handshake")
+		}
+
+		override suspend fun settle() = withContext(Dispatchers.IO) {
+			if(transferred && !socket.isClosed) answerFollowUps()
+			Unit
+		}
+
+		/** Upstream `receive_request_send_response_ps`: answer requests until the console is quiet for a second. */
+		private fun answerFollowUps(): Boolean
+		{
+			var received = false
+			val deadline = System.nanoTime() + FOLLOW_UP_LIMIT_MS * 1_000_000L
+			while(System.nanoTime() < deadline)
+			{
+				val bytes = receive(FOLLOW_UP_QUIET_MS) ?: return received
+				if(!PsnCandidateHandshake.isRequest(bytes)) continue
+				respond(bytes, buffer.socketAddress as InetSocketAddress)
+				received = true
+			}
+			return received
+		}
+
+		private fun respond(request: ByteArray, source: InetSocketAddress)
+		{
+			val response = PsnCandidateHandshake.response(request, localHash, peerHash, offer.sid, peer.sid, source)
+			socket.send(DatagramPacket(response, response.size, source))
+		}
+
+		private fun receive(timeoutMillis: Int): ByteArray?
+		{
+			if(timeoutMillis <= 0) return null
+			socket.soTimeout = timeoutMillis
+			return try
+			{
+				buffer.length = buffer.data.size
+				socket.receive(buffer)
+				buffer.data.copyOf(buffer.length)
+			}
+			catch(_: SocketTimeoutException) { null }
+		}
+
+		/** The console reached our LOCAL candidate over the LAN, or our STUN one from outside it. */
+		private fun withMapping(candidate: PsnCandidate, source: InetSocketAddress): PsnCandidate
+		{
+			val lan = candidate.type == "LOCAL" || (candidate.type == "DERIVED" && source.address.isSiteLocalAddress)
+			val ours = if(lan) localCandidate else remoteCandidate
+			return candidate.copy(mappedAddress = ours.addr, mappedPort = ours.port)
 		}
 
 		override fun close()
 		{
 			if(!transferred) socket.close()
 		}
+	}
+
+	private companion object
+	{
+		// holepunch.c: SELECT_CANDIDATE_TRIES, SELECT_CANDIDATE_TIMEOUT_SEC, EXTRA_CANDIDATE_ADDRESSES,
+		// WAIT_RESPONSE_TIMEOUT_SEC and SELECT_CANDIDATE_CONNECTION_SEC.
+		const val SELECT_CANDIDATE_TRIES = 20
+		const val SELECT_CANDIDATE_TIMEOUT_MS = 500
+		const val EXTRA_CANDIDATE_ADDRESSES = 3
+		const val FOLLOW_UP_QUIET_MS = 1_000
+		const val FOLLOW_UP_LIMIT_MS = 5_000
 	}
 }

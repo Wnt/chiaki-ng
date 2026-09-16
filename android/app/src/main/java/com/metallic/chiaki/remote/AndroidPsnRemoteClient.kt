@@ -4,6 +4,7 @@
 package com.metallic.chiaki.remote
 
 import android.content.Context
+import android.util.Log
 import com.metallic.chiaki.regist.PsnCredentialStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +37,13 @@ class AndroidPsnRemoteClient(context: Context)
 		OkHttpPsnPushTransport(http, json),
 		DatagramPsnHolePuncher(),
 		nativeBridge,
-		json = json
+		json = json,
+		trace = { Log.i(TRACE_TAG, it) }
 	)
+
+	private companion object
+	{
+		/** `adb logcat -s PsnRemote` shows how far a PSN link got and what each side sent (PLE-313). */
+		const val TRACE_TAG = "PsnRemote"
+	}
 }
