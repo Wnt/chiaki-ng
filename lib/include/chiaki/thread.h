@@ -32,7 +32,8 @@ typedef enum {
 	CHIAKI_THREAD_NAME_FEEDBACK,
 	CHIAKI_THREAD_NAME_SESSION,
 	CHIAKI_THREAD_NAME_REGIST,
-	CHIAKI_THREAD_NAME_GKCRYPT
+	CHIAKI_THREAD_NAME_GKCRYPT,
+	CHIAKI_THREAD_NAME_VIDEO_DECODER
 } ChiakiThreadName;
 
 typedef void (*ChiakiThreadAffinityFunc)(ChiakiThreadName name, void *user);

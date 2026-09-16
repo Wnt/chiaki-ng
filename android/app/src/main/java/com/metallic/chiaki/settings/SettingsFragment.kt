@@ -31,6 +31,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled
 		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
+		preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
@@ -51,6 +52,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled = value
 			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
+			preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled = value
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value

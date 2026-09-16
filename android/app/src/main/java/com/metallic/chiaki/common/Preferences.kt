@@ -137,6 +137,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
 
+	val threadPriorityBoostEnabledKey get() = resources.getString(R.string.preferences_thread_priority_boost_enabled_key)
+	var threadPriorityBoostEnabled
+		get() = sharedPreferences.getBoolean(threadPriorityBoostEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(threadPriorityBoostEnabledKey, value).apply() }
+
 	val takionVideoPacketReorderingDisabledKey get() = resources.getString(R.string.preferences_takion_video_packet_reordering_disabled_key)
 	var takionVideoPacketReorderingDisabled
 		get() = sharedPreferences.getBoolean(takionVideoPacketReorderingDisabledKey, false)
