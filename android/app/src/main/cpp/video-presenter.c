@@ -241,8 +241,23 @@ static void adjust_dejitter_buffer_locked(AndroidChiakiVideoPresenter *presenter
 static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 		const AndroidChiakiVideoPresenterFrame *frame)
 {
-	int64_t pts_ns = frame->info.presentationTimeUs * 1000LL;
-	presenter->arrival_offsets[presenter->arrival_offset_next] = frame->arrival_ns - pts_ns;
+	int64_t sample_ns;
+	if(presenter->real_pts_enabled)
+	{
+		int64_t pts_ns = frame->info.presentationTimeUs * 1000LL;
+		sample_ns = frame->arrival_ns - pts_ns;
+	}
+	else
+	{
+		if(presenter->last_arrival_ns == 0)
+		{
+			presenter->last_arrival_ns = frame->arrival_ns;
+			return;
+		}
+		sample_ns = frame->arrival_ns - presenter->last_arrival_ns;
+		presenter->last_arrival_ns = frame->arrival_ns;
+	}
+	presenter->arrival_offsets[presenter->arrival_offset_next] = sample_ns;
 	presenter->arrival_offset_next = (presenter->arrival_offset_next + 1) % ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW;
 	if(presenter->arrival_offset_count < ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW)
 		presenter->arrival_offset_count++;
@@ -686,6 +701,7 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->timeline_valid = false;
 	presenter->last_vsync_ns = 0;
 	presenter->dejitter_buffer_ns = VIDEO_PRESENTER_DJB_START_NS;
+	presenter->last_arrival_ns = 0;
 	presenter->arrival_offset_count = 0;
 	presenter->arrival_offset_next = 0;
 	presenter->samples_since_adjustment = 0;
@@ -769,6 +785,8 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 	presenter->mode = mode;
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->timeline_valid = false;
+	if(!presenter->real_pts_enabled)
+		presenter->last_arrival_ns = 0;
 	if(!presenter->timestamped_release_enabled)
 		drain_immediate_locked(presenter);
 	chiaki_cond_broadcast(&presenter->queue_cond);
@@ -800,6 +818,8 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->timeline_valid = false;
 	presenter->last_vsync_ns = 0;
+	if(!presenter->real_pts_enabled)
+		presenter->last_arrival_ns = 0;
 	if(!presenter->timestamped_release_enabled)
 		drain_immediate_locked(presenter);
 	chiaki_cond_broadcast(&presenter->queue_cond);

@@ -103,6 +103,7 @@ typedef struct android_chiaki_video_presenter_t
 	int64_t timeline_offset_ns;
 	uint64_t dejitter_buffer_ns;
 	int64_t arrival_offsets[ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW];
+	int64_t last_arrival_ns;
 	uint32_t arrival_offset_count;
 	uint32_t arrival_offset_next;
 	uint32_t samples_since_adjustment;
