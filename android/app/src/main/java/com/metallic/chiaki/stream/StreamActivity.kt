@@ -82,10 +82,16 @@ class StreamActivity : AppCompatActivity()
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
 
+		val preferences = Preferences(this)
 		WindowCompat.setDecorFitsSystemWindows(window, false)
-		if(Preferences(this).streamWindowOptimizationsEnabled)
+		if(preferences.streamWindowOptimizationsEnabled)
 			configureWindowOptimizations()
-		configureDisplayRefreshRate(Preferences(this).displayRefreshRateMode, connectInfo.videoProfile.maxFPS.toFloat())
+		val displayRefreshRateMode = effectiveDisplayRefreshRateMode(
+			preferences.displayRefreshRateMode,
+			preferences.realVideoTimestamps,
+			preferences.videoPacingEnabled
+		)
+		configureDisplayRefreshRate(displayRefreshRateMode, connectInfo.videoProfile.maxFPS.toFloat())
 		insetsController = WindowCompat.getInsetsController(window, window.decorView)
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
