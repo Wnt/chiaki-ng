@@ -83,7 +83,7 @@ class MainActivity : AppCompatActivity()
 		viewModel.setPsnEnabled(true, !unifiedConsoleListEnabled || psnListAllowed)
 		pendingRegistrationHost?.also { host ->
 			pendingRegistrationHost = null
-			showGuidedRegistration(host.host, host.name, host.isPS5)
+			showGuidedRegistration(host.host, host.name)
 		}
 		updateHomeState()
 	}
@@ -435,8 +435,18 @@ class MainActivity : AppCompatActivity()
 	private fun playLocalConsole(host: DisplayHost)
 	{
 		val registeredHost = host.registeredHost
+		if(registeredHost != null && !registeredHost.target.isPS5)
+		{
+			showUnsupportedRegistration(registeredHost)
+			return
+		}
 		if(registeredHost == null)
 		{
+			if(host is DiscoveredDisplayHost && !host.isPS5)
+			{
+				showUnsupportedConsole(host.name ?: host.host)
+				return
+			}
 			if(host is DiscoveredDisplayHost)
 			{
 				if(preferences.psnAccountId.isNullOrBlank())
@@ -445,7 +455,7 @@ class MainActivity : AppCompatActivity()
 					startPsnSignIn()
 				}
 				else
-					showGuidedRegistration(host.host, host.name, host.isPS5)
+					showGuidedRegistration(host.host, host.name)
 			}
 			else
 				startLegacyRegistration(host)
@@ -498,12 +508,32 @@ class MainActivity : AppCompatActivity()
 		viewModel.showPsnPreview(listOf(PsnDevice("preview-console", "Living Room PS5")))
 	}
 
-	private fun showGuidedRegistration(host: String, name: String?, isPS5: Boolean)
+	private fun showUnsupportedRegistration(registeredHost: RegisteredHost)
+	{
+		MaterialAlertDialogBuilder(this)
+			.setTitle(R.string.alert_title_ps4_unsupported)
+			.setMessage(getString(R.string.alert_message_ps4_registration_unsupported, registeredHost.serverNickname ?: registeredHost.serverMac.toString()))
+			.setPositiveButton(R.string.action_delete) { _, _ ->
+				viewModel.deleteRegisteredHost(registeredHost)
+			}
+			.setNegativeButton(R.string.action_keep) { _, _ -> }
+			.show()
+	}
+
+	private fun showUnsupportedConsole(name: String)
+	{
+		MaterialAlertDialogBuilder(this)
+			.setTitle(R.string.alert_title_ps4_unsupported)
+			.setMessage(getString(R.string.alert_message_ps4_console_unsupported, name))
+			.setPositiveButton(android.R.string.ok) { _, _ -> }
+			.show()
+	}
+
+	private fun showGuidedRegistration(host: String, name: String?)
 	{
 		registrationLauncher.launch(Intent(this, RegistActivity::class.java).apply {
 			putExtra(RegistActivity.EXTRA_HOST, host)
 			putExtra(RegistActivity.EXTRA_BROADCAST, false)
-			putExtra(RegistActivity.EXTRA_CONSOLE_IS_PS5, isPS5)
 			putExtra(RegistActivity.EXTRA_CONSOLE_NAME, name)
 			putExtra(RegistActivity.EXTRA_GUIDED, true)
 			if(previewState != null)
@@ -525,7 +555,7 @@ class MainActivity : AppCompatActivity()
 	{
 		if(previewState != null)
 		{
-			showGuidedRegistration("192.0.2.1", console.device.name, true)
+			showGuidedRegistration("192.0.2.1", console.device.name)
 			return
 		}
 		viewModel.playPsnConsole(console)
@@ -542,6 +572,11 @@ class MainActivity : AppCompatActivity()
 	private fun wakeupHost(host: DisplayHost)
 	{
 		val registeredHost = host.registeredHost ?: return
+		if(!registeredHost.target.isPS5)
+		{
+			showUnsupportedRegistration(registeredHost)
+			return
+		}
 		viewModel.discoveryManager.sendWakeup(
 			host.host,
 			registeredHost.rpRegistKey,
@@ -552,6 +587,11 @@ class MainActivity : AppCompatActivity()
 	private fun connectPsnConsole(console: PsnConsole)
 	{
 		val registered = console.registeredHost ?: return
+		if(!registered.target.isPS5)
+		{
+			showUnsupportedRegistration(registered)
+			return
+		}
 		streamLauncher.launch(Intent(this, StreamActivity::class.java).apply {
 			putExtra(StreamActivity.EXTRA_CONNECT_INFO, viewModel.connectInfo(registered))
 			putExtra(StreamActivity.EXTRA_PSN_DEVICE, console.device)

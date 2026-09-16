@@ -20,8 +20,12 @@ enum class Target(val value: Int)
 
 	companion object
 	{
+		/** The only target this fork registers: it is PS5 only. */
+		val REGISTRATION = PS5_1
+
+		/** Unknown values resolve to PS5; stored PS4 values still decode as PS4 so the app can flag them as unsupported. */
 		@JvmStatic
-		fun fromValue(value: Int) = values().firstOrNull { it.value == value } ?: PS4_10
+		fun fromValue(value: Int) = values().firstOrNull { it.value == value } ?: REGISTRATION
 	}
 
 	val isPS5 get() = value >= PS5_UNKNOWN.value
@@ -721,6 +725,10 @@ data class RegistInfo(
 	companion object
 	{
 		const val ACCOUNT_ID_SIZE = 8
+
+		/** New registrations have no target choice: always PS5, identified by PSN account ID. */
+		fun forPS5(host: String, broadcast: Boolean, psnAccountId: ByteArray, pin: Int) =
+			RegistInfo(Target.REGISTRATION, host, broadcast, null, psnAccountId, pin)
 	}
 }
 

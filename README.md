@@ -32,6 +32,8 @@ This is a debug build signed with the project debug key. Android may ask you to 
 
 ## Status
 
+**PS5 only.** This fork does not support the PS4: registration always targets a PS5 and there is no console-type choice. A PS4 registration carried over from an older install is shown as unsupported with a Delete action, and the app will not stream to it. The PS4 code in the shared C library is kept only to ease upstream merges; the Android app never selects it, and nobody tests it.
+
 This is a research fork, not a finished general-purpose release. Most changes are opt-in so they can be measured against upstream behavior, results come from one phone and one PS5, and some experiments are known to regress performance or not work. The project issue tracker and ticket board are private.
 
 This project is not endorsed or certified by Sony Interactive Entertainment LLC.
