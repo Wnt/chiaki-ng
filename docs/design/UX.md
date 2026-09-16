@@ -246,7 +246,7 @@ quality presets on Home, not duplicated in Settings.
 Move to the hidden Developer page: resolution/FPS/bitrate/codec raw controls;
 display refresh policy; timestamps and timestamp rate; low-latency decoder;
 operating-rate default/auto/override; decoder priority/input/thread affinity;
-performance mode and Wi-Fi lock; late-frame recovery; every pacing mode/lead/
+power-management hints and Wi-Fi lock; late-frame recovery; every pacing mode/lead/
 age/nonblocking knob; packet-loss cap/adaptive reporting/reorder bypass;
 controller coalescing/unbuffered/trigger fallback/feedback interval; touch
 redraw coalescing; stream window optimisation; diagnostics overlay and stats;

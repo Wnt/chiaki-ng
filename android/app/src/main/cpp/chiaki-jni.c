@@ -209,6 +209,7 @@ typedef struct android_chiaki_session_t
 	AndroidChiakiVideoDecoder video_decoder;
 	AndroidChiakiAudioDecoder audio_decoder;
 	void *audio_output;
+	bool performance_mode_enabled;
 	bool stream_stats_log_enabled;
 } AndroidChiakiSession;
 
@@ -336,7 +337,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 		{
 			jboolean adpf_live = false;
 			jboolean sustained_live = false;
-			if(session->video_decoder.performance_mode_enabled)
+			if(session->performance_mode_enabled)
 			{
 				adpf_live = E->CallBooleanMethod(env, session->java_session,
 						session->java_session_is_adpf_performance_mode_live_meth);
@@ -346,9 +347,9 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 				clear_performance_hint_exception(env, session, "sustained status");
 			}
 			char performance_status[96] = "";
-			if(session->video_decoder.performance_mode_enabled)
+			if(session->performance_mode_enabled)
 				snprintf(performance_status, sizeof(performance_status),
-						" | perf operating_rate=live sustained=%s adpf=%s",
+						" | perf sustained=%s adpf=%s",
 						sustained_live ? "live" : "off", adpf_live ? "live" : "off");
 			AndroidChiakiVideoDiagnostics diagnostics;
 			AndroidChiakiAudioDiagnostics audio;
@@ -646,11 +647,12 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	}
 	memset(session, 0, sizeof(AndroidChiakiSession));
 	session->log = log;
+	session->performance_mode_enabled = performance_mode;
 	session->stream_stats_log_enabled = feedback_stats_log_interval_ms > 0;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
-			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_default,
+			(int32_t)decoder_operating_rate, decoder_operating_rate_default,
 			decoder_operating_rate_auto, decoder_realtime_priority,
 			video_timestamp_rate_hz > 0 ? (unsigned int)video_timestamp_rate_hz : 0, stream_stats_enabled,
 			feedback_stats_log_interval_ms > 0, &presenter_config);
