@@ -24,6 +24,11 @@ def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching")
 def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "false").toBoolean()
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
 def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
+def chiakiAbiFilters = (project.findProperty("chiakiAbiFilters") ?: "")
+        .toString()
+        .split(',')
+        .collect { it.trim() }
+        .findAll { it }
 
 android {
     namespace "com.metallic.chiaki"
@@ -36,6 +41,9 @@ android {
         targetSdk 35
         versionCode 12
         versionName chiakiVersion
+        ndk {
+            abiFilters.addAll(chiakiAbiFilters)
+        }
         buildConfigField "boolean", "CHIAKI_ANDROID_EGL_RENDERER", androidEglRenderer.toString()
         externalNativeBuild {
             cmake {

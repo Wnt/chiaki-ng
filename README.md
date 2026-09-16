@@ -5,6 +5,12 @@
 
 Pleikkari Android is an experimental, Android-only fork of chiaki-ng focused on reducing end-to-end latency for PS5 Remote Play toward a GeForce NOW-class experience. Development and measurements currently target one Galaxy S22 Ultra (SM-S908B, Exynos 2200); desktop and other non-Android targets are not maintained in this fork.
 
+## Download
+
+Download the latest `android-port` APK from the stable [pleikkari-android-debug.apk](https://github.com/Wnt/chiaki-ng/releases/download/android-latest/pleikkari-android-debug.apk) link. Each workflow run also keeps a `pleikkari-android-debug` artifact for 30 days under the repository's [Actions](https://github.com/Wnt/chiaki-ng/actions/workflows/build-android.yml) page.
+
+This is a debug build signed with the project debug key, so it installs over the phone's existing app with `adb install -r pleikkari-android-debug.apk` without removing its registration data.
+
 ## Status
 
 This is a research fork, not a finished general-purpose release. Most changes are opt-in so they can be measured against upstream behavior, results come from one phone and one PS5, and some experiments are known to regress performance or not work. The project issue tracker and ticket board are private.
@@ -69,7 +75,7 @@ cd android
 
 The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk` relative to the repository root.
 
-This repository intentionally declares no ABI filter, so a normal build includes all configured Android ABIs. `GATE_ABIS` / `PLEIKKARI_ABIS` narrowing is a development-only facility in the private workspace tooling, not a feature of this fork and not appropriate for release artifacts.
+By default, the build includes all configured Android ABIs. Pass a comma-separated list with `-PchiakiAbiFilters=arm64-v8a,x86_64` to narrow a development build; the rolling Android CI build uses only `arm64-v8a`, while release builds leave the property empty and continue to include every ABI.
 
 ## Register a console and stream
 
