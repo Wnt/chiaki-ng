@@ -182,6 +182,8 @@ typedef struct android_chiaki_session_t
 	jmethodID java_session_performance_hint_thread_started_meth;
 	jmethodID java_session_performance_hint_report_meth;
 	jmethodID java_session_performance_hint_thread_stopped_meth;
+	jmethodID java_session_is_adpf_performance_mode_live_meth;
+	jmethodID java_session_is_sustained_performance_mode_live_meth;
 	jfieldID java_controller_state_buttons;
 	jfieldID java_controller_state_l2_state;
 	jfieldID java_controller_state_r2_state;
@@ -332,6 +334,22 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 		}
 		case CHIAKI_EVENT_STREAM_STATS:
 		{
+			jboolean adpf_live = false;
+			jboolean sustained_live = false;
+			if(session->video_decoder.performance_mode_enabled)
+			{
+				adpf_live = E->CallBooleanMethod(env, session->java_session,
+						session->java_session_is_adpf_performance_mode_live_meth);
+				clear_performance_hint_exception(env, session, "ADPF status");
+				sustained_live = E->CallBooleanMethod(env, session->java_session,
+						session->java_session_is_sustained_performance_mode_live_meth);
+				clear_performance_hint_exception(env, session, "sustained status");
+			}
+			char performance_status[96] = "";
+			if(session->video_decoder.performance_mode_enabled)
+				snprintf(performance_status, sizeof(performance_status),
+						" | perf operating_rate=live sustained=%s adpf=%s",
+						sustained_live ? "live" : "off", adpf_live ? "live" : "off");
 			AndroidChiakiVideoDiagnostics diagnostics;
 			AndroidChiakiAudioDiagnostics audio;
 			android_chiaki_video_decoder_get_diagnostics(&session->video_decoder, &diagnostics);
@@ -349,7 +367,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" lost %llu reorder_timeouts %llu"
 					" | per_s takion %llu.%03llu feedback %llu.%03llu"
 					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
-					" audio_xruns %s%d audio_underruns %llu",
+					" audio_xruns %s%d audio_underruns %llu%s",
 					(unsigned long long)interval_ms,
 					(unsigned long long)event->stream_stats.stream_frames,
 					(unsigned long long)diagnostics.output_frames,
@@ -368,7 +386,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)(audio.latency_us / 1000),
 					(unsigned long long)(audio.latency_us % 1000),
 					audio.xruns_valid ? "" : "unavailable/", audio.xruns,
-					(unsigned long long)audio.underruns);
+					(unsigned long long)audio.underruns, performance_status);
 			}
 			E->CallVoidMethod(env, session->java_session,
 					session->java_session_event_stream_stats_meth,
@@ -599,14 +617,14 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");
+	session->java_session_is_adpf_performance_mode_live_meth = E->GetMethodID(env, session->java_session_class, "isAdpfPerformanceModeLive", "()Z");
+	session->java_session_is_sustained_performance_mode_live_meth = E->GetMethodID(env, session->java_session_class, "isSustainedPerformanceModeLive", "()Z");
 	if(performance_mode && android_get_device_api_level() >= 31)
 	{
 		android_chiaki_video_presenter_set_performance_hint_callbacks(&session->video_decoder.presenter,
 				android_chiaki_performance_hint_thread_started,
 				android_chiaki_performance_hint_report,
 				android_chiaki_performance_hint_thread_stopped, session);
-		CHIAKI_LOGI(log, "ADPF performance hints enabled with a %d fps frame budget",
-				connect_info.video_profile.max_fps);
 	}
 
 	jclass controller_state_class = E->FindClass(env, BASE_PACKAGE"/ControllerState");

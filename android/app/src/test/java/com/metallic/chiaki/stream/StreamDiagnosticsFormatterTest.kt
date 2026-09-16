@@ -61,4 +61,15 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
 		assertEquals(8, text.lines().size)
 	}
+
+	@Test
+	fun performanceFlagsOnlyNameLiveLegs()
+	{
+		assertEquals(emptyList<String>(), StreamActivity.performanceModeDiagnosticFlags(false, false, false))
+		assertEquals(listOf("perf-oprate"), StreamActivity.performanceModeDiagnosticFlags(true, false, false))
+		assertEquals(
+			listOf("perf-oprate", "perf-sustained", "perf-adpf"),
+			StreamActivity.performanceModeDiagnosticFlags(true, true, true)
+		)
+	}
 }

@@ -449,6 +449,21 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	@Suppress("unused") // Called from the native decoder and presenter threads.
 	private fun performanceHintThreadStopped(role: Int) = performanceHints.threadStopped(role)
 
+	@Suppress("unused") // Read by the native 1 Hz diagnostics logger.
+	private fun isAdpfPerformanceModeLive() = performanceHints.isActive
+
+	val adpfPerformanceModeLive get() = performanceHints.isActive
+
+	@Volatile private var sustainedPerformanceModeLive = false
+
+	@Suppress("unused") // Read by the native 1 Hz diagnostics logger.
+	private fun isSustainedPerformanceModeLive() = sustainedPerformanceModeLive
+
+	fun setSustainedPerformanceModeLive(live: Boolean)
+	{
+		sustainedPerformanceModeLive = live
+	}
+
 	private fun event(event: Event)
 	{
 		eventCallback?.let { it(event) }
