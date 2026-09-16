@@ -16,7 +16,6 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
-import android.provider.Settings
 import android.util.Log
 import android.view.*
 import android.widget.EditText
@@ -85,10 +84,6 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_JUST_LINKED = "just_linked"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		const val EXTRA_STREAM_SUMMARY = "stream_summary"
-		// Private device experiment setting, intentionally absent from the user-facing Settings
-		// screen. `adb shell settings put global ple_244_window_touch_layout 1` enables the A/B
-		// candidate; a missing key preserves the current layout.
-		const val WINDOW_TOUCH_LAYOUT_SETTING = "ple_244_window_touch_layout"
 		private const val HIDE_UI_TIMEOUT_MS = 3500L
 		/** How often the connect overlay's second count is redrawn (PLE-337). */
 		private const val CONNECT_PROGRESS_TICK_MS = 500L
@@ -128,9 +123,6 @@ class StreamActivity : AppCompatActivity()
 	private var touchControlsFragment: TouchControlsFragment? = null
 	private var lastWindowInsets: WindowInsetsCompat? = null
 	private var lastLayoutBoundsLog: String? = null
-	private val windowTouchLayoutEnabled by lazy {
-		Settings.Global.getInt(contentResolver, WINDOW_TOUCH_LAYOUT_SETTING, 0) == 1
-	}
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -489,7 +481,6 @@ class StreamActivity : AppCompatActivity()
 				.launchIn(lifecycleScope)
 			fragment.onScreenControlsEnabled = viewModel.onScreenControlsEnabled
 			fragment.overlayRevealRequested = ::showOverlay
-			fragment.windowLayoutEnabled = windowTouchLayoutEnabled
 			touchControlsFragment = fragment
 		}
 	}
@@ -703,8 +694,7 @@ class StreamActivity : AppCompatActivity()
 
 	private fun prepareWindowTouchLayout()
 	{
-		binding.aspectRatioLayout.forceFitInPortrait = windowTouchLayoutEnabled
-		if(!windowTouchLayoutEnabled || binding.streamTouchpadView.parent === binding.root)
+		if(binding.streamTouchpadView.parent === binding.root)
 			return
 		(binding.streamTouchpadView.parent as ViewGroup).removeView(binding.streamTouchpadView)
 		val videoIndex = binding.root.indexOfChild(binding.aspectRatioLayout)
@@ -720,7 +710,7 @@ class StreamActivity : AppCompatActivity()
 
 	private fun portraitControlsTop(): Int
 	{
-		if(!windowTouchLayoutEnabled || binding.root.width <= 0 || binding.root.height <= binding.root.width)
+		if(binding.root.width <= 0 || binding.root.height <= binding.root.width)
 			return 0
 		val ratio = binding.aspectRatioLayout.aspectRatio
 		return if(ratio > 0f) (binding.root.width / ratio).toInt().coerceAtMost(binding.root.height) else 0
@@ -728,7 +718,7 @@ class StreamActivity : AppCompatActivity()
 
 	private fun applyWindowTouchLayout()
 	{
-		if(!windowTouchLayoutEnabled || binding.root.width <= 0)
+		if(binding.root.width <= 0)
 			return
 		val controlsTop = portraitControlsTop()
 		val portrait = controlsTop > 0
@@ -765,8 +755,6 @@ class StreamActivity : AppCompatActivity()
 
 	private fun logWindowTouchBounds()
 	{
-		if(!windowTouchLayoutEnabled)
-			return
 		fun View.boundsString(): String
 		{
 			val bounds = Rect()

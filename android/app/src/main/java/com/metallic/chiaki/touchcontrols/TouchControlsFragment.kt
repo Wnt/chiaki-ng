@@ -13,7 +13,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
-import com.metallic.chiaki.R
 import com.metallic.chiaki.databinding.FragmentControlsBinding
 import com.metallic.chiaki.lib.ControllerState
 import kotlinx.coroutines.flow.Flow
@@ -45,12 +44,6 @@ abstract class TouchControlsFragment : Fragment()
 
 	var onScreenControlsEnabled: LiveData<Boolean>? = null
 	var overlayRevealRequested: (() -> Unit)? = null
-	var windowLayoutEnabled = false
-		set(value)
-		{
-			field = value
-			(this as? DefaultTouchControlsFragment)?.applyWindowLayout()
-		}
 	var controlsBelowVideo = false
 		set(value)
 		{
@@ -124,34 +117,25 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 		val currentBinding = _binding ?: return
 		currentBinding.controllerDock.layoutParams =
 			(currentBinding.controllerDock.layoutParams as ConstraintLayout.LayoutParams).apply {
-				// Zero is ConstraintLayout's "no maximum" value. The XML caps remain the
-				// untouched, flag-off baseline.
-				matchConstraintMaxWidth = if(windowLayoutEnabled) 0 else dp(440)
-				matchConstraintMaxHeight = if(windowLayoutEnabled) 0 else dp(400)
+				// Zero is ConstraintLayout's "no maximum" value: the dock spans the whole
+				// window it is given, so the controls reach both edges (PLE-341).
+				matchConstraintMaxWidth = 0
+				matchConstraintMaxHeight = 0
 			}
-		updateWindowVerticalAnchors(
-			currentBinding.dpadView,
-			R.id.l2ButtonView,
-			R.id.leftAnalogStickView,
-			0.42f
-		)
-		updateWindowVerticalAnchors(
-			currentBinding.faceButtonsLayout,
-			R.id.r2ButtonView,
-			R.id.rightAnalogStickView,
-			0.4f
-		)
+		updateWindowVerticalAnchors(currentBinding.dpadView, 0.42f)
+		updateWindowVerticalAnchors(currentBinding.faceButtonsLayout, 0.4f)
 		currentBinding.controllerDock.requestLayout()
 	}
 
-	private fun updateWindowVerticalAnchors(view: View, legacyTop: Int, legacyBottom: Int, windowBias: Float)
+	/** Anchor the group to the whole dock and place it by bias, not against its neighbours. */
+	private fun updateWindowVerticalAnchors(view: View, windowBias: Float)
 	{
 		view.layoutParams = (view.layoutParams as ConstraintLayout.LayoutParams).apply {
-			topToTop = if(windowLayoutEnabled) ConstraintSet.PARENT_ID else ConstraintSet.UNSET
-			bottomToBottom = if(windowLayoutEnabled) ConstraintSet.PARENT_ID else ConstraintSet.UNSET
-			topToBottom = if(windowLayoutEnabled) ConstraintSet.UNSET else legacyTop
-			bottomToTop = if(windowLayoutEnabled) ConstraintSet.UNSET else legacyBottom
-			verticalBias = if(windowLayoutEnabled) windowBias else 0.5f
+			topToTop = ConstraintSet.PARENT_ID
+			bottomToBottom = ConstraintSet.PARENT_ID
+			topToBottom = ConstraintSet.UNSET
+			bottomToTop = ConstraintSet.UNSET
+			verticalBias = windowBias
 		}
 	}
 
@@ -165,13 +149,11 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 		val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
 		safeView.setPadding(
 			max(safe.left, gestures.left),
-			if(windowLayoutEnabled && controlsBelowVideo) 0 else max(safe.top, gestures.top),
+			if(controlsBelowVideo) 0 else max(safe.top, gestures.top),
 			max(safe.right, gestures.right),
 			max(safe.bottom, gestures.bottom)
 		)
 	}
-
-	private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
 	override fun onDestroyView()
 	{
