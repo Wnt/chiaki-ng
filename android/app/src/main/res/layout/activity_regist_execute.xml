@@ -19,7 +19,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_chainStyle="packed"
-        app:tint="?attr/colorOnPrimary" />
+        app:tint="?attr/colorOnSurface" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/infoTextView"
@@ -28,6 +28,7 @@
         android:layout_marginTop="28dp"
         android:gravity="center"
         android:textAppearance="?attr/textAppearanceHeadline4"
+        android:textColor="?attr/colorOnSurface"
         app:layout_constraintBottom_toTopOf="@id/progressBar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -46,7 +47,6 @@
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/primaryButton"
-        style="@style/MageTheme.Button"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="28dp"

@@ -3,11 +3,16 @@
 package com.metallic.chiaki.regist
 
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.util.Base64
 import android.view.View
 import android.view.Window
+import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import com.metallic.chiaki.R
@@ -45,6 +50,7 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 	private var manualAccountIdVisible = false
 	private var currentAccountId: String? = null
 	private var guided = false
+	private var usabilityChangesEnabled = false
 
 	override val revealWindow: Window get() = window
 	override val revealIntent: Intent get() = intent
@@ -58,6 +64,13 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		setContentView(binding.root)
 		binding.root.applySystemBarInsets()
 		handleReveal()
+		usabilityChangesEnabled = RegistrationFormFeature.isEnabled(this)
+		if(usabilityChangesEnabled)
+		{
+			window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+			binding.rootLayout.isFillViewport = true
+			keepFocusedInputVisible()
+		}
 
 		viewModel = ViewModelProvider(this).get(RegistViewModel::class.java)
 		preferences = Preferences(this)
@@ -135,6 +148,40 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 			showGuidedPinEntry()
 	}
 
+	private fun keepFocusedInputVisible()
+	{
+		val initialBottomPadding = binding.formContentLayout.paddingBottom
+		ViewCompat.setOnApplyWindowInsetsListener(binding.formContentLayout) { view, insets ->
+			val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+			val systemBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
+			view.updatePadding(bottom = initialBottomPadding + (imeBottom - systemBottom).coerceAtLeast(0))
+			insets
+		}
+		ViewCompat.requestApplyInsets(binding.formContentLayout)
+
+		val inputs = setOf(binding.hostEditText, binding.psnIdEditText, binding.pinEditText)
+		binding.rootLayout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+			currentFocus?.takeIf(inputs::contains)?.let(::revealInput)
+		}
+		inputs.forEach { input ->
+			input.setOnFocusChangeListener { view, hasFocus ->
+				if(hasFocus)
+					revealInput(view)
+			}
+		}
+	}
+
+	private fun revealInput(input: View)
+	{
+		input.postDelayed({
+			val extraBottom = (24 * resources.displayMetrics.density).toInt()
+			input.requestRectangleOnScreen(
+				Rect(0, 0, input.width, input.height + extraBottom),
+				true
+			)
+		}, 200)
+	}
+
 	private fun showGuidedPinEntry()
 	{
 		val consoleName = intent.getStringExtra(EXTRA_CONSOLE_NAME)
@@ -143,6 +190,7 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		binding.titleTextView.text = getString(R.string.link_console_title, consoleName)
 		binding.hostTextInputLayout.visibility = View.GONE
 		binding.broadcastCheckBox.visibility = View.GONE
+		binding.consoleTypeTextView.visibility = View.GONE
 		binding.ps4VersionRadioGroup.visibility = View.GONE
 		binding.psnSignInButton.visibility = View.GONE
 		binding.psnAccountIdStatusTextView.visibility = View.GONE

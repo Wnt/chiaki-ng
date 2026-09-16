@@ -35,12 +35,13 @@
     <string name="title_regist">Register Console</string>
     <string name="link_console_title">Link %s</string>
     <string name="action_link_console">Link console</string>
-    <string name="hint_regist_host">Host</string>
-    <string name="regist_broadcast">Broadcast</string>
-    <string name="regist_option_ps4_lt_7">PS4 &lt; 7.0</string>
-    <string name="regist_option_ps4_ge_7">PS4 ≥ 7.0, &lt; 8</string>
-    <string name="regist_option_ps4_ge_8">PS4 ≥ 8.0</string>
-    <string name="regist_option_ps5">PS5</string>
+    <string name="hint_regist_host">Console address</string>
+    <string name="regist_broadcast">Search local network</string>
+    <string name="regist_console_type">Console model</string>
+    <string name="regist_option_ps4_lt_7">Older PlayStation 4 (version 6 or earlier)</string>
+    <string name="regist_option_ps4_ge_7">PlayStation 4 (version 7)</string>
+    <string name="regist_option_ps4_ge_8">PlayStation 4 (updated)</string>
+    <string name="regist_option_ps5">PlayStation 5</string>
     <string name="regist_psn_account_id_help">About obtaining your Account ID, see</string>
     <string name="regist_psn_account_id_help_url">https://streetpea.github.io/chiaki-ng/setup/configuration/#registering-your-playstation</string>
     <string name="hint_regist_psn_online_id">PSN Online ID (username, case-sensitive)</string>
@@ -79,10 +80,10 @@
     <string name="alert_message_import">Registered Hosts: %s\n\nManual Hosts: %s</string>
     <string name="alert_message_import_failed">Failed to import settings from file:\n%s</string>
     <string name="action_import_failed_ack">Dismiss</string>
-    <string name="title_edit_manual">Manual Console Entry</string>
+    <string name="title_edit_manual">Add console by address</string>
     <string name="action_add_manual_save">Save</string>
-    <string name="hint_add_manual_regist_host">Registered Console</string>
-    <string name="add_manual_regist_on_connect">Register on first Connection</string>
+    <string name="hint_add_manual_regist_host">Use saved registration</string>
+    <string name="add_manual_regist_on_connect">Register when first connected</string>
     <string name="preferences_category_title_general">General</string>
     <string name="preferences_category_title_account">Account</string>
     <string name="preferences_category_title_controller_touch">Controller &amp; touch</string>
@@ -317,5 +318,6 @@
     <string name="preferences_psn_login_in_app_browser_key">psn_login_in_app_browser</string>
     <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
+    <string name="preferences_registration_form_usability_enabled_key">registration_form_usability_enabled</string>
     <string name="preferences_stream_quality_preset_key">stream_quality_preset</string>
 </resources>
