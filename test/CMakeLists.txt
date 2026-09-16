@@ -21,6 +21,8 @@ set(CHIAKI_UNIT_SOURCES
 				test_log.c
 				test_log.h
 				bitstream.c
+				video_presenter.c
+				../android/app/src/main/cpp/video-presenter-age.c
 				regist.c)
 
 if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)

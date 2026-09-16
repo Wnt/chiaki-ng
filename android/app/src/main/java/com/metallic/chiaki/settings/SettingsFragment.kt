@@ -40,6 +40,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
+		preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
 		preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled
 		preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled
@@ -70,6 +71,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
+			preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value
 			preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled = value
 			preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled = value
@@ -89,6 +91,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.displayRefreshRateModeKey -> preferences.displayRefreshRateMode.value
 		key == preferences.videoPacingModeKey -> preferences.videoPacingMode.value
 		key == preferences.videoPresenterLeadKey -> preferences.videoPresenterLead.value
+		key == preferences.videoPacingMaxFrameAgePeriodsKey -> preferences.videoPacingMaxFrameAgePeriods.toString()
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.decoderOperatingRateKey -> preferences.decoderOperatingRate.toString()
@@ -128,6 +131,10 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val lead = Preferences.VideoPresenterLead.values().firstOrNull { it.value == value } ?: return
 				preferences.videoPresenterLead = lead
+			}
+			key == preferences.videoPacingMaxFrameAgePeriodsKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.videoPacingMaxFrameAgePeriods = it }
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
 			key == preferences.packetLossMaxPercentKey ->
@@ -204,6 +211,17 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_presenter_lead_key))?.let {
 			it.entryValues = Preferences.videoPresenterLeadAll.map { lead -> lead.value }.toTypedArray()
 			it.entries = Preferences.videoPresenterLeadAll.map { lead -> getString(lead.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_video_pacing_max_frame_age_periods_key))?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_video_pacing_max_frame_age_periods_value,
+					preferences.videoPacingMaxFrameAgePeriods)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.videoPacingMaxFrameAgePeriods.toString())
+			}
 		}
 
 		val bitratePreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_bitrate_key))

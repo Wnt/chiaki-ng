@@ -46,6 +46,7 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint64_t decode_p95_us;
 	uint64_t missed_vsyncs;
 	uint64_t dropped_frames;
+	uint64_t bounded_age_dropped_frames;
 	uint64_t dejitter_buffer_ns;
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;
@@ -109,6 +110,8 @@ typedef struct android_chiaki_video_presenter_t
 
 	uint64_t missed_vsyncs;
 	uint64_t dropped_frames;
+	uint64_t bounded_age_dropped_frames;
+	uint32_t max_queue_age_periods;
 	bool diagnostics_enabled;
 	AndroidChiakiVideoInputTimestamp diagnostics_inputs[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
 	uint32_t diagnostics_input_next;
@@ -134,14 +137,16 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 		AndroidChiakiPerformanceHintThreadCallback stop_cb, void *user);
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode);
+		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
+		uint32_t max_queue_age_periods);
 void android_chiaki_video_presenter_request_stop(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_join(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPacingMode mode);
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode);
+		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
+		uint32_t max_queue_age_periods);
 void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterStats *stats);
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,

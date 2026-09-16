@@ -211,6 +211,21 @@
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_video_pacing_bounded_age_enabled_key"
+			app:title="@string/preferences_video_pacing_bounded_age_enabled_title"
+			app:summary="@string/preferences_video_pacing_bounded_age_enabled_summary"
+			app:defaultValue="false"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_video_pacing_max_frame_age_periods_key"
+			app:title="@string/preferences_video_pacing_max_frame_age_periods_title"
+			app:defaultValue="2"
+			app:dependency="@string/preferences_video_pacing_bounded_age_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
         <SwitchPreference
             app:key="preferences_stream_window_optimizations_enabled"
             app:title="Stream Window Optimizations"
