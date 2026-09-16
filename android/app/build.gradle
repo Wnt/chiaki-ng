@@ -121,6 +121,18 @@ android {
     } else {
         println("Signing not enabled")
     }
+
+    // PLE-97: CI signs the debug APK with the project's debug keystore so it
+    // installs over the test phone's registered app (`adb install -r`). The
+    // path comes in as a gradle property; local builds keep AGP's default
+    // ~/.android/debug.keystore lookup.
+    if(project.hasProperty("chiakiDebugKeystore")) {
+        println("Debug signing from " + project.property("chiakiDebugKeystore"))
+        signingConfigs.debug.storeFile = file(project.property("chiakiDebugKeystore"))
+        signingConfigs.debug.storePassword = "android"
+        signingConfigs.debug.keyAlias = "androiddebugkey"
+        signingConfigs.debug.keyPassword = "android"
+    }
 }
 
 ksp {
