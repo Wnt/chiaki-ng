@@ -23,7 +23,9 @@ class StreamViewModel(
 	val application: Application,
 	val connectInfo: ConnectInfo,
 	private val psnDevice: PsnDevice? = null,
-	diagnosticsPreview: Boolean = false
+	diagnosticsPreview: Boolean = false,
+	/** This stream follows a successful registration: the console may still be settling (PLE-335). */
+	justLinked: Boolean = false
 ): ViewModel()
 {
 	val preferences = Preferences(application)
@@ -32,7 +34,8 @@ class StreamViewModel(
 	val input = StreamInput(application, preferences)
 	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, input,
-		externallyManaged = psnDevice != null || diagnosticsPreview)
+		externallyManaged = psnDevice != null || diagnosticsPreview,
+		justLinked = justLinked)
 
 	private val remoteController: PsnRemoteController? = psnDevice?.let {
 		val bridge = AndroidPsnRemoteNativeBridge(

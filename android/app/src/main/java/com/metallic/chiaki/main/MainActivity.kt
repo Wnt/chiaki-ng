@@ -66,6 +66,7 @@ class MainActivity : AppCompatActivity()
 	/** An unlinked console found on the network, waiting for the account's console list to link it. */
 	private var pendingLinkHost: DisplayHost? = null
 	private var pendingAutoPlayAddress: String? = null
+	private var pendingAutoPlayJustLinked = false
 	private var previewState: String? = null
 
 	private val psnListAllowed: Boolean get() = shouldLoadPsnConsoleList(
@@ -109,6 +110,8 @@ class MainActivity : AppCompatActivity()
 		if(result.resultCode == Activity.RESULT_OK)
 		{
 			pendingAutoPlayAddress = result.data?.getStringExtra(RegistActivity.EXTRA_REGISTERED_HOST)
+			// A console linked with a PIN needs the same moment to settle as a PSN-linked one.
+			pendingAutoPlayJustLinked = true
 			maybePlayRegisteredHost(localHosts)
 		}
 	}
@@ -202,9 +205,9 @@ class MainActivity : AppCompatActivity()
 			viewModel.clearPsnPlayRequest()
 			val local = request.console.registeredHost?.let { readyLocalHost(it) }
 			if(local != null)
-				playLocalConsole(local)
+				playLocalConsole(local, justLinked = request.justLinked)
 			else
-				connectPsnConsole(request.console)
+				connectPsnConsole(request.console, justLinked = request.justLinked)
 		}
 		updateHomeState()
 	}
@@ -482,7 +485,7 @@ class MainActivity : AppCompatActivity()
 		console.displayHost?.let(::wakeupHost)
 	}
 
-	private fun playLocalConsole(host: DisplayHost)
+	private fun playLocalConsole(host: DisplayHost, justLinked: Boolean = false)
 	{
 		val registeredHost = host.registeredHost
 		if(registeredHost != null && !registeredHost.target.isPS5)
@@ -549,6 +552,7 @@ class MainActivity : AppCompatActivity()
 		)
 		streamLauncher.launch(Intent(this, StreamActivity::class.java).apply {
 			putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
+			putExtra(StreamActivity.EXTRA_JUST_LINKED, justLinked)
 		})
 	}
 
@@ -669,7 +673,9 @@ class MainActivity : AppCompatActivity()
 		val address = pendingAutoPlayAddress ?: return
 		val host = hosts.firstOrNull { it.host == address && it.registeredHost != null } ?: return
 		pendingAutoPlayAddress = null
-		playLocalConsole(host)
+		val justLinked = pendingAutoPlayJustLinked
+		pendingAutoPlayJustLinked = false
+		playLocalConsole(host, justLinked = justLinked)
 	}
 
 	private fun wakeupHost(host: DisplayHost)
@@ -687,7 +693,7 @@ class MainActivity : AppCompatActivity()
 		)
 	}
 
-	private fun connectPsnConsole(console: PsnConsole)
+	private fun connectPsnConsole(console: PsnConsole, justLinked: Boolean = false)
 	{
 		val registered = console.registeredHost ?: return
 		if(!registered.target.isPS5)
@@ -698,6 +704,7 @@ class MainActivity : AppCompatActivity()
 		streamLauncher.launch(Intent(this, StreamActivity::class.java).apply {
 			putExtra(StreamActivity.EXTRA_CONNECT_INFO, viewModel.connectInfo(registered))
 			putExtra(StreamActivity.EXTRA_PSN_DEVICE, console.device)
+			putExtra(StreamActivity.EXTRA_JUST_LINKED, justLinked)
 		})
 	}
 

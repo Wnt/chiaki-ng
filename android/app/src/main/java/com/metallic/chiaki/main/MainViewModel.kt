@@ -198,7 +198,7 @@ class MainViewModel(
 				database.registeredHostDao().deleteByMac(host.serverMac)
 				host.copy(id = database.registeredHostDao().insert(host))
 			}
-			PsnPlayRequest(console.copy(registeredHost = savedHost))
+			PsnPlayRequest(console.copy(registeredHost = savedHost), justLinked = true)
 		}
 	}
 
