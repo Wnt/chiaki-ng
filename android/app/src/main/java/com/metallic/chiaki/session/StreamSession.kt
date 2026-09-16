@@ -23,6 +23,7 @@ data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
 class StreamSession(private val context: Context, val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
+		val videoPresenterLead: Int,
 		val input: StreamInput, private val externallyManaged: Boolean = false)
 {
 	var session: Session? = null
@@ -79,7 +80,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			val surface = surface
 			if(surface != null)
 				session.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-					surfaceVsyncOffsetNanos, nativePacingMode)
+					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead)
 			this.session = session
 		}
 		catch(e: CreateError)
@@ -95,7 +96,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		val currentSurface = surface
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-				surfaceVsyncOffsetNanos, nativePacingMode)
+				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead)
 	}
 
 	fun detachRemoteSession()
@@ -152,7 +153,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 				clearFrameRate(holder.surface, frameRate)
 				this@StreamSession.surface = null
 				session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-					surfaceVsyncOffsetNanos, nativePacingMode)
+					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead)
 			}
 		})
 		
@@ -219,14 +220,14 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		surfaceRefreshHz = refreshHz ?: display?.refreshRate?.toDouble() ?: connectInfo.videoProfile.maxFPS.toDouble()
 		surfaceVsyncOffsetNanos = display?.appVsyncOffsetNanos ?: 0L
 		session?.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead)
 	}
 
 	fun detachSurface()
 	{
 		this.surface = null
 		session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead)
 	}
 
 	fun attachToTextureView(textureView: TextureView)
