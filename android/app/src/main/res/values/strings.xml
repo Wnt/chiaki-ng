@@ -50,6 +50,10 @@
     <string name="psn_login_redirect_invalid">Sony returned an invalid sign-in redirect</string>
     <string name="action_psn_finish_sign_in">Finish sign-in</string>
     <string name="action_psn_continue_sign_in">Continue signing in</string>
+    <!-- PLE-334: the one tap that finishes sign-in. Pressing the tab's action button is the only
+         way an Android app learns a Custom Tab's address, so the user has to be told which
+         control it is before Sony's blank redirect page appears. One line, never a paragraph. -->
+    <string name="psn_login_finish_hint">When the page goes blank, tap ✓ Finish sign-in at the top</string>
     <string name="action_psn_link_with_pin">Link with PIN instead</string>
     <string name="psn_login_link_expired">That sign-in link expired or was already used. Sign in again.</string>
     <string name="action_retry">Retry</string>
