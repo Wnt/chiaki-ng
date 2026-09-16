@@ -24,7 +24,6 @@ import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.common.getDatabase
 import com.metallic.chiaki.databinding.ActivityEditManualBinding
-import com.metallic.chiaki.regist.RegistrationFormFeature
 
 class EditManualConsoleActivity: AppCompatActivity(), RevealActivity
 {
@@ -35,7 +34,6 @@ class EditManualConsoleActivity: AppCompatActivity(), RevealActivity
 
 	private lateinit var viewModel: EditManualConsoleViewModel
 	private lateinit var binding: ActivityEditManualBinding
-	private var usabilityChangesEnabled = false
 
 	override val revealIntent: Intent get() = intent
 	override val revealRootLayout: View get() = binding.rootLayout
@@ -49,13 +47,9 @@ class EditManualConsoleActivity: AppCompatActivity(), RevealActivity
 		setContentView(binding.root)
 		binding.root.applySystemBarInsets()
 		handleReveal()
-		usabilityChangesEnabled = RegistrationFormFeature.isEnabled(this)
-		if(usabilityChangesEnabled)
-		{
-			window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-			binding.rootLayout.isFillViewport = true
-			keepFocusedInputVisible()
-		}
+		window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+		binding.rootLayout.isFillViewport = true
+		keepFocusedInputVisible()
 
 		viewModel = ViewModelProvider(this, viewModelFactory {
 				EditManualConsoleViewModel(getDatabase(this),
@@ -77,7 +71,7 @@ class EditManualConsoleActivity: AppCompatActivity(), RevealActivity
 		viewModel.registeredHosts.observe(this, Observer { hosts ->
 			val hasRegistrationChoice = hosts.any { it != null }
 			binding.registeredHostTextInputLayout.visibility =
-				if(!usabilityChangesEnabled || hasRegistrationChoice) View.VISIBLE else View.GONE
+				if(hasRegistrationChoice) View.VISIBLE else View.GONE
 			binding.registeredHostTextView.setAdapter(ArrayAdapter<String>(this, R.layout.dropdown_menu_popup_item,
 				hosts.map { titleForRegisteredHost(it) }))
 			binding.registeredHostTextView.onItemClickListener = object: AdapterView.OnItemClickListener {

@@ -33,6 +33,7 @@
     <string name="title_regist">Register Console</string>
     <string name="link_console_title">Link %s</string>
     <string name="action_link_console">Link console</string>
+    <string name="action_link_with_pin">Link with PIN</string>
     <string name="hint_regist_host">Console address</string>
     <string name="regist_broadcast">Search local network</string>
     <string name="regist_option_ps5">PlayStation 5</string>
@@ -234,7 +235,7 @@
     <string name="console_status_standby">Standby</string>
     <string name="console_status_remote">Remote</string>
     <string name="console_status_remote_psn">Remote via PSN</string>
-    <string name="console_status_registration_required">Registration required</string>
+    <string name="console_status_registration_required">Not linked yet</string>
     <string name="console_status_refreshing">Refreshing consoles</string>
     <string name="stream_summary_title">Last session</string>
     <string name="stream_summary_end_console_takeover">The stream ended because someone started playing on the TV with the console\'s own controller. A PS5 allows one session at a time.</string>
@@ -315,6 +316,5 @@
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
     <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
-    <string name="preferences_registration_form_usability_enabled_key">registration_form_usability_enabled</string>
     <string name="preferences_stream_quality_preset_key">stream_quality_preset</string>
 </resources>

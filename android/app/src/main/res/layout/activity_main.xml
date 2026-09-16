@@ -227,12 +227,26 @@
                 android:gravity="center"
                 android:textColor="?attr/colorError" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/retryPsnActionButton"
-                style="@style/Widget.Material3.Button.TextButton"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/action_retry" />
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/retryPsnActionButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_retry" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/linkWithPinButton"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_link_with_pin"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
 
         <FrameLayout

@@ -43,6 +43,23 @@ class PsnConsoleTest
 		assertEquals(OnboardingHomeState.ACCOUNT_CONSOLES, onboardingHomeState(0, true))
 	}
 
+	@Test fun consoleFoundOnTheNetworkSkipsWelcome()
+	{
+		assertEquals(OnboardingHomeState.ACCOUNT_CONSOLES, onboardingHomeState(0, false, 1))
+		assertEquals(OnboardingHomeState.WELCOME, onboardingHomeState(0, false, 0))
+	}
+
+	@Test fun signInLinksOnlyAnUnlinkedAccountConsoleWithTheTappedName()
+	{
+		val unlinked = PsnConsole(PsnDevice("one", "PS5-466"), null)
+		val other = PsnConsole(PsnDevice("two", "Office PS5"), null)
+
+		assertEquals(unlinked, psnConsoleNamed(listOf(other, unlinked), " ps5-466 "))
+		assertNull(psnConsoleNamed(listOf(other), "PS5-466"))
+		assertNull(psnConsoleNamed(listOf(unlinked), null))
+		assertNull(psnConsoleNamed(listOf(unlinked), ""))
+	}
+
 	@Test fun configuredConsoleAlwaysReturnsHome()
 	{
 		assertEquals(OnboardingHomeState.HOME, onboardingHomeState(1, false))

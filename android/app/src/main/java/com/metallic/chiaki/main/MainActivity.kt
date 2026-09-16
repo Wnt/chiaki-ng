@@ -26,7 +26,9 @@ import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.common.ext.putRevealExtra
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.databinding.ActivityMainBinding
+import com.metallic.chiaki.discovery.serverMac
 import com.metallic.chiaki.lib.ConnectInfo
+import com.metallic.chiaki.lib.DiscoveryHost
 import com.metallic.chiaki.manualconsole.EditManualConsoleActivity
 import com.metallic.chiaki.regist.PsnLoginActivity
 import com.metallic.chiaki.regist.RegistActivity
@@ -47,7 +49,6 @@ class MainActivity : AppCompatActivity()
 	companion object
 	{
 		const val EXTRA_ONBOARDING_PREVIEW = "onboarding_preview"
-		const val EXTRA_UNIFIED_CONSOLE_LIST = "unified_console_list"
 		private const val PREVIEW_WELCOME = "welcome"
 		private const val PREVIEW_CONSOLES = "consoles"
 		private const val PREVIEW_SUMMARY = "summary"
@@ -62,9 +63,10 @@ class MainActivity : AppCompatActivity()
 	private var psnConsoles: List<PsnConsole> = emptyList()
 	private var configuredConsoleCount = -1
 	private var pendingRegistrationHost: DisplayHost? = null
+	/** An unlinked console found on the network, waiting for the account's console list to link it. */
+	private var pendingLinkHost: DisplayHost? = null
 	private var pendingAutoPlayAddress: String? = null
 	private var previewState: String? = null
-	private var unifiedConsoleListEnabled = false
 
 	private val psnListAllowed: Boolean get() = shouldLoadPsnConsoleList(
 		preferences.psnRemotePlayEnabled,
@@ -85,11 +87,12 @@ class MainActivity : AppCompatActivity()
 			return@registerForActivityResult
 		preferences.psnSignInEnabled = true
 		preferences.psnRemotePlayEnabled = true
-		viewModel.setPsnEnabled(true, !unifiedConsoleListEnabled || psnListAllowed)
 		pendingRegistrationHost?.also { host ->
 			pendingRegistrationHost = null
-			showGuidedRegistration(host.host, host.name)
+			pendingLinkHost = host
 		}
+		viewModel.setPsnEnabled(true, psnListAllowed)
+		linkPendingHost()
 		updateHomeState()
 	}
 
@@ -119,8 +122,6 @@ class MainActivity : AppCompatActivity()
 		binding.appBarLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 		binding.onboardingLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 		preferences = Preferences(this)
-		unifiedConsoleListEnabled = BuildConfig.DEBUG &&
-			intent.getBooleanExtra(EXTRA_UNIFIED_CONSOLE_LIST, false)
 		previewState = intent.getStringExtra(EXTRA_ONBOARDING_PREVIEW)
 			?.takeIf { BuildConfig.DEBUG && it in setOf(PREVIEW_WELCOME, PREVIEW_CONSOLES, PREVIEW_SUMMARY) }
 		setSupportActionBar(binding.toolbar)
@@ -160,14 +161,13 @@ class MainActivity : AppCompatActivity()
 			this::playConsole,
 			this::wakeConsole,
 			this::editConsole,
-			this::deleteConsole,
-			unifiedConsoleListEnabled
+			this::deleteConsole
 		)
 		binding.hostsRecyclerView.adapter = consoleAdapter
 		binding.hostsRecyclerView.layoutManager = LinearLayoutManager(this)
 		viewModel.displayHosts.observe(this) {
 			localHosts = it
-			updateConsoleList()
+			updateHomeState()
 			maybePlayRegisteredHost(it)
 		}
 		viewModel.configuredConsoleCount.observe(this) { count ->
@@ -184,13 +184,18 @@ class MainActivity : AppCompatActivity()
 		viewModel.psnListState.observe(this) {
 			updatePsnListState(it)
 			updateHomeState()
+			linkPendingHost()
 		}
 		viewModel.psnAction.observe(this) { consoleAdapter.action = it }
 		viewModel.psnError.observe(this, this::showPsnActionError)
 		viewModel.psnPlayRequest.observe(this) { request ->
 			request ?: return@observe
-			connectPsnConsole(request.console)
 			viewModel.clearPsnPlayRequest()
+			val local = request.console.registeredHost?.let { readyLocalHost(it) }
+			if(local != null)
+				playLocalConsole(local)
+			else
+				connectPsnConsole(request.console)
 		}
 		updateHomeState()
 	}
@@ -226,7 +231,8 @@ class MainActivity : AppCompatActivity()
 		PREVIEW_CONSOLES, PREVIEW_SUMMARY -> OnboardingHomeState.ACCOUNT_CONSOLES
 		else -> onboardingHomeState(
 			configuredConsoleCount,
-			if(unifiedConsoleListEnabled) psnListAllowed else preferences.psnRemotePlayEnabled
+			psnListAllowed,
+			localHosts.count { it is DiscoveredDisplayHost && it.isPS5 }
 		)
 	}
 
@@ -280,11 +286,7 @@ class MainActivity : AppCompatActivity()
 		if(!::consoleAdapter.isInitialized)
 			return
 		val atTop = binding.hostsRecyclerView.computeVerticalScrollOffset() == 0
-		val hosts = if(currentHomeState() == OnboardingHomeState.ACCOUNT_CONSOLES) emptyList() else localHosts
-		consoleAdapter.consoles = if(unifiedConsoleListEnabled)
-			mergeHomeConsoles(hosts, psnConsoles)
-		else
-			mergeHomeConsolesLegacy(hosts, psnConsoles)
+		consoleAdapter.consoles = mergeHomeConsoles(localHosts, psnConsoles)
 		if(atTop)
 			binding.hostsRecyclerView.scrollToPosition(0)
 		val listUnavailable = viewModel.psnListState.value is PsnConsoleListState.Error ||
@@ -318,6 +320,13 @@ class MainActivity : AppCompatActivity()
 				if(error.recovery == PsnErrorRecovery.SIGN_IN) startPsnSignIn()
 				else viewModel.retryLastPsnAction()
 			}
+		}
+		val pinHost = viewModel.lastFailedPsnConsole?.takeIf { error != null }?.let(::unlinkedLocalHost)
+		binding.linkWithPinButton.visibility = if(pinHost == null) View.GONE else View.VISIBLE
+		binding.linkWithPinButton.setOnClickListener {
+			pinHost ?: return@setOnClickListener
+			viewModel.clearPsnError()
+			showGuidedRegistration(pinHost.host, pinHost.name)
 		}
 	}
 
@@ -386,10 +395,7 @@ class MainActivity : AppCompatActivity()
 	{
 		super.onStart()
 		if(previewState == null)
-			viewModel.setPsnEnabled(
-				preferences.psnRemotePlayEnabled,
-				!unifiedConsoleListEnabled || psnListAllowed
-			)
+			viewModel.setPsnEnabled(preferences.psnRemotePlayEnabled, psnListAllowed)
 		viewModel.discoveryManager.resume()
 	}
 
@@ -446,7 +452,7 @@ class MainActivity : AppCompatActivity()
 		}
 		preferences.psnSignInEnabled = true
 		preferences.psnRemotePlayEnabled = true
-		viewModel.setPsnEnabled(true, !unifiedConsoleListEnabled || psnListAllowed)
+		viewModel.setPsnEnabled(true, psnListAllowed)
 		updateHomeState()
 	}
 
@@ -489,7 +495,18 @@ class MainActivity : AppCompatActivity()
 					startPsnSignIn()
 				}
 				else
-					showGuidedRegistration(host.host, host.name)
+				{
+					pendingLinkHost = host
+					if(!psnListAllowed)
+					{
+						preferences.psnSignInEnabled = true
+						preferences.psnRemotePlayEnabled = true
+					}
+					viewModel.setPsnEnabled(true, psnListAllowed)
+					if(viewModel.psnListState.value is PsnConsoleListState.Error)
+						viewModel.loadPsnConsoles()
+					linkPendingHost()
+				}
 			}
 			else
 				startLegacyRegistration(host)
@@ -595,6 +612,41 @@ class MainActivity : AppCompatActivity()
 		viewModel.playPsnConsole(console)
 	}
 
+	/**
+	 * Links the console the user tapped before signing in. The account knows the console, so it is
+	 * registered over PSN with no PIN; only a console the account does not list asks for the PIN.
+	 */
+	private fun linkPendingHost()
+	{
+		val host = pendingLinkHost ?: return
+		val listState = viewModel.psnListState.value
+		if(listState == PsnConsoleListState.Loading || listState == PsnConsoleListState.Hidden && psnListAllowed)
+			return
+		pendingLinkHost = null
+		val console = psnConsoleNamed(viewModel.currentPsnConsoles(), host.name)
+		if(console != null)
+			playPsnConsole(console)
+		else
+			showGuidedRegistration(host.host, host.name)
+	}
+
+	/** A console registered over PSN that is awake on this network streams locally, not through PSN. */
+	private fun readyLocalHost(registeredHost: RegisteredHost): DisplayHost? = localHosts
+		.filterIsInstance<DiscoveredDisplayHost>()
+		.firstOrNull { host ->
+			host.isPS5 && host.discoveredHost.state == DiscoveryHost.State.READY &&
+				host.discoveredHost.serverMac == registeredHost.serverMac
+		}
+		?.let { DiscoveredDisplayHost(registeredHost, it.discoveredHost) }
+
+	/** The console on this network behind a failed PSN link, which can still be linked with a PIN. */
+	private fun unlinkedLocalHost(console: PsnConsole): DisplayHost? = localHosts
+		.filterIsInstance<DiscoveredDisplayHost>()
+		.firstOrNull { host ->
+			host.registeredHost == null && host.isPS5 &&
+				psnConsoleNamed(listOf(PsnConsole(console.device, null)), host.name) != null
+		}
+
 	private fun maybePlayRegisteredHost(hosts: List<DisplayHost>)
 	{
 		val address = pendingAutoPlayAddress ?: return
@@ -634,9 +686,7 @@ class MainActivity : AppCompatActivity()
 
 	private fun editConsole(console: HomeConsole)
 	{
-		val host = if(unifiedConsoleListEnabled)
-			console.manualDisplayHost else console.displayHost as? ManualDisplayHost
-		host ?: return
+		val host = console.manualDisplayHost ?: return
 		startActivity(Intent(this, EditManualConsoleActivity::class.java).apply {
 			putExtra(EditManualConsoleActivity.EXTRA_MANUAL_HOST_ID, host.manualHost.id)
 		})
@@ -644,9 +694,7 @@ class MainActivity : AppCompatActivity()
 
 	private fun deleteConsole(console: HomeConsole)
 	{
-		val host = if(unifiedConsoleListEnabled)
-			console.manualDisplayHost else console.displayHost as? ManualDisplayHost
-		host ?: return
+		val host = console.manualDisplayHost ?: return
 		MaterialAlertDialogBuilder(this)
 			.setMessage(getString(R.string.alert_message_delete_manual_host, host.manualHost.host))
 			.setPositiveButton(R.string.action_delete) { _, _ ->

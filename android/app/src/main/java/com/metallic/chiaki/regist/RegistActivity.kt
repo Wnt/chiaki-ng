@@ -45,7 +45,6 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 	private var manualAccountIdVisible = false
 	private var currentAccountId: String? = null
 	private var guided = false
-	private var usabilityChangesEnabled = false
 
 	override val revealWindow: Window get() = window
 	override val revealIntent: Intent get() = intent
@@ -59,13 +58,9 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		setContentView(binding.root)
 		binding.root.applySystemBarInsets()
 		handleReveal()
-		usabilityChangesEnabled = RegistrationFormFeature.isEnabled(this)
-		if(usabilityChangesEnabled)
-		{
-			window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-			binding.rootLayout.isFillViewport = true
-			keepFocusedInputVisible()
-		}
+		window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+		binding.rootLayout.isFillViewport = true
+		keepFocusedInputVisible()
 
 		preferences = Preferences(this)
 		guided = intent.getBooleanExtra(EXTRA_GUIDED, false)
