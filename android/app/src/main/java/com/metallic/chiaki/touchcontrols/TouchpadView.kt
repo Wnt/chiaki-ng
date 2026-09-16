@@ -128,7 +128,7 @@ class TouchpadView @JvmOverloads constructor(
 		when(event.actionMasked)
 		{
 			MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
-				if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+				if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
 					requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_POINTER)
 				state.startTouch(touchX(event, event.actionIndex), touchY(event, event.actionIndex))?.let {
 					haptics.trigger()
