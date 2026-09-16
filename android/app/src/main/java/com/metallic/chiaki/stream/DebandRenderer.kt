@@ -8,12 +8,14 @@ import android.opengl.GLES30
 import android.opengl.GLSurfaceView
 import android.os.Handler
 import android.os.Looper
+import android.os.Trace
 import android.util.Log
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.random.Random
@@ -31,6 +33,7 @@ class DebandRenderer(
 
     companion object {
         private const val TAG = "DebandRenderer"
+        private const val FRAME_LOG_INTERVAL = 120L
 
         // 1. Copy pass (OES -> FBO)
         private val COPY_VERTEX_SHADER = """
@@ -224,9 +227,13 @@ class DebandRenderer(
 
     @Volatile
     private var frameAvailable = false
+    private val dirtyFrameAvailable = AtomicBoolean(false)
     private var frameCount = 0f
     private val firstFrameCallbackLogged = AtomicBoolean(false)
     private val firstFrameDrawLogged = AtomicBoolean(false)
+    private val frameCallbackCount = AtomicLong(0)
+    private var drawCount = 0L
+    private var textureUpdateCount = 0L
 
     init {
         android.opengl.Matrix.setIdentityM(stMatrix, 0)
@@ -307,10 +314,40 @@ class DebandRenderer(
     }
 
     override fun onDrawFrame(gl: GL10?) {
-        if (frameAvailable) {
-            surfaceTexture?.updateTexImage()
+        // Claim the pending notification before updateTexImage(). A new callback can arrive
+        // while updateTexImage() is running; clearing the flag afterwards would erase that
+        // notification and leave its buffer queued forever in render-when-dirty mode.
+        val updateTexture = if (renderWhenDirty) {
+            dirtyFrameAvailable.getAndSet(false)
+        } else {
+            frameAvailable
+        }
+        if (renderWhenDirty) {
+            drawCount++
+            if (shouldLogFrameEvent(drawCount)) {
+                Log.i(TAG, "Dirty draw #$drawCount started on ${Thread.currentThread().name}; updateTexture=$updateTexture")
+            }
+        }
+        if (updateTexture) {
+            if (renderWhenDirty) {
+                Trace.beginSection("DebandRenderer.updateTexImage")
+                try {
+                    surfaceTexture?.updateTexImage()
+                } finally {
+                    Trace.endSection()
+                }
+            } else {
+                surfaceTexture?.updateTexImage()
+            }
             surfaceTexture?.getTransformMatrix(stMatrix)
-            frameAvailable = false
+            if (!renderWhenDirty)
+                frameAvailable = false
+            if (renderWhenDirty) {
+                textureUpdateCount++
+                if (shouldLogFrameEvent(textureUpdateCount)) {
+                    Log.i(TAG, "Dirty updateTexImage #$textureUpdateCount completed on ${Thread.currentThread().name}")
+                }
+            }
             if (renderWhenDirty && firstFrameDrawLogged.compareAndSet(false, true)) {
                 Log.i(TAG, "First decoder frame drawn on ${Thread.currentThread().name}")
             }
@@ -364,12 +401,35 @@ class DebandRenderer(
     }
 
     override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
-        frameAvailable = true
+        val callbackCount = if (renderWhenDirty) frameCallbackCount.incrementAndGet() else 0L
+        if (renderWhenDirty)
+            dirtyFrameAvailable.set(true)
+        else
+            frameAvailable = true
         if (renderWhenDirty && firstFrameCallbackLogged.compareAndSet(false, true)) {
             Log.i(TAG, "First decoder frame available on ${Thread.currentThread().name}; requesting render")
         }
-        onRequestRender()
+        if (renderWhenDirty && shouldLogFrameEvent(callbackCount)) {
+            Log.i(TAG, "Dirty frame callback #$callbackCount on ${Thread.currentThread().name}; requesting render")
+        }
+        if (renderWhenDirty) {
+            Trace.beginSection("DebandRenderer.onFrameAvailable")
+            try {
+                Trace.beginSection("DebandRenderer.requestRender")
+                try {
+                    onRequestRender()
+                } finally {
+                    Trace.endSection()
+                }
+            } finally {
+                Trace.endSection()
+            }
+        } else {
+            onRequestRender()
+        }
     }
+
+    private fun shouldLogFrameEvent(count: Long) = count <= 5 || count % FRAME_LOG_INTERVAL == 0L
 
     /**
      * Releases the SurfaceTexture and its Surface. Safe to call from any thread.
