@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Shown before the browser opens (PLE-339). Pressing the tab's ✓ is the only way this app ever
+	learns the tab's address, and that address carries the authorization code, so the one tap the
+	whole flow depends on is explained here first - on a toolbar we draw ourselves, close enough
+	to Chrome's and Firefox's to be recognised in either, imitating neither.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:id="@+id/signInExplainerTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="360dp"
+            android:gravity="center_horizontal"
+            android:text="@string/signin_explainer_title"
+            android:textAppearance="?attr/textAppearanceHeadline6"
+            android:textColor="?android:attr/textColorPrimary" />
+
+        <TextView
+            android:id="@+id/signInExplainerBody"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:maxWidth="360dp"
+            android:gravity="center_horizontal"
+            android:text="@string/signin_explainer_body"
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:textColor="?android:attr/textColorPrimary" />
+
+        <!-- The mock-up. Read out as one thing: its parts are decoration, not controls. -->
+        <LinearLayout
+            android:id="@+id/signInExplainerMock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:background="@drawable/signin_explainer_mock_card"
+            android:contentDescription="@string/signin_explainer_mock_description"
+            android:focusable="true"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:id="@+id/signInExplainerMockToolbar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:importantForAccessibility="noHideDescendants"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_close"
+                    android:tint="?android:attr/textColorSecondary" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/signInExplainerMockTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/signin_explainer_mock_title"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/signInExplainerMockUrl"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="@string/signin_explainer_mock_url"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- The ✓, picked out: a ring at rest under a second ring that pulses outward. -->
+                <FrameLayout
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp">
+
+                    <View
+                        android:id="@+id/signInExplainerCheckPulse"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/signin_explainer_check_ring"
+                        android:visibility="invisible" />
+
+                    <View
+                        android:id="@+id/signInExplainerCheckRing"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/signin_explainer_check_ring" />
+
+                    <ImageView
+                        android:id="@+id/signInExplainerCheck"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_psn_finish_sign_in"
+                        android:tint="@color/signin_explainer_highlight" />
+                </FrameLayout>
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginStart="4dp"
+                    android:src="@drawable/ic_overflow"
+                    android:tint="?android:attr/textColorSecondary" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/signin_explainer_mock_stroke" />
+
+            <!-- Sony's page below the toolbar, as lines: the mock-up quotes no one's page. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAccessibility="noHideDescendants"
+                android:orientation="vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="20dp">
+
+                <View
+                    android:layout_width="160dp"
+                    android:layout_height="8dp"
+                    android:background="@drawable/signin_explainer_mock_line" />
+
+                <View
+                    android:layout_width="110dp"
+                    android:layout_height="8dp"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/signin_explainer_mock_line" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- The only clock the user sees: it fills, it carries no digits. -->
+        <ProgressBar
+            android:id="@+id/signInExplainerProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="24dp"
+            android:contentDescription="@string/signin_explainer_progress_description"
+            android:indeterminate="false" />
+
+        <Button
+            android:id="@+id/signInExplainerButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:minWidth="200dp"
+            android:text="@string/action_signin_explainer_proceed" />
+    </LinearLayout>
+</ScrollView>
