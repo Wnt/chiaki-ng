@@ -6,6 +6,12 @@
     <color name="on_primary">#ffffff</color>
     <color name="on_secondary">#000000</color>
 
+    <!-- Readable on the light AppTheme surface; overridden for dark in
+         values-night/colors.xml. See attr colorTextLink. -->
+    <color name="text_link">#0D47A1</color>
+    <!-- Readable on an always-dark surface (StreamTheme is not DayNight). -->
+    <color name="text_link_dark">#82B1FF</color>
+
     <color name="stream_text">@android:color/white</color>
     <color name="stream_background">@android:color/black</color>
     <color name="stream_overlay_background">#77000000</color>

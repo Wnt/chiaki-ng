@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Readable on the dark AppTheme surface. Light default lives in
+         values/colors.xml. See attr colorTextLink. -->
+    <color name="text_link">@color/text_link_dark</color>
+</resources>

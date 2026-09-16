@@ -6,6 +6,7 @@
         <item name="colorOnPrimary">@color/on_primary</item>
         <item name="colorSecondary">@color/accent</item>
         <item name="colorOnSecondary">@color/on_secondary</item>
+        <item name="colorTextLink">@color/text_link</item>
         <item name="android:statusBarColor">?attr/colorPrimarySurface</item>
         <item name="android:navigationBarColor">?attr/colorPrimarySurface</item>
         <item name="materialAlertDialogTheme">@style/AppTheme.AlertDialog</item>
@@ -29,7 +30,7 @@
     </style>
 
     <style name="AppTheme.AlertDialog.Button" parent="Widget.Material3.Button.TextButton.Dialog">
-        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/colorTextLink</item>
     </style>
 
     <!-- Temporary names retained for layouts owned by PLE-245. Both now use
@@ -44,6 +45,7 @@
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="colorTextLink">@color/text_link_dark</item>
         <item name="materialAlertDialogTheme">@style/AppTheme.AlertDialog</item>
         <item name="android:windowBackground">@color/stream_background</item>
     </style>
