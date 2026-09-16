@@ -455,6 +455,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			E->GetFieldID(env, connect_info_class, "performanceModeEnabled", "Z"));
 	jboolean decoder_late_frame_recovery = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLateFrameRecoveryEnabled", "Z"));
 	jint decoder_operating_rate = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRate", "I"));
+	jboolean decoder_operating_rate_default = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRateDefault", "Z"));
 	jboolean decoder_operating_rate_auto = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRateAuto", "Z"));
 	jboolean decoder_realtime_priority = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderRealtimePriority", "Z"));
 	jint video_timestamp_rate_hz = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "videoTimestampRateHz", "I"));
@@ -576,7 +577,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
-			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_auto, decoder_realtime_priority,
+			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_default,
+			decoder_operating_rate_auto, decoder_realtime_priority,
 			video_timestamp_rate_hz > 0 ? (unsigned int)video_timestamp_rate_hz : 0, stream_stats_enabled,
 			feedback_stats_log_interval_ms > 0);
 	if(err != CHIAKI_ERR_SUCCESS)
