@@ -80,9 +80,8 @@ class StreamActivity : AppCompatActivity()
 			return source and InputDevice.SOURCE_CLASS_JOYSTICK == InputDevice.SOURCE_CLASS_JOYSTICK
 		}
 
-		internal fun performanceModeDiagnosticFlags(requested: Boolean, sustainedLive: Boolean, adpfLive: Boolean) =
+		internal fun performanceModeDiagnosticFlags(sustainedLive: Boolean, adpfLive: Boolean) =
 			buildList {
-				if(requested) add("perf-oprate")
 				if(sustainedLive) add("perf-sustained")
 				if(adpfLive) add("perf-adpf")
 			}
@@ -574,7 +573,6 @@ class StreamActivity : AppCompatActivity()
 			if(preferences.feedbackStatsLogEnabled) add("fb-log")
 			if(connectInfo.threadPriorityBoostEnabled) add("prio")
 			addAll(performanceModeDiagnosticFlags(
-				connectInfo.performanceModeEnabled,
 				sustainedPerformanceModeEnabled,
 				viewModel.session.session?.adpfPerformanceModeLive == true
 			))
