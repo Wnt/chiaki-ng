@@ -131,7 +131,7 @@ private class ChiakiNative
 		@JvmStatic external fun sessionSetRemoteDataSocket(ptr: Long, fd: Int): Int
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
 			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int,
-			maxQueueAgePeriods: Int)
+			maxQueueAgePeriods: Int, nonblockingProducer: Boolean)
 		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
 		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
@@ -531,10 +531,10 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	fun setRemoteDataSocket(fd: Int) = ErrorCode(ChiakiNative.sessionSetRemoteDataSocket(nativePtr, fd))
 
 	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
-		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int)
+		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, nonblockingProducer: Boolean)
 	{
 		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos,
-			pacingMode, presenterLead, maxQueueAgePeriods)
+			pacingMode, presenterLead, maxQueueAgePeriods, nonblockingProducer)
 	}
 
 	fun setPacingMode(pacingMode: Int) = ChiakiNative.sessionSetPacingMode(nativePtr, pacingMode)

@@ -41,6 +41,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
 		preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled
+		preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
 		preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled
 		preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled
@@ -72,6 +73,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
 			preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled = value
+			preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value
 			preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled = value
 			preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled = value

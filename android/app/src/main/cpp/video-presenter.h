@@ -100,6 +100,7 @@ typedef struct android_chiaki_video_presenter_t
 	bool timestamped_release_enabled;
 	bool late_frame_recovery_enabled;
 	bool real_pts_enabled;
+	bool nonblocking_producer;
 	unsigned int stream_fps;
 	double refresh_hz;
 	int64_t app_vsync_offset_ns;
@@ -146,7 +147,7 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, bool nonblocking_producer);
 void android_chiaki_video_presenter_request_stop(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_join(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presenter,
@@ -154,7 +155,7 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, bool nonblocking_producer);
 void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterStats *stats);
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
