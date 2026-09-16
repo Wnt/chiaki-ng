@@ -308,6 +308,14 @@ class MainActivity : AppCompatActivity()
 
 	private fun showPsnActionError(error: PsnActionError?)
 	{
+		val pinHost = viewModel.lastFailedPsnConsole?.takeIf { error != null }?.let(::unlinkedLocalHost)
+		if(error != null && psnFailureStep(error.recovery, consoleOnLan = pinHost != null) == PsnFailureStep.LINK_WITH_PIN)
+		{
+			// PLE-313: the console is right here, so linking it with its PIN is the next step, not an error.
+			viewModel.clearPsnError()
+			showGuidedRegistration(pinHost!!.host, pinHost.name)
+			return
+		}
 		binding.psnActionErrorLayout.visibility = if(error == null) View.GONE else View.VISIBLE
 		binding.psnActionErrorTextView.text = error?.let { getString(R.string.psn_play_failed, it.message) }
 		if(error != null)
@@ -320,13 +328,6 @@ class MainActivity : AppCompatActivity()
 				if(error.recovery == PsnErrorRecovery.SIGN_IN) startPsnSignIn()
 				else viewModel.retryLastPsnAction()
 			}
-		}
-		val pinHost = viewModel.lastFailedPsnConsole?.takeIf { error != null }?.let(::unlinkedLocalHost)
-		binding.linkWithPinButton.visibility = if(pinHost == null) View.GONE else View.VISIBLE
-		binding.linkWithPinButton.setOnClickListener {
-			pinHost ?: return@setOnClickListener
-			viewModel.clearPsnError()
-			showGuidedRegistration(pinHost.host, pinHost.name)
 		}
 	}
 

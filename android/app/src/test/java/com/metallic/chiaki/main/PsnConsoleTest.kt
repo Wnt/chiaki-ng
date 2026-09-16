@@ -65,4 +65,13 @@ class PsnConsoleTest
 		assertEquals(OnboardingHomeState.HOME, onboardingHomeState(1, false))
 		assertEquals(OnboardingHomeState.HOME, onboardingHomeState(1, true))
 	}
+
+	/** PLE-313: a console on this network is linked with its PIN next; only an unreachable one shows Retry. */
+	@Test fun failedPsnLinkToAConsoleOnTheNetworkGoesToThePinLink()
+	{
+		assertEquals(PsnFailureStep.LINK_WITH_PIN, psnFailureStep(PsnErrorRecovery.RETRY, consoleOnLan = true))
+		assertEquals(PsnFailureStep.RETRY, psnFailureStep(PsnErrorRecovery.RETRY, consoleOnLan = false))
+		assertEquals(PsnFailureStep.SIGN_IN, psnFailureStep(PsnErrorRecovery.SIGN_IN, consoleOnLan = true))
+		assertEquals(PsnFailureStep.SIGN_IN, psnFailureStep(PsnErrorRecovery.SIGN_IN, consoleOnLan = false))
+	}
 }

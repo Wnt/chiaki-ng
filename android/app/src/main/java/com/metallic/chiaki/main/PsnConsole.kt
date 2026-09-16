@@ -31,6 +31,21 @@ data class PsnPlayRequest(val console: PsnConsole)
 
 enum class PsnErrorRecovery { RETRY, SIGN_IN }
 
+/** What Home does after a PSN link or play fails. */
+internal enum class PsnFailureStep { SIGN_IN, LINK_WITH_PIN, RETRY }
+
+/**
+ * PLE-313: a failed PSN link to a console that is also on this network goes straight to the guided PIN
+ * link, which works whatever PSN refused. Only a console out of reach is left with an error and Retry,
+ * and an expired sign-in always asks to sign in again.
+ */
+internal fun psnFailureStep(recovery: PsnErrorRecovery, consoleOnLan: Boolean): PsnFailureStep = when
+{
+	recovery == PsnErrorRecovery.SIGN_IN -> PsnFailureStep.SIGN_IN
+	consoleOnLan -> PsnFailureStep.LINK_WITH_PIN
+	else -> PsnFailureStep.RETRY
+}
+
 data class PsnActionError(
 	val message: String,
 	val recovery: PsnErrorRecovery
