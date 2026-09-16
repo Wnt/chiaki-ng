@@ -172,6 +172,14 @@ typedef struct android_chiaki_session_t
 	ChiakiLog *log;
 	jobject java_session;
 	jclass java_session_class;
+	// Cached on the Java thread in session_create: the CHIAKI_EVENT_REGIST callback runs on the session's
+	// own native thread, where FindClass sees only the system classloader and cannot resolve an app class
+	// (PLE-332: "Didn't find class com.metallic.chiaki.lib.Target" aborted the process the first time a
+	// PSN session ever reached registration).
+	jclass java_target_class;
+	jmethodID java_target_from_value_meth;
+	jclass java_regist_host_class;
+	jmethodID java_regist_host_ctor;
 	jmethodID java_session_event_connected_meth;
 	jmethodID java_session_event_login_pin_request_meth;
 	jmethodID java_session_event_quit_meth;
@@ -310,14 +318,11 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 		case CHIAKI_EVENT_REGIST:
 		{
 			ChiakiRegisteredHost *host = &event->host;
-			jclass target_class = E->FindClass(env, BASE_PACKAGE"/Target");
-			jmethodID target_from_value = E->GetStaticMethodID(env, target_class, "fromValue", "(I)L"BASE_PACKAGE"/Target;");
+			jclass target_class = session->java_target_class;
+			jmethodID target_from_value = session->java_target_from_value_meth;
 			jobject target = E->CallStaticObjectMethod(env, target_class, target_from_value, (jint)host->target);
-			jclass host_class = E->FindClass(env, BASE_PACKAGE"/RegistHost");
-			jmethodID host_ctor = E->GetMethodID(env, host_class, "<init>", "("
-					"L"BASE_PACKAGE"/Target;"
-					"Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-					"[BLjava/lang/String;[BI[B)V");
+			jclass host_class = session->java_regist_host_class;
+			jmethodID host_ctor = session->java_regist_host_ctor;
 			jobject java_host = E->NewObject(env, host_class, host_ctor,
 					target,
 					jnistr_from_ascii(env, host->ap_ssid),
@@ -710,6 +715,13 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 
 	session->java_session = E->NewGlobalRef(env, java_session);
 	session->java_session_class = E->NewGlobalRef(env, E->GetObjectClass(env, session->java_session));
+	session->java_target_class = E->NewGlobalRef(env, E->FindClass(env, BASE_PACKAGE"/Target"));
+	session->java_target_from_value_meth = E->GetStaticMethodID(env, session->java_target_class, "fromValue", "(I)L"BASE_PACKAGE"/Target;");
+	session->java_regist_host_class = E->NewGlobalRef(env, E->FindClass(env, BASE_PACKAGE"/RegistHost"));
+	session->java_regist_host_ctor = E->GetMethodID(env, session->java_regist_host_class, "<init>", "("
+			"L"BASE_PACKAGE"/Target;"
+			"Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+			"[BLjava/lang/String;[BI[B)V");
 	session->java_session_event_connected_meth = E->GetMethodID(env, session->java_session_class, "eventConnected", "()V");
 	session->java_session_event_login_pin_request_meth = E->GetMethodID(env, session->java_session_class, "eventLoginPinRequest", "(Z)V");
 	session->java_session_event_quit_meth = E->GetMethodID(env, session->java_session_class, "eventQuit", "(ILjava/lang/String;)V");
@@ -809,6 +821,8 @@ JNIEXPORT void JNICALL JNI_FCN(sessionFree)(JNIEnv *env, jobject obj, jlong ptr)
 	android_chiaki_audio_decoder_fini(&session->audio_decoder);
 	android_chiaki_audio_output_free(session->audio_output);
 	E->DeleteGlobalRef(env, session->java_session);
+	E->DeleteGlobalRef(env, session->java_regist_host_class);
+	E->DeleteGlobalRef(env, session->java_target_class);
 	E->DeleteGlobalRef(env, session->java_session_class);
 	CHIAKI_LOGI(session->log, "JNI Session has quit");
 	android_chiaki_file_log_fini(session->log);
