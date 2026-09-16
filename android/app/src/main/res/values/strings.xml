@@ -100,6 +100,8 @@
     <string name="preferences_takion_video_packet_reordering_disabled_summary">Bypass the 16 ms network reorder queue and let frame FEC handle missing packets (re-connect required)</string>
     <string name="preferences_controller_input_coalescing_enabled_title">Vsync-paced controller input</string>
     <string name="preferences_controller_input_coalescing_enabled_summary">Merge controller updates into one native call per display frame (applies to the next stream)</string>
+    <string name="preferences_feedback_reduced_interval_enabled_title">Reduced feedback interval (experimental)</string>
+    <string name="preferences_feedback_reduced_interval_enabled_summary">Send controller feedback state at most every 4ms instead of 8ms; untested on PS5, revert if it causes disconnects or dropped input (applies to the next stream)</string>
     <string name="preferences_log_verbose_title">Verbose Logging</string>
     <string name="preferences_log_verbose_summary">Warning: This logs a LOT! Don\'t enable for regular use.</string>
     <string name="preferences_resolution_title_360p">360p</string>
@@ -163,6 +165,7 @@
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>
+    <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>
     <string name="preferences_debanding_key">stream_debanding</string>
     <string name="preferences_debanding_render_when_dirty_key">stream_debanding_render_when_dirty</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
