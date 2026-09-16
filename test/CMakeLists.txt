@@ -23,6 +23,7 @@ set(CHIAKI_UNIT_SOURCES
 				bitstream.c
 				video_presenter.c
 				../android/app/src/main/cpp/video-presenter-age.c
+				../android/app/src/main/cpp/video-presenter-histogram.c
 				regist.c)
 
 if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)

@@ -2,6 +2,7 @@
 
 #include "video-presenter.h"
 #include "video-presenter-age.h"
+#include "video-presenter-histogram.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -171,13 +172,6 @@ static void release_frame_locked(AndroidChiakiVideoPresenter *presenter,
 		record_release_locked(presenter, !render);
 }
 
-static int compare_i64(const void *left, const void *right)
-{
-	int64_t a = *(const int64_t *)left;
-	int64_t b = *(const int64_t *)right;
-	return a < b ? -1 : a > b ? 1 : 0;
-}
-
 static int compare_u64(const void *left, const void *right)
 {
 	uint64_t a = *(const uint64_t *)left;
@@ -191,17 +185,18 @@ static void adjust_dejitter_buffer_locked(AndroidChiakiVideoPresenter *presenter
 	if(count < ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW)
 		return;
 
-	int64_t offsets[ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW];
-	memcpy(offsets, presenter->arrival_offsets, count * sizeof(offsets[0]));
-	qsort(offsets, count, sizeof(offsets[0]), compare_i64);
-	int64_t baseline = offsets[0];
+	int64_t baseline = presenter->arrival_offsets[0];
+	for(uint32_t i = 1; i < count; i++)
+	{
+		if(presenter->arrival_offsets[i] < baseline)
+			baseline = presenter->arrival_offsets[i];
+	}
+	AndroidChiakiVideoHistogram histogram;
+	android_chiaki_video_histogram_reset(&histogram);
 	for(uint32_t i = 0; i < count; i++)
-		offsets[i] -= baseline;
-	qsort(offsets, count, sizeof(offsets[0]), compare_i64);
-	uint32_t percentile_index = (997 * count + 999) / 1000;
-	if(percentile_index > 0)
-		percentile_index--;
-	uint64_t percentile_ns = (uint64_t)offsets[percentile_index];
+		android_chiaki_video_histogram_add(&histogram,
+				(uint64_t)(presenter->arrival_offsets[i] - baseline));
+	uint64_t percentile_ns = android_chiaki_video_histogram_percentile(&histogram, 997, 1000);
 	uint64_t old_depth_ns = presenter->dejitter_buffer_ns;
 	uint64_t period_ns = presenter->vsync_period_ns > 0 ? (uint64_t)presenter->vsync_period_ns : 16666667ULL;
 
