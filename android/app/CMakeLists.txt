@@ -9,6 +9,8 @@ add_library(chiaki-jni SHARED
         src/main/cpp/log.c
         src/main/cpp/video-decoder.h
         src/main/cpp/video-decoder.c
+        src/main/cpp/video-presenter.h
+        src/main/cpp/video-presenter.c
         src/main/cpp/audio-decoder.h
         src/main/cpp/audio-decoder.c
         src/main/cpp/audio-output.h

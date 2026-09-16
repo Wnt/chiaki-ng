@@ -453,10 +453,20 @@ JNIEXPORT jint JNICALL JNI_FCN(sessionJoin)(JNIEnv *env, jobject obj, jlong ptr)
 	return chiaki_session_join(&session->session);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface)
+JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface,
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
-	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface);
+	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface,
+			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
+}
+
+JNIEXPORT void JNICALL JNI_FCN(sessionSetPacingMode)(JNIEnv *env, jobject obj, jlong ptr, jint pacing_mode)
+{
+	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
+	android_chiaki_video_decoder_set_pacing_mode(&session->video_decoder,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
 }
 
 JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj, jlong ptr)
@@ -466,8 +476,10 @@ JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj
 	android_chiaki_video_decoder_get_stats(&session->video_decoder, &stats);
 
 	jclass stats_class = E->FindClass(env, BASE_PACKAGE"/VideoStats");
-	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(J)V");
-	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped);
+	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(JJJJ)V");
+	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped,
+			(jlong)stats.missed_vsyncs, (jlong)stats.presenter_frames_dropped,
+			(jlong)stats.dejitter_buffer_ns);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetControllerState)(JNIEnv *env, jobject obj, jlong ptr, jobject controller_state_java)
