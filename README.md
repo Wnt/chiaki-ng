@@ -5,11 +5,23 @@
 
 Pleikkari Android is an experimental, Android-only fork of chiaki-ng focused on reducing end-to-end latency for PS5 Remote Play toward a GeForce NOW-class experience. Development and measurements currently target one Galaxy S22 Ultra (SM-S908B, Exynos 2200); desktop and other non-Android targets are not maintained in this fork.
 
+## What it looks like
+
+The app opens with one clear path into Remote Play. After sign-in, the home screen keeps consoles, their current state, the Play action, and three practical quality presets together. Advanced experiments stay out of the everyday flow.
+
+<p align="center">
+  <img src="docs/screenshots/onboarding.png" width="30%" alt="Pleikkari Android welcome screen with Sign in with PSN and Add by address actions">
+  <img src="docs/screenshots/home.png" width="30%" alt="Pleikkari Android console home screen with quality presets and a Play action">
+  <img src="docs/screenshots/settings.png" width="30%" alt="Pleikkari Android settings screen with account, controller and about sections">
+</p>
+
+These are Android emulator captures of the static interface. Stream controls and the end-of-stream summary are not shown because they require a real Remote Play session.
+
 ## Download
 
 Download the latest `android-port` APK from the stable [pleikkari-android-debug.apk](https://github.com/Wnt/chiaki-ng/releases/download/android-latest/pleikkari-android-debug.apk) link. Each workflow run also keeps a `pleikkari-android-debug` artifact for 30 days under the repository's [Actions](https://github.com/Wnt/chiaki-ng/actions/workflows/build-android.yml) page.
 
-This is a debug build signed with the project debug key, so it installs over the phone's existing app with `adb install -r pleikkari-android-debug.apk` without removing its registration data.
+This is a debug build signed with the project debug key. Android may ask you to allow installs from your browser or file manager. Existing development installs can be updated with `adb install -r pleikkari-android-debug.apk` without removing registration data; do not uninstall first if you want to retain registered consoles.
 
 ## Status
 
@@ -79,11 +91,11 @@ By default, the build includes all configured Android ABIs. Pass a comma-separat
 
 ## Register a console and stream
 
-1. In Settings, optionally enable **PSN Sign-In Registration**, then use the in-app PSN sign-in. This obtains and stores the account ID so it does not have to be pasted as base64 manually.
-2. For the normal local flow, select the discovered PS5 and choose **Register Console**. On the PS5, open **Settings → System → Remote Play → Link Device**, then enter the displayed eight-digit PIN in the app.
-3. Return to the home screen and select the registered console to stream.
+1. Open the app and choose **Sign in with PSN**. **Add by address** remains available for LAN-only setups.
+2. Choose a console and tap **Play**. The app registers it automatically when possible.
+3. If the console asks for a PIN, on the PS5 open **Settings → System → Remote Play → Link Device** and enter the displayed eight-digit PIN in the app. Tap **Play** when registration completes.
 
-The experimental PIN-less/remote path is separate: enable **PSN remote consoles (experimental)** after PSN sign-in. The **Consoles on your PSN account** section then exposes the PLE-26/PLE-50 control-plane actions for consoles associated with that account. Keep this switch off if you only need local discovery, Link Device registration, and LAN streaming.
+Choose **Balanced**, **Low latency**, or **Data saver** directly on the home screen. Balanced is ready to use without visiting Settings. During a stream, tap the video to reveal the connection-quality indicator and touch controls; ending the session returns to a short summary of duration, latency, dropped frames, and network quality.
 
 ## License and disclaimer
 

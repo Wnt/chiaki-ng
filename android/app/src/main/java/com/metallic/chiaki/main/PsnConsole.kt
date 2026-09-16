@@ -23,9 +23,35 @@ internal fun matchPsnConsoles(
 	}
 }
 
-enum class PsnConsoleAction { REGISTER, WAKE }
+enum class PsnConsoleAction { PLAY }
 
 data class PsnConsoleActionState(val duid: String, val action: PsnConsoleAction)
+
+data class PsnPlayRequest(val console: PsnConsole)
+
+enum class PsnErrorRecovery { RETRY, SIGN_IN }
+
+data class PsnActionError(
+	val message: String,
+	val recovery: PsnErrorRecovery
+)
+
+enum class OnboardingHomeState
+{
+	WELCOME,
+	ACCOUNT_CONSOLES,
+	HOME
+}
+
+internal fun onboardingHomeState(
+	configuredConsoleCount: Int,
+	psnEnabled: Boolean
+): OnboardingHomeState = when
+{
+	configuredConsoleCount > 0 -> OnboardingHomeState.HOME
+	psnEnabled -> OnboardingHomeState.ACCOUNT_CONSOLES
+	else -> OnboardingHomeState.WELCOME
+}
 
 sealed interface PsnConsoleListState
 {

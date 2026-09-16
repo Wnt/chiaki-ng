@@ -11,6 +11,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.*
+import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.exportAndShareAllSettings
@@ -50,7 +51,15 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled
 		preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
+		preferences.coalesceTouchRedrawEnabledKey -> preferences.coalesceTouchRedrawEnabled
+		preferences.streamWindowOptimizationsEnabledKey -> preferences.streamWindowOptimizationsEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
+		preferences.psnLoginInAppBrowserKey -> preferences.psnLoginInAppBrowser
+		preferences.psnRemotePlayEnabledKey -> preferences.psnRemotePlayEnabled
+		preferences.performanceModeEnabledKey -> preferences.performanceModeEnabled
+		preferences.wifiLowLatencyLockEnabledKey -> preferences.wifiLowLatencyLockEnabled
+		preferences.videoDejitterHalfRateEnabledKey -> preferences.videoDejitterHalfRateEnabled
+		preferences.streamDiagnosticsOverlayEnabledKey -> preferences.streamDiagnosticsOverlayEnabled
 		else -> defValue
 	}
 
@@ -86,7 +95,15 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled = value
 			preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
+			preferences.coalesceTouchRedrawEnabledKey -> preferences.coalesceTouchRedrawEnabled = value
+			preferences.streamWindowOptimizationsEnabledKey -> preferences.streamWindowOptimizationsEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
+			preferences.psnLoginInAppBrowserKey -> preferences.psnLoginInAppBrowser = value
+			preferences.psnRemotePlayEnabledKey -> preferences.psnRemotePlayEnabled = value
+			preferences.performanceModeEnabledKey -> preferences.performanceModeEnabled = value
+			preferences.wifiLowLatencyLockEnabledKey -> preferences.wifiLowLatencyLockEnabled = value
+			preferences.videoDejitterHalfRateEnabledKey -> preferences.videoDejitterHalfRateEnabled = value
+			preferences.streamDiagnosticsOverlayEnabledKey -> preferences.streamDiagnosticsOverlayEnabled = value
 		}
 	}
 
@@ -201,12 +218,14 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 	}
 }
 
-class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
+open class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 {
 	companion object
 	{
 		private const val PICK_SETTINGS_JSON_REQUEST = 1
 	}
+
+	protected open val preferenceResource = R.xml.preferences_user
 
 	override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?)
 	{
@@ -217,7 +236,7 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 
 		val preferences = viewModel.preferences
 		preferenceManager.preferenceDataStore = DataStore(preferences)
-		setPreferencesFromResource(R.xml.preferences, rootKey)
+		setPreferencesFromResource(preferenceResource, rootKey)
 
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_resolution_key))?.let {
 			it.entryValues = Preferences.resolutionAll.map { res -> res.value }.toTypedArray()
@@ -368,9 +387,28 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 
 		preferenceScreen.findPreference<Preference>(getString(R.string.preferences_export_settings_key))?.setOnPreferenceClickListener { exportSettings(); true }
 		preferenceScreen.findPreference<Preference>(getString(R.string.preferences_import_settings_key))?.setOnPreferenceClickListener { importSettings(); true }
+
+		onPreferencesCreated(preferences)
 	}
 
-	override fun getTitle(resources: Resources): String = resources.getString(R.string.title_settings)
+	protected open fun onPreferencesCreated(preferences: Preferences)
+	{
+		var versionTapCount = 0
+		preferenceScreen.findPreference<Preference>("about_version")?.let { versionPreference ->
+			versionPreference.summary = BuildConfig.VERSION_NAME
+			versionPreference.setOnPreferenceClickListener {
+				versionTapCount++
+				if(versionTapCount >= 5)
+				{
+					versionTapCount = 0
+					(activity as? SettingsActivity)?.openDeveloperSettings()
+				}
+				true
+			}
+		}
+	}
+
+	open override fun getTitle(resources: Resources): String = resources.getString(R.string.title_settings)
 
 	private fun exportSettings()
 	{
@@ -397,4 +435,41 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 			}
 		}
 	}
+}
+
+class ControllerSettingsFragment: SettingsFragment()
+{
+	override val preferenceResource = R.xml.preferences_controller
+
+	override fun getTitle(resources: Resources): String = resources.getString(R.string.title_controller_settings)
+}
+
+class ControllerMappingSettingsFragment: SettingsFragment()
+{
+	override val preferenceResource = R.xml.preferences_controller_mapping
+
+	override fun getTitle(resources: Resources): String = resources.getString(R.string.title_controller_mapping)
+}
+
+class DeveloperSettingsFragment: SettingsFragment()
+{
+	override val preferenceResource = R.xml.preferences
+
+	override fun onPreferencesCreated(preferences: Preferences)
+	{
+		listOf(
+			"registered_hosts",
+			getString(R.string.preferences_psn_sign_in_enabled_key),
+			getString(R.string.preferences_swap_cross_moon_key),
+			getString(R.string.preferences_rumble_enabled_key),
+			preferences.touchscreenTouchpadEnabledKey,
+			getString(R.string.preferences_motion_enabled_key),
+			getString(R.string.preferences_button_haptic_enabled_key),
+			"category_mapping"
+		).forEach { key ->
+			preferenceScreen.findPreference<Preference>(key)?.isVisible = false
+		}
+	}
+
+	override fun getTitle(resources: Resources): String = resources.getString(R.string.title_developer_settings)
 }

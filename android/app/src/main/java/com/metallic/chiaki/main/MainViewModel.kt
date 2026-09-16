@@ -14,8 +14,8 @@ import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.remote.AndroidPsnRemoteClient
 import com.metallic.chiaki.remote.AndroidPsnRemoteNativeBridge
 import com.metallic.chiaki.remote.PsnDevice
+import com.metallic.chiaki.remote.PsnRemoteAuthenticationException
 import com.metallic.chiaki.remote.PsnRemoteController
-import com.metallic.chiaki.remote.PsnRemoteNativeBridge
 import com.metallic.chiaki.remote.PsnRemoteState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -62,16 +62,27 @@ class MainViewModel(
 		discoveryManager.discoveryActive.asLiveData()
 	}
 
+	val configuredConsoleCount by lazy {
+		combine(
+			database.manualHostDao().getAll(),
+			database.registeredHostDao().getAll()
+		) { manualHosts, registeredHosts -> manualHosts.size + registeredHosts.size }
+			.asLiveData()
+	}
+
 	private val psnDevices = MutableStateFlow<List<PsnDevice>>(emptyList())
 	private val _psnListState = MutableLiveData<PsnConsoleListState>(PsnConsoleListState.Hidden)
 	val psnListState: LiveData<PsnConsoleListState> get() = _psnListState
 	private val _psnAction = MutableLiveData<PsnConsoleActionState?>(null)
 	val psnAction: LiveData<PsnConsoleActionState?> get() = _psnAction
-	private val _psnMessage = MutableLiveData<String?>(null)
-	val psnMessage: LiveData<String?> get() = _psnMessage
+	private val _psnError = MutableLiveData<PsnActionError?>(null)
+	val psnError: LiveData<PsnActionError?> get() = _psnError
+	private val _psnPlayRequest = MutableLiveData<PsnPlayRequest?>(null)
+	val psnPlayRequest: LiveData<PsnPlayRequest?> get() = _psnPlayRequest
 	private var psnLoadJob: Job? = null
 	private var psnActionJob: Job? = null
 	private var actionController: PsnRemoteController? = null
+	private var lastFailedPsnConsole: PsnConsole? = null
 
 	val psnConsoles = combine(psnDevices, database.registeredHostDao().getAll(), ::matchPsnConsoles).asLiveData()
 
@@ -112,6 +123,13 @@ class MainViewModel(
 		}
 	}
 
+	internal fun showPsnPreview(devices: List<PsnDevice>)
+	{
+		psnLoadJob?.cancel()
+		psnDevices.value = devices
+		_psnListState.value = PsnConsoleListState.Ready
+	}
+
 	fun connectInfo(host: RegisteredHost?, autoRegister: Boolean = false): ConnectInfo = ConnectInfo(
 		ps5 = true,
 		host = "",
@@ -135,13 +153,22 @@ class MainViewModel(
 		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 		decoderRealtimePriority = preferences.decoderRealtimePriority,
 		videoTimestampRateHz = preferences.videoTimestampRateHz,
-		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled,
+		// The Home session summary consumes the same 1 Hz counters as the optional overlay.
+		streamDiagnosticsEnabled = true,
 		videoPresenterConfig = preferences.videoPresenterConfig
 	)
 
-	fun registerPsnConsole(console: PsnConsole)
+	fun playPsnConsole(console: PsnConsole)
 	{
-		runPsnAction(console, PsnConsoleAction.REGISTER) {
+		val registered = console.registeredHost
+		if(registered != null)
+		{
+			_psnError.value = null
+			lastFailedPsnConsole = null
+			_psnPlayRequest.value = PsnPlayRequest(console)
+			return
+		}
+		runPsnAction(console, PsnConsoleAction.PLAY) {
 			val bridge = AndroidPsnRemoteNativeBridge(
 				connectInfo(null, autoRegister = true),
 				logManager.createNewFile().file.absolutePath,
@@ -151,45 +178,39 @@ class MainViewModel(
 			)
 			val controller = psnClient.controller(bridge).also { actionController = it }
 			controller.connect(console.device)
-			val registered = (controller.state.value as? PsnRemoteState.Registered)?.host
+			val registHost = (controller.state.value as? PsnRemoteState.Registered)?.host
 				?: error("PSN registration did not return console credentials")
-			withContext(Dispatchers.IO) {
-				val host = RegisteredHost(registered)
+			val savedHost = withContext(Dispatchers.IO) {
+				val host = RegisteredHost(registHost)
 				database.registeredHostDao().deleteByMac(host.serverMac)
-				database.registeredHostDao().insert(host)
+				host.copy(id = database.registeredHostDao().insert(host))
 			}
-			"${console.device.name} registered"
+			PsnPlayRequest(console.copy(registeredHost = savedHost))
 		}
 	}
 
-	fun wakePsnConsole(console: PsnConsole)
+	fun retryLastPsnAction()
 	{
-		runPsnAction(console, PsnConsoleAction.WAKE) {
-			val bridge = object : PsnRemoteNativeBridge
-			{
-				override suspend fun start(control: com.metallic.chiaki.remote.PsnPunchedSocket, registration: com.metallic.chiaki.remote.PsnRegistrationMaterial) =
-					error("Wake does not start the native session")
-				override suspend fun setDataSocket(data: com.metallic.chiaki.remote.PsnPunchedSocket) = Unit
-			}
-			val controller = psnClient.controller(bridge).also { actionController = it }
-			controller.wake(console.device)
-			"Wake command sent to ${console.device.name}"
-		}
+		val console = lastFailedPsnConsole ?: return
+		_psnError.value = null
+		playPsnConsole(console)
 	}
 
 	private fun runPsnAction(
 		console: PsnConsole,
 		action: PsnConsoleAction,
-		block: suspend () -> String
+		block: suspend () -> PsnPlayRequest
 	)
 	{
 		if(psnActionJob?.isActive == true)
 			return
 		psnActionJob = viewModelScope.launch {
+			_psnError.value = null
 			_psnAction.value = PsnConsoleActionState(console.device.duid, action)
 			try
 			{
-				_psnMessage.value = block()
+				_psnPlayRequest.value = block()
+				lastFailedPsnConsole = null
 			}
 			catch(cancelled: CancellationException)
 			{
@@ -197,7 +218,11 @@ class MainViewModel(
 			}
 			catch(error: Throwable)
 			{
-				_psnMessage.value = error.message ?: "PSN console action failed"
+				lastFailedPsnConsole = console
+				_psnError.value = PsnActionError(
+					error.message ?: "Could not start Remote Play",
+					if(error is PsnRemoteAuthenticationException) PsnErrorRecovery.SIGN_IN else PsnErrorRecovery.RETRY
+				)
 			}
 			finally
 			{
@@ -208,9 +233,14 @@ class MainViewModel(
 		}
 	}
 
-	fun clearPsnMessage()
+	fun clearPsnError()
 	{
-		_psnMessage.value = null
+		_psnError.value = null
+	}
+
+	fun clearPsnPlayRequest()
+	{
+		_psnPlayRequest.value = null
 	}
 
 	fun deleteManualHost(manualHost: ManualHost)

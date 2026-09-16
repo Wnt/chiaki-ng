@@ -7,9 +7,13 @@
     <color name="stream_text">@android:color/white</color>
     <color name="stream_background">@android:color/black</color>
     <color name="stream_overlay_background">#77000000</color>
-
-    <color name="floating_action_button_speed_dial_background">#fafafa</color>
-    <color name="floating_action_button_speed_dial_tint">#333333</color>
+    <color name="stream_control_dock_background">#E61C1B1F</color>
+    <color name="stream_control_dock_stroke">#55FFFFFF</color>
+    <color name="stream_quality_good">#2E7D32</color>
+    <color name="stream_quality_fair">#F9A825</color>
+    <color name="stream_quality_poor">#C62828</color>
+    <color name="stream_quality_unknown">#616161</color>
+    <color name="stream_quit">#FFFFB4AB</color>
 
     <color name="control_primary">#22ffffff</color>
     <color name="control_pressed">#88ffffff</color>

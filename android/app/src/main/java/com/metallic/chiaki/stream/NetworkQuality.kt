@@ -56,6 +56,31 @@ internal data class NetworkQualitySnapshot(
 	}
 }
 
+internal data class NetworkQualityChipMetrics(
+	val rttMillis: Double,
+	val jitterMillis: Double,
+	val lossPercent: Double
+)
+
+internal data class NetworkQualityChipContent(
+	val level: NetworkQualityLevel,
+	val metrics: NetworkQualityChipMetrics?
+)
+
+internal object NetworkQualityChipPresenter
+{
+	fun content(snapshot: NetworkQualitySnapshot, expanded: Boolean) = NetworkQualityChipContent(
+		level = snapshot.level,
+		metrics = if(expanded && snapshot.level != NetworkQualityLevel.UNKNOWN)
+			NetworkQualityChipMetrics(
+				rttMillis = snapshot.fastRttMillis,
+				jitterMillis = snapshot.fastJitterMillis,
+				lossPercent = snapshot.fastLossPercent
+			)
+		else null
+	)
+}
+
 private data class NetworkQualitySample(
 	val rttMillis: Double,
 	val jitterMillis: Double,
