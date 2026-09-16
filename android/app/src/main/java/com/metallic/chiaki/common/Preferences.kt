@@ -228,6 +228,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(gamepadUnbufferedDispatchEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(gamepadUnbufferedDispatchEnabledKey, value).apply() }
 
+	val gamepadTriggerFallbackEnabledKey get() = resources.getString(R.string.preferences_gamepad_trigger_fallback_enabled_key)
+	var gamepadTriggerFallbackEnabled
+		get() = sharedPreferences.getBoolean(gamepadTriggerFallbackEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(gamepadTriggerFallbackEnabledKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)
