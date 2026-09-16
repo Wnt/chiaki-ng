@@ -62,7 +62,6 @@ class PreferenceKeyContractTest
 			"@string/preferences_motion_enabled_key",
 			"@string/preferences_packet_loss_max_percent_key",
 			"@string/preferences_performance_mode_enabled_key",
-			"@string/preferences_psn_login_in_app_browser_key",
 			"@string/preferences_psn_remote_play_enabled_key",
 			"@string/preferences_psn_sign_in_enabled_key",
 			"@string/preferences_real_video_timestamps_key",

@@ -82,8 +82,9 @@
         <activity
             android:name=".regist.PsnRedirectActivity"
             android:exported="true"
+            android:excludeFromRecents="true"
             android:noHistory="true"
-            android:theme="@style/AppTheme">
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -94,6 +95,10 @@
                     android:path="/remoteplay/redirect" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".regist.PsnRedirectReceiver"
+            android:exported="false" />
 
         <activity
             android:name=".regist.RegistExecuteActivity"
