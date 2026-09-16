@@ -19,6 +19,8 @@ def chiakiVersionPatch = grepVersionComponent(rootCMakeListsContent, "CHIAKI_VER
 def chiakiVersion = "$chiakiVersionMajor.$chiakiVersionMinor.$chiakiVersionPatch"
 println("Determined Chiaki Version: $chiakiVersion")
 
+def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching") ?: "false").toBoolean()
+
 android {
     namespace "com.metallic.chiaki"
     compileSdk 35
@@ -45,6 +47,7 @@ android {
                         "-DCHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT=ON",
                         "-DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF",
                         "-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF",
+                        "-DCHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING=${takionReceiveBatching ? 'ON' : 'OFF'}",
                         "-DANDROID_STL=c++_shared",
                         "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
                         "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"

@@ -38,6 +38,7 @@ tri_option(CHIAKI_USE_SYSTEM_CURL "Use system-provided curl instead of submodule
 option(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT "Build json-c from source via FetchContent" OFF)
 option(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT "Build miniupnpc from source via FetchContent" OFF)
 option(CHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING "Raise Takion UDP SO_RCVBUF to >=1MB and mark outgoing packets with DSCP EF" OFF)
+option(CHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING "Use a fixed Takion receive buffer pool and recvmmsg on Linux/Android" OFF)
 
 set(CHIAKI_VERSION_MAJOR 1)
 set(CHIAKI_VERSION_MINOR 10)
