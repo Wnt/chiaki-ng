@@ -84,7 +84,8 @@ class MainViewModel(
 	private var psnLoadJob: Job? = null
 	private var psnActionJob: Job? = null
 	private var actionController: PsnRemoteController? = null
-	private var lastFailedPsnConsole: PsnConsole? = null
+	var lastFailedPsnConsole: PsnConsole? = null
+		private set
 
 	val psnConsoles = combine(psnDevices, database.registeredHostDao().getAll(), ::matchPsnConsoles).asLiveData()
 
@@ -128,6 +129,12 @@ class MainViewModel(
 			}
 		}
 	}
+
+	/**
+	 * The account's consoles as of now. [psnConsoles] reaches observers after [psnListState] turns
+	 * Ready, so code reacting to Ready reads the list here.
+	 */
+	fun currentPsnConsoles(): List<PsnConsole> = psnDevices.value.map { PsnConsole(it, null) }
 
 	internal fun showPsnPreview(devices: List<PsnDevice>)
 	{

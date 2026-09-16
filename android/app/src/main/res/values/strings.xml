@@ -33,6 +33,7 @@
     <string name="title_regist">Register Console</string>
     <string name="link_console_title">Link %s</string>
     <string name="action_link_console">Link console</string>
+    <string name="action_link_with_pin">Link with PIN</string>
     <string name="hint_regist_host">Console address</string>
     <string name="regist_broadcast">Search local network</string>
     <string name="regist_option_ps5">PlayStation 5</string>
@@ -49,19 +50,9 @@
     <string name="psn_account_id_saved">PSN account ID saved</string>
     <string name="psn_login_failed">PSN sign-in failed</string>
     <string name="psn_login_redirect_invalid">Sony returned an invalid sign-in redirect</string>
-    <string name="psn_login_external_instructions">Complete sign-in in the browser. On the Sony page you land on, copy the full page address, return here, then paste it below.</string>
-    <string name="psn_login_reliable_instructions">Sign in in your browser. If Sony leaves you on the redirect page, copy its address and return here.</string>
-    <string name="psn_login_link_settings_instructions">Turn on Open supported links, then return here.</string>
-    <string name="psn_login_link_settings_required">Open supported links is still off. Turn it on, or continue in the browser and paste the sign-in link here.</string>
-    <string name="psn_login_returned_without_code">Sign-in did not finish. Try again, or paste the link from Sony’s redirect page.</string>
+    <string name="action_psn_finish_sign_in">Finish sign-in</string>
+    <string name="action_psn_continue_sign_in">Continue signing in</string>
     <string name="psn_login_link_expired">That sign-in link expired or was already used. Sign in again.</string>
-    <string name="psn_login_redirect_hint">https://remoteplay.dl.playstation.net/remoteplay/redirect?code=…</string>
-    <string name="action_paste_address">Paste address</string>
-    <string name="action_paste_sign_in_link">Paste sign-in link</string>
-    <string name="action_open_psn_sign_in">Open PSN sign-in</string>
-    <string name="action_open_link_settings">Open link settings</string>
-    <string name="action_continue_in_browser">Continue in browser</string>
-    <string name="psn_login_no_clipboard_address">The clipboard does not contain a page address</string>
     <string name="action_retry">Retry</string>
     <string name="regist_pin_invalid">Please enter a valid %d-digit PIN</string>
     <string name="action_share_log">Share Log</string>
@@ -215,8 +206,6 @@
     <string name="preferences_debanding_render_when_dirty_summary">Redraw the debanding shader only when a new decoded frame arrives instead of every display refresh, reducing GPU load and power use.</string>
     <string name="preferences_psn_sign_in_enabled_title">PSN Sign-In Registration</string>
     <string name="preferences_psn_sign_in_enabled_summary">Use the in-app PSN sign-in and prefill discovered console details</string>
-    <string name="preferences_psn_login_in_app_browser_title">Use embedded PSN browser</string>
-    <string name="preferences_psn_login_in_app_browser_summary">Use the legacy WebView login instead of the passkey-capable system browser</string>
     <string name="preferences_psn_remote_play_enabled_title">PSN remote consoles (experimental)</string>
     <string name="preferences_psn_remote_play_enabled_summary">Enable the Kotlin PSN remote-play control plane; reconnect required</string>
     <string name="preferences_swap_cross_moon_title">Swap Cross/Moon and Box/Pyramid Buttons</string>
@@ -246,7 +235,7 @@
     <string name="console_status_standby">Standby</string>
     <string name="console_status_remote">Remote</string>
     <string name="console_status_remote_psn">Remote via PSN</string>
-    <string name="console_status_registration_required">Registration required</string>
+    <string name="console_status_registration_required">Not linked yet</string>
     <string name="console_status_refreshing">Refreshing consoles</string>
     <string name="stream_summary_title">Last session</string>
     <string name="stream_summary_end_console_takeover">The stream ended because someone started playing on the TV with the console\'s own controller. A PS5 allows one session at a time.</string>
@@ -325,9 +314,7 @@
     <string name="preferences_debanding_key">stream_debanding</string>
     <string name="preferences_debanding_render_when_dirty_key">stream_debanding_render_when_dirty</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
-    <string name="preferences_psn_login_in_app_browser_key">psn_login_in_app_browser</string>
     <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
-    <string name="preferences_registration_form_usability_enabled_key">registration_form_usability_enabled</string>
     <string name="preferences_stream_quality_preset_key">stream_quality_preset</string>
 </resources>

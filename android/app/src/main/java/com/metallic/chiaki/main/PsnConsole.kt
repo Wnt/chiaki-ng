@@ -43,14 +43,26 @@ enum class OnboardingHomeState
 	HOME
 }
 
+/**
+ * The welcome screen is only for a first run with nothing to show: a console found on the network
+ * is listed straight away, so a new user starts from their console rather than from a choice.
+ */
 internal fun onboardingHomeState(
 	configuredConsoleCount: Int,
-	psnEnabled: Boolean
+	psnSignedIn: Boolean,
+	discoveredConsoleCount: Int = 0
 ): OnboardingHomeState = when
 {
 	configuredConsoleCount > 0 -> OnboardingHomeState.HOME
-	psnEnabled -> OnboardingHomeState.ACCOUNT_CONSOLES
+	psnSignedIn || discoveredConsoleCount > 0 -> OnboardingHomeState.ACCOUNT_CONSOLES
 	else -> OnboardingHomeState.WELCOME
+}
+
+/** The unlinked console on the account that a sign-in started for [consoleName] should link. */
+internal fun psnConsoleNamed(consoles: List<PsnConsole>, consoleName: String?): PsnConsole?
+{
+	val name = consoleName?.trim()?.lowercase()?.takeIf(String::isNotEmpty) ?: return null
+	return consoles.firstOrNull { it.registeredHost == null && it.device.name.trim().lowercase() == name }
 }
 
 internal fun shouldLoadPsnConsoleList(

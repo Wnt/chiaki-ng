@@ -57,7 +57,6 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.coalesceTouchRedrawEnabledKey -> preferences.coalesceTouchRedrawEnabled
 		preferences.streamWindowOptimizationsEnabledKey -> preferences.streamWindowOptimizationsEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
-		preferences.psnLoginInAppBrowserKey -> preferences.psnLoginInAppBrowser
 		preferences.psnRemotePlayEnabledKey -> preferences.psnRemotePlayEnabled
 		preferences.performanceModeEnabledKey -> preferences.performanceModeEnabled
 		preferences.wifiLowLatencyLockEnabledKey -> preferences.wifiLowLatencyLockEnabled
@@ -102,7 +101,6 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.coalesceTouchRedrawEnabledKey -> preferences.coalesceTouchRedrawEnabled = value
 			preferences.streamWindowOptimizationsEnabledKey -> preferences.streamWindowOptimizationsEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
-			preferences.psnLoginInAppBrowserKey -> preferences.psnLoginInAppBrowser = value
 			preferences.psnRemotePlayEnabledKey -> preferences.psnRemotePlayEnabled = value
 			preferences.performanceModeEnabledKey -> preferences.performanceModeEnabled = value
 			preferences.wifiLowLatencyLockEnabledKey -> preferences.wifiLowLatencyLockEnabled = value

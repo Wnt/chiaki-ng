@@ -21,53 +21,6 @@ data class HomeConsole(
 	val manualDisplayHost: ManualDisplayHost? = displayHost as? ManualDisplayHost
 )
 
-internal fun mergeHomeConsolesLegacy(
-	hosts: List<DisplayHost>,
-	psnConsoles: List<PsnConsole>
-): List<HomeConsole>
-{
-	val remainingPsn = psnConsoles.toMutableList()
-	val local = hosts.map { host ->
-		val psn = remainingPsn.firstOrNull { remote ->
-			val localRegistration = host.registeredHost
-			val remoteRegistration = remote.registeredHost
-			localRegistration != null && remoteRegistration != null &&
-				((localRegistration.id > 0L && localRegistration.id == remoteRegistration.id) ||
-					localRegistration.serverMac == remoteRegistration.serverMac)
-		}?.also(remainingPsn::remove)
-		val discovered = host as? DiscoveredDisplayHost
-		val status = when
-		{
-			host.registeredHost == null -> HomeConsoleStatus.REGISTRATION_REQUIRED
-			discovered?.discoveredHost?.state == DiscoveryHost.State.READY -> HomeConsoleStatus.ON
-			discovered?.discoveredHost?.state == DiscoveryHost.State.STANDBY -> HomeConsoleStatus.STANDBY
-			else -> HomeConsoleStatus.REMOTE
-		}
-		HomeConsole(
-			key = host.registeredHost?.serverMac?.toString() ?: "local:${host.host}",
-			name = host.name?.takeIf(String::isNotBlank) ?: psn?.device?.name ?: host.host,
-			detail = discovered?.discoveredHost?.runningAppName?.takeIf(String::isNotBlank)
-				?: host.host.takeIf(String::isNotBlank),
-			status = status,
-			displayHost = host,
-			psnConsole = psn
-		)
-	}
-	val remoteOnly = remainingPsn.map { console ->
-		HomeConsole(
-			key = "psn:${console.device.duid}",
-			name = console.device.name,
-			detail = null,
-			status = if(console.registeredHost == null)
-				HomeConsoleStatus.REGISTRATION_REQUIRED else HomeConsoleStatus.REMOTE,
-			psnConsole = console
-		)
-	}
-	return (local + remoteOnly).sortedWith(
-		compareBy<HomeConsole> { it.status.ordinal }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
-	)
-}
-
 private data class LocalConsoleGroup(
 	val hosts: MutableList<DisplayHost>,
 	val identities: MutableSet<String>
@@ -173,6 +126,26 @@ private fun homeConsole(
 	)
 }
 
+/**
+ * A console found on the network that is not linked yet is the same console as an unlinked one on
+ * the signed-in account when the names match; the row then links it over PSN, without a PIN.
+ */
+private fun unlinkedPsnConsoleFor(
+	group: LocalConsoleGroup,
+	registrations: List<RegisteredHost>,
+	psnConsoles: List<PsnConsole>
+): PsnConsole?
+{
+	if(registrations.isNotEmpty())
+		return null
+	val names = group.hosts.filterIsInstance<DiscoveredDisplayHost>()
+		.mapNotNull { it.name?.trim()?.takeIf(String::isNotEmpty)?.lowercase() }
+		.toSet()
+	return psnConsoles.firstOrNull { console ->
+		console.registeredHost == null && console.device.name.trim().lowercase() in names
+	}
+}
+
 internal fun mergeHomeConsoles(
 	hosts: List<DisplayHost>,
 	psnConsoles: List<PsnConsole>
@@ -181,11 +154,11 @@ internal fun mergeHomeConsoles(
 	val remainingPsn = psnConsoles.toMutableList()
 	val local = groupLocalConsoles(hosts).map { group ->
 		val registrations = group.hosts.mapNotNull(DisplayHost::registeredHost)
-		val psn = remainingPsn.firstOrNull { remote ->
+		val psn = (remainingPsn.firstOrNull { remote ->
 			registrations.any { localRegistration ->
 				registrationsMatch(localRegistration, remote.registeredHost)
 			}
-		}?.also(remainingPsn::remove)
+		} ?: unlinkedPsnConsoleFor(group, registrations, remainingPsn))?.also(remainingPsn::remove)
 		homeConsole(group, psn)
 	}
 	val remoteOnly = remainingPsn.map { console ->
