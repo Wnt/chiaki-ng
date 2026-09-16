@@ -28,8 +28,14 @@
     <color name="stream_quality_unknown">#616161</color>
     <color name="stream_quit">#FFFFB4AB</color>
 
-    <color name="control_primary">#22ffffff</color>
-    <color name="control_pressed">#88ffffff</color>
+    <color name="control_primary">#59ffffff</color>
+    <color name="control_pressed">#CCffffff</color>
+    <color name="control_stick_gate_fill">#26000000</color>
+    <color name="control_stick_gate_stroke">#80ffffff</color>
+    <color name="control_stick_travel_stroke">#2Effffff</color>
+    <color name="control_stick_socket_fill">#1Affffff</color>
+    <color name="control_stick_knob_fill">#5Cffffff</color>
+    <color name="control_stick_knob_stroke">#A6ffffff</color>
 
     <color name="item_delete_background">#B71C1C</color>
 </resources>

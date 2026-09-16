@@ -16,6 +16,7 @@
     <declare-styleable name="ButtonView">
         <attr name="drawableIdle" />
         <attr name="drawablePressed" />
+        <attr name="drawableFitCenter" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="AnalogStickView">

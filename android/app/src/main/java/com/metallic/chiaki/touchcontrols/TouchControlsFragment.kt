@@ -6,8 +6,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.Fragment
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -69,7 +67,6 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?)
 	{
 		super.onViewCreated(view, savedInstanceState)
-		applyWindowLayout()
 		binding.controlsBackgroundView.setOnClickListener { overlayRevealRequested?.invoke() }
 		ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
 			lastInsets = insets
@@ -110,33 +107,6 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 		onScreenControlsEnabled?.observe(viewLifecycleOwner, Observer {
 			view.visibility = if(it) View.VISIBLE else View.GONE
 		})
-	}
-
-	internal fun applyWindowLayout()
-	{
-		val currentBinding = _binding ?: return
-		currentBinding.controllerDock.layoutParams =
-			(currentBinding.controllerDock.layoutParams as ConstraintLayout.LayoutParams).apply {
-				// Zero is ConstraintLayout's "no maximum" value: the dock spans the whole
-				// window it is given, so the controls reach both edges (PLE-341).
-				matchConstraintMaxWidth = 0
-				matchConstraintMaxHeight = 0
-			}
-		updateWindowVerticalAnchors(currentBinding.dpadView, 0.42f)
-		updateWindowVerticalAnchors(currentBinding.faceButtonsLayout, 0.4f)
-		currentBinding.controllerDock.requestLayout()
-	}
-
-	/** Anchor the group to the whole dock and place it by bias, not against its neighbours. */
-	private fun updateWindowVerticalAnchors(view: View, windowBias: Float)
-	{
-		view.layoutParams = (view.layoutParams as ConstraintLayout.LayoutParams).apply {
-			topToTop = ConstraintSet.PARENT_ID
-			bottomToBottom = ConstraintSet.PARENT_ID
-			topToBottom = ConstraintSet.UNSET
-			bottomToTop = ConstraintSet.UNSET
-			verticalBias = windowBias
-		}
 	}
 
 	internal fun applyWindowInsets()

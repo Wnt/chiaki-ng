@@ -42,6 +42,19 @@ class AnalogStickView @JvmOverloads constructor(
 	private var center: Vector? = null
 
 	/**
+	 * Where the gate is drawn while nothing is touching it. The stick itself stays
+	 * relative -- it still centres on wherever the thumb lands -- but an untouched
+	 * stick used to draw nothing at all, which is why its position was
+	 * undiscoverable (PLE-342). Drawing the gate and knob at the view's centre
+	 * costs no per-frame work: this View is invalidated on input, not on video
+	 * frames, and the overlay layer it lives in is composited every frame either
+	 * way.
+	 */
+	private var homeCenter: Vector = Vector(0f, 0f)
+
+	private var drawnAlpha = -1
+
+	/**
 	 * Same as state, but scaled to the circle
 	 */
 	private var handlePosition: Vector = Vector(0f, 0f)
@@ -76,23 +89,38 @@ class AnalogStickView @JvmOverloads constructor(
 		}
 	}
 
+	override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int)
+	{
+		super.onSizeChanged(w, h, oldw, oldh)
+		homeCenter = Vector(w * 0.5f, h * 0.5f)
+	}
+
 	override fun onDraw(canvas: Canvas)
 	{
 		redrawPending = false
 		super.onDraw(canvas)
 
-		val center = center
-		if(center != null)
-		{
-			val circleRadius = radius + handleRadius
-			drawableBase?.setBounds((center.x - circleRadius).toInt(), (center.y - circleRadius).toInt(), (center.x + circleRadius).toInt(), (center.y + circleRadius).toInt())
-			drawableBase?.draw(canvas)
+		if(radius <= 0f)
+			return
 
-			val handleX = center.x + handlePosition.x * radius
-			val handleY = center.y + handlePosition.y * radius
-			drawableHandle?.setBounds((handleX - handleRadius).toInt(), (handleY - handleRadius).toInt(), (handleX + handleRadius).toInt(),(handleY + handleRadius).toInt())
-			drawableHandle?.draw(canvas)
+		val engaged = center
+		val center = engaged ?: homeCenter
+		val alpha = if(engaged != null) ALPHA_ENGAGED else ALPHA_AT_REST
+		if(alpha != drawnAlpha)
+		{
+			drawnAlpha = alpha
+			drawableBase?.alpha = alpha
+			drawableHandle?.alpha = alpha
 		}
+
+		val circleRadius = radius + handleRadius
+		drawableBase?.setBounds((center.x - circleRadius).toInt(), (center.y - circleRadius).toInt(), (center.x + circleRadius).toInt(), (center.y + circleRadius).toInt())
+		drawableBase?.draw(canvas)
+
+		val handleX = center.x + handlePosition.x * radius
+		val handleY = center.y + handlePosition.y * radius
+		drawableHandle?.setBounds((handleX - handleRadius).toInt(), (handleY - handleRadius).toInt(), (handleX + handleRadius).toInt(),(handleY + handleRadius).toInt())
+		drawableHandle?.draw(canvas)
 	}
 
 	private fun updateState(position: Vector?)
@@ -141,5 +169,11 @@ class AnalogStickView @JvmOverloads constructor(
 			requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_POINTER)
 		touchTracker.touchEvent(event)
 		return true
+	}
+
+	companion object
+	{
+		private const val ALPHA_ENGAGED = 255
+		private const val ALPHA_AT_REST = 178
 	}
 }
