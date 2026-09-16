@@ -27,9 +27,8 @@
     <string name="action_add_manual">Add Console Manually</string>
     <string name="action_add_by_address">Add by address</string>
     <string name="onboarding_title">PlayStation Remote Play</string>
-    <string name="regist_pin_instructions_ps5_before">On the PS5, navigate to</string>
-    <string name="regist_pin_instructions_ps5_navigation">Settings →\nSystem → Remote Play →\nLink Device</string>
-    <string name="regist_pin_instructions_after">to obtain the PIN</string>
+    <!-- PLE-331: the exact on-console path, one line, no instruction wall. -->
+    <string name="regist_pin_instructions_ps5_navigation">Settings → System → Remote Play → Link Device</string>
     <string name="title_regist">Register Console</string>
     <string name="link_console_title">Link %s</string>
     <string name="action_link_console">Link console</string>
