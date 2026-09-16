@@ -99,6 +99,11 @@ megahertz frame rate. This is the documented behaviour of Samsung's MFC driver Q
 last N input timestamps, floored by the operating rate, mapped to an MFC clock/bus level), and it also
 explains round 2's side observation that touch input makes the decoder 40 % faster: DVFS.
 
+**Corrected by PLE-116 ([`PLE-116.md`](PLE-116.md)):** the default path's 1 µs steps do not reach the
+decoder's top level; they land on the same level as `operating-rate = 480` (7.6–8.2 ms), and an explicit
+`operating-rate = 960` goes one level further (6.8 ms mean / 8.4–8.6 p95) with or without real PTS, while
+1920 adds nothing over 960.
+
 Not proven at the clock level: `/sys/class/devfreq/17000090.devfreq_mfc0/cur_freq` exists on the phone
 but is unreadable unprivileged, so the MFC frequency itself was not read. The evidence is behavioural.
 
