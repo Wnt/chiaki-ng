@@ -130,7 +130,7 @@
 			app:key="@string/preferences_decoder_input_thread_enabled_key"
 			app:title="@string/preferences_decoder_input_thread_enabled_title"
 			app:summary="@string/preferences_decoder_input_thread_enabled_summary"
-			app:defaultValue="false"
+			app:defaultValue="true"
 			app:icon="@drawable/ic_fps" />
 
         <SwitchPreference
