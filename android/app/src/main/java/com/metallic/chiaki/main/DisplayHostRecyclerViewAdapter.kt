@@ -30,7 +30,8 @@ class DisplayHostRecyclerViewAdapter(
 	private val play: (HomeConsole) -> Unit,
 	private val wake: (HomeConsole) -> Unit,
 	private val edit: (HomeConsole) -> Unit,
-	private val delete: (HomeConsole) -> Unit
+	private val delete: (HomeConsole) -> Unit,
+	private val unifiedRowsEnabled: Boolean = false
 ): RecyclerView.Adapter<DisplayHostRecyclerViewAdapter.ViewHolder>()
 {
 	var consoles: List<HomeConsole> = emptyList()
@@ -60,7 +61,10 @@ class DisplayHostRecyclerViewAdapter(
 	{
 		val console = consoles[position]
 		val context = holder.itemView.context
-		val thisBusy = action?.duid == console.psnConsole?.device?.duid
+		val thisBusy = if(unifiedRowsEnabled)
+			action?.duid?.let { it == console.psnConsole?.device?.duid } == true
+		else
+			action?.duid == console.psnConsole?.device?.duid
 		val anyBusy = action != null
 		holder.binding.apply {
 			nameTextView.text = console.name
@@ -84,7 +88,9 @@ class DisplayHostRecyclerViewAdapter(
 			wakeButton.isEnabled = !anyBusy
 			wakeButton.setOnClickListener { wake(console) }
 
-			val editable = console.displayHost is ManualDisplayHost
+			val editableHost = if(unifiedRowsEnabled)
+				console.manualDisplayHost else console.displayHost as? ManualDisplayHost
+			val editable = editableHost != null
 			menuButton.isVisible = editable
 			if(editable)
 				menuButton.setOnClickListener {

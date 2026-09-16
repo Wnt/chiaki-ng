@@ -86,9 +86,9 @@ class MainViewModel(
 
 	val psnConsoles = combine(psnDevices, database.registeredHostDao().getAll(), ::matchPsnConsoles).asLiveData()
 
-	fun setPsnEnabled(enabled: Boolean)
+	fun setPsnEnabled(enabled: Boolean, signedIn: Boolean = true)
 	{
-		if(!enabled)
+		if(!enabled || !signedIn)
 		{
 			psnLoadJob?.cancel()
 			psnDevices.value = emptyList()
