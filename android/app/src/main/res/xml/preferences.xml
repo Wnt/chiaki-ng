@@ -230,7 +230,7 @@
 			app:key="@string/preferences_video_recovery_strategy_key"
 			app:title="@string/preferences_video_recovery_strategy_title"
 			app:summary="%s"
-			app:defaultValue="timeline_shift"
+			app:defaultValue="flush"
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 

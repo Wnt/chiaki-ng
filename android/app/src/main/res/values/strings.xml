@@ -109,7 +109,7 @@
 	<string name="preferences_video_presenter_lead_title_2ms">2 ms</string>
 	<string name="preferences_video_presenter_lead_title_half_vsync">Half vsync period</string>
 	<string name="preferences_video_recovery_strategy_title">Pacing recovery strategy</string>
-	<string name="preferences_video_recovery_strategy_summary">What the presenter does when a queued frame is already late: shift the timeline (today) or flush the queue to the newest frame, GFN-style (experimental; reconnect required)</string>
+	<string name="preferences_video_recovery_strategy_summary">What the presenter does when a queued frame is already late: flush the queue to the newest frame (default) or shift the timeline (reconnect required)</string>
 	<string name="preferences_video_recovery_strategy_title_timeline_shift">Shift timeline</string>
 	<string name="preferences_video_recovery_strategy_title_flush">Flush queue</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_title">Bound paced-frame age</string>
