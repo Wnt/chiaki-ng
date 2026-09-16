@@ -56,6 +56,13 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_CONNECT_INFO = "connect_info"
 		const val EXTRA_PSN_DEVICE = "psn_device"
 		private const val HIDE_UI_TIMEOUT_MS = 2000L
+
+		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
+		{
+			if(!enabled || sdkInt < Build.VERSION_CODES.R)
+				return false
+			return source and InputDevice.SOURCE_CLASS_JOYSTICK == InputDevice.SOURCE_CLASS_JOYSTICK
+		}
 	}
 
 	private lateinit var viewModel: StreamViewModel
@@ -572,7 +579,31 @@ class StreamActivity : AppCompatActivity()
 	private fun adjustStreamViewAspect() = adjustSurfaceViewAspect()
 
 	override fun dispatchKeyEvent(event: KeyEvent) = viewModel.input.dispatchKeyEvent(event) || super.dispatchKeyEvent(event)
+
+	override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean
+	{
+		requestUnbufferedGamepadDispatchIfEnabled(event)
+		return super.dispatchGenericMotionEvent(event)
+	}
+
 	override fun onGenericMotionEvent(event: MotionEvent) = viewModel.input.onGenericMotionEvent(event) || super.onGenericMotionEvent(event)
+
+	// PLE-91: on the buffered path Android holds a joystick axis change for up to one input-batch
+	// interval (8-16 ms) before dispatchGenericMotionEvent sees it; requesting unbuffered dispatch
+	// removes that wait. The MotionEvent overload of requestUnbufferedDispatch is documented for
+	// touch events only (it has existed since API 21), so joystick/gamepad sources need the
+	// source-class overload, which the platform added only in API 30 (confirmed against
+	// android-35's api-versions.xml, not the API 26/31 levels quoted in earlier notes).
+	private fun requestUnbufferedGamepadDispatchIfEnabled(event: MotionEvent)
+	{
+		val shouldRequest = shouldRequestUnbufferedGamepadDispatch(
+			source = event.source,
+			sdkInt = Build.VERSION.SDK_INT,
+			enabled = Preferences(this).gamepadUnbufferedDispatchEnabled
+		)
+		if(shouldRequest)
+			window.decorView.requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_JOYSTICK)
+	}
 }
 
 enum class TransformMode

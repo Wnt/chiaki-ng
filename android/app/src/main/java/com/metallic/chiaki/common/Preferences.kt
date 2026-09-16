@@ -213,6 +213,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(controllerInputCoalescingEnabledKey, value).apply() }
 
+	val gamepadUnbufferedDispatchEnabledKey get() = resources.getString(R.string.preferences_gamepad_unbuffered_dispatch_enabled_key)
+	var gamepadUnbufferedDispatchEnabled
+		get() = sharedPreferences.getBoolean(gamepadUnbufferedDispatchEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(gamepadUnbufferedDispatchEnabledKey, value).apply() }
+
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled
 		get() = sharedPreferences.getBoolean(touchscreenTouchpadEnabledKey, false)

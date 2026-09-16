@@ -197,6 +197,13 @@
             app:icon="@drawable/ic_gamepad" />
 
         <SwitchPreference
+            app:key="@string/preferences_gamepad_unbuffered_dispatch_enabled_key"
+            app:title="@string/preferences_gamepad_unbuffered_dispatch_enabled_title"
+            app:summary="@string/preferences_gamepad_unbuffered_dispatch_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_gamepad" />
+
+        <SwitchPreference
             app:key="@string/preferences_feedback_reduced_interval_enabled_key"
             app:title="@string/preferences_feedback_reduced_interval_enabled_title"
             app:summary="@string/preferences_feedback_reduced_interval_enabled_summary"
