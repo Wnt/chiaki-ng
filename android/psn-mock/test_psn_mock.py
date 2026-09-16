@@ -181,6 +181,28 @@ class MockServerTest(unittest.TestCase):
                 status, body = self.exchange(self.sign_in(account)["code"])
                 self.assertEqual((status, body["error"]), (400, "invalid_grant"))
 
+    def test_session_cookie_skips_the_form_until_sessions_are_cleared(self):
+        txn = self.authorize()
+        response, _ = self.request("POST", "/2.0/oauth/authorize/password",
+                                   body=urlencode({"txn": txn, "account": "ok+session@mock", "password": "pw"}),
+                                   headers={"Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual(response.status, 302)
+        first = parse_qs(urlsplit(response.getheader("Location")).query)["code"][0]
+        cookie = response.getheader("Set-Cookie").split(";", 1)[0]
+        self.assertTrue(cookie.startswith(psn_mock.SESSION_COOKIE + "="))
+        query = urlencode({"response_type": "code", "client_id": psn_mock.CLIENT_ID,
+                           "redirect_uri": f"https://{VERIFIED}/remoteplay/redirect", "scope": "psn:clientapp"})
+        response, _ = self.request("GET", "/2.0/oauth/authorize?" + query, headers={"Cookie": cookie})
+        self.assertEqual(response.status, 302)
+        second = parse_qs(urlsplit(response.getheader("Location")).query)["code"][0]
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.exchange(second)[0], 200)
+        response, _ = self.request("POST", "/__mock/sessions/clear")
+        self.assertEqual(response.status, 200)
+        response, page = self.request("GET", "/2.0/oauth/authorize?" + query, headers={"Cookie": cookie})
+        self.assertEqual(response.status, 200)
+        self.assertIn(b'name="txn"', page)
+
     def test_cancel_redirects_with_an_error_and_no_code(self):
         params = self.sign_in("cancel@mock", NOLINK)
         self.assertEqual(params, {"error": "access_denied", "error_description": "User cancelled"})

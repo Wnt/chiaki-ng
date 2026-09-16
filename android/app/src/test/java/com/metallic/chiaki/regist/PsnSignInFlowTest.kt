@@ -91,4 +91,13 @@ class PsnSignInFlowTest
 		assertEquals(redirect, PsnPendingRedirect.take())
 		assertNull(PsnPendingRedirect.take())
 	}
+
+	@Test
+	fun browserLeftWithoutCode_reopensSilentlyTwiceThenOffersChoices()
+	{
+		assertEquals(PsnBrowserReturnStep.REOPEN_TAB, psnBrowserReturnStep(0))
+		assertEquals(PsnBrowserReturnStep.REOPEN_TAB, psnBrowserReturnStep(1))
+		assertEquals(PsnBrowserReturnStep.OFFER_CHOICES, psnBrowserReturnStep(2))
+		assertEquals(PsnBrowserReturnStep.OFFER_CHOICES, psnBrowserReturnStep(3))
+	}
 }
