@@ -239,6 +239,17 @@ static MunitResult test_period_seed_and_update(const MunitParameter params[], vo
 			period_60_hz, 17000000), ==, 16708333);
 	munit_assert_int64(android_chiaki_video_presenter_update_period(
 			period_120_hz, 25000000), ==, period_120_hz);
+
+	// A match-stream panel transition after presenter startup reseeds at 60 Hz;
+	// the next Choreographer observation remains locked to that 16.67 ms grid.
+	int64_t running_period_ns = android_chiaki_video_presenter_seed_period(
+			120.0, 0, 60);
+	munit_assert_int64(running_period_ns, ==, period_120_hz);
+	running_period_ns = android_chiaki_video_presenter_seed_period(60.0, 0, 60);
+	munit_assert_int64(running_period_ns, ==, period_60_hz);
+	running_period_ns = android_chiaki_video_presenter_update_period(
+			running_period_ns, period_60_hz);
+	munit_assert_int64(running_period_ns, ==, period_60_hz);
 	return MUNIT_OK;
 }
 

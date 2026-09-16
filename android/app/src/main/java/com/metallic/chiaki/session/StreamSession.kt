@@ -11,6 +11,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.metallic.chiaki.common.LogManager
 import com.metallic.chiaki.lib.*
+import com.metallic.chiaki.stream.displayTimingChanged
 
 sealed class StreamState
 object StreamStateIdle: StreamState()
@@ -231,15 +232,17 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			surfaceVsyncOffsetNanos)
 	}
 
-	fun updateDisplayTiming(refreshHz: Double, appVsyncOffsetNanos: Long)
+	fun updateDisplayTiming(refreshHz: Double, appVsyncOffsetNanos: Long): Boolean
 	{
-		if(surfaceRefreshHz == refreshHz && surfaceVsyncOffsetNanos == appVsyncOffsetNanos)
-			return
+		if(!displayTimingChanged(surfaceRefreshHz, surfaceVsyncOffsetNanos,
+				refreshHz, appVsyncOffsetNanos))
+			return false
 		surfaceRefreshHz = refreshHz
 		surfaceVsyncOffsetNanos = appVsyncOffsetNanos
 		if(surface != null)
 			session?.setTiming(connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 				surfaceVsyncOffsetNanos)
+		return true
 	}
 
 	fun detachSurface()

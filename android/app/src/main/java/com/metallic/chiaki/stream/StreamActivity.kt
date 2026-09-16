@@ -459,8 +459,12 @@ class StreamActivity : AppCompatActivity()
 
 	private fun registerDisplayListener()
 	{
+		val preferences = Preferences(this)
 		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N
-				|| !Preferences(this).videoPacingEnabled
+				|| !presenterDisplayTimingUpdatesEnabled(
+					preferences.displayRefreshRateMode,
+					preferences.videoPacingEnabled
+				)
 				|| displayListener != null)
 			return
 
@@ -469,13 +473,13 @@ class StreamActivity : AppCompatActivity()
 		{
 			override fun onDisplayAdded(displayId: Int) = Unit
 			override fun onDisplayRemoved(displayId: Int) = Unit
-				override fun onDisplayChanged(displayId: Int)
-				{
-					val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
-					if(displayId != streamDisplay.displayId)
-						return
-					manager.getDisplay(displayId)?.let(::updatePresenterDisplayTiming)
-				}
+			override fun onDisplayChanged(displayId: Int)
+			{
+				val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
+				if(displayId != streamDisplay.displayId)
+					return
+				manager.getDisplay(displayId)?.let(::updatePresenterDisplayTiming)
+			}
 		}
 		displayManager = manager
 		displayListener = listener
@@ -494,8 +498,8 @@ class StreamActivity : AppCompatActivity()
 	private fun updatePresenterDisplayTiming(display: Display)
 	{
 		val refreshHz = display.mode.refreshRate.toDouble()
-		viewModel.session.updateDisplayTiming(refreshHz, display.appVsyncOffsetNanos)
-		Log.i("StreamActivity", "Display timing changed: ${"%.2f".format(Locale.US, refreshHz)} Hz")
+		if(viewModel.session.updateDisplayTiming(refreshHz, display.appVsyncOffsetNanos))
+			Log.i("StreamActivity", "Display timing changed: ${"%.2f".format(Locale.US, refreshHz)} Hz")
 	}
 
 	override fun onConfigurationChanged(newConfig: Configuration)
