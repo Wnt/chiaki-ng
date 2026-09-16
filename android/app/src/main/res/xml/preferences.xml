@@ -139,6 +139,21 @@
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_video_pacing_enabled_key"
+			app:title="@string/preferences_video_pacing_enabled_title"
+			app:summary="@string/preferences_video_pacing_enabled_summary"
+			app:defaultValue="false"
+			app:icon="@drawable/ic_fps" />
+
+		<ListPreference
+			app:key="@string/preferences_video_pacing_mode_key"
+			app:title="@string/preferences_video_pacing_mode_title"
+			app:summary="%s"
+			app:defaultValue="balanced"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
         <SwitchPreference
             app:key="preferences_stream_window_optimizations_enabled"
             app:title="Stream Window Optimizations"
@@ -163,6 +178,13 @@
             app:key="@string/preferences_controller_input_coalescing_enabled_key"
             app:title="@string/preferences_controller_input_coalescing_enabled_title"
             app:summary="@string/preferences_controller_input_coalescing_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_gamepad" />
+
+        <SwitchPreference
+            app:key="@string/preferences_feedback_reduced_interval_enabled_key"
+            app:title="@string/preferences_feedback_reduced_interval_enabled_title"
+            app:summary="@string/preferences_feedback_reduced_interval_enabled_summary"
             app:defaultValue="false"
             app:icon="@drawable/ic_gamepad" />
     </PreferenceCategory>

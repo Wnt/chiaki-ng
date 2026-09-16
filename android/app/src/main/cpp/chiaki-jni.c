@@ -266,6 +266,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
 		E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
+	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
 	jbyteArray morning_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "morning", "[B"));
@@ -274,6 +275,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 
 	ChiakiConnectInfo connect_info = { 0 };
 	connect_info.ps5 = ps5;
+	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
 
 	const char *str_borrow = E->GetStringUTFChars(env, host_string, NULL);
@@ -453,10 +455,20 @@ JNIEXPORT jint JNICALL JNI_FCN(sessionJoin)(JNIEnv *env, jobject obj, jlong ptr)
 	return chiaki_session_join(&session->session);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface)
+JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface,
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
-	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface);
+	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface,
+			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
+}
+
+JNIEXPORT void JNICALL JNI_FCN(sessionSetPacingMode)(JNIEnv *env, jobject obj, jlong ptr, jint pacing_mode)
+{
+	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
+	android_chiaki_video_decoder_set_pacing_mode(&session->video_decoder,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
 }
 
 JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj, jlong ptr)
@@ -466,8 +478,10 @@ JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj
 	android_chiaki_video_decoder_get_stats(&session->video_decoder, &stats);
 
 	jclass stats_class = E->FindClass(env, BASE_PACKAGE"/VideoStats");
-	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(J)V");
-	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped);
+	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(JJJJ)V");
+	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped,
+			(jlong)stats.missed_vsyncs, (jlong)stats.presenter_frames_dropped,
+			(jlong)stats.dejitter_buffer_ns);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetControllerState)(JNIEnv *env, jobject obj, jlong ptr, jobject controller_state_java)

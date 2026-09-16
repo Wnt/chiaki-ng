@@ -159,7 +159,13 @@ class StreamActivity : AppCompatActivity()
 			binding.debandSurfaceView.visibility = View.VISIBLE
 
 			debandRenderer = DebandRenderer(
-				onSurfaceReady = { surface -> viewModel.session.attachToSurface(surface) },
+				onSurfaceReady = { surface ->
+					val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+						viewModel.connectInfo.videoProfile.maxFPS.toDouble()
+					else
+						null
+					viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
+				},
 				onRequestRender = { binding.debandSurfaceView.requestRender() }
 			)
 

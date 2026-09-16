@@ -5,7 +5,7 @@
 
 #include <string.h>
 
-#define FEEDBACK_STATE_TIMEOUT_MIN_MS 8 // minimum time to wait between sending 2 packets
+#define FEEDBACK_STATE_TIMEOUT_MIN_MS_DEFAULT 8 // default minimum time to wait between sending 2 packets
 #define FEEDBACK_STATE_TIMEOUT_MAX_MS 200 // maximum time to wait between sending 2 packets
 
 #define FEEDBACK_HISTORY_BUFFER_SIZE 0x10
@@ -17,10 +17,11 @@ static void feedback_sender_send_history_packet(ChiakiFeedbackSender *feedback_s
 static void feedback_sender_flush_history_locked(ChiakiFeedbackSender *feedback_sender);
 static void feedback_sender_record_history(ChiakiFeedbackSender *feedback_sender, const ChiakiControllerState *state_prev, const ChiakiControllerState *state_now);
 
-CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion)
+CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion, uint32_t state_min_interval_ms)
 {
 	feedback_sender->log = takion->log;
 	feedback_sender->takion = takion;
+	feedback_sender->state_min_interval_ms = state_min_interval_ms ? state_min_interval_ms : FEEDBACK_STATE_TIMEOUT_MIN_MS_DEFAULT;
 
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_prev);
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_history_prev);
@@ -267,8 +268,12 @@ static void feedback_sender_record_history(ChiakiFeedbackSender *feedback_sender
 static bool state_cond_check(void *user)
 {
 	ChiakiFeedbackSender *feedback_sender = user;
-	return feedback_sender->should_stop
-		|| feedback_sender->controller_state_changed;
+	if(feedback_sender->should_stop)
+		return true;
+	if(!feedback_sender->controller_state_changed)
+		return false;
+	uint64_t now_ms = chiaki_time_now_monotonic_ms();
+	return now_ms - feedback_sender->last_feedback_state_ms >= feedback_sender->state_min_interval_ms;
 }
 
 static void *feedback_sender_thread_func(void *user)
@@ -280,15 +285,21 @@ static void *feedback_sender_thread_func(void *user)
 	if(err != CHIAKI_ERR_SUCCESS)
 		return NULL;
 
-	uint64_t last_feedback_state_ms = chiaki_time_now_monotonic_ms();
+	feedback_sender->last_feedback_state_ms = chiaki_time_now_monotonic_ms();
 	while(true)
 	{
 		if(feedback_sender->history_packet_len == 0)
 		{
 			uint64_t now_ms = chiaki_time_now_monotonic_ms();
-			uint64_t next_timeout = FEEDBACK_STATE_TIMEOUT_MAX_MS;
-			if(now_ms - last_feedback_state_ms < FEEDBACK_STATE_TIMEOUT_MAX_MS)
-				next_timeout = FEEDBACK_STATE_TIMEOUT_MAX_MS - (now_ms - last_feedback_state_ms);
+			uint64_t elapsed = now_ms - feedback_sender->last_feedback_state_ms;
+			uint64_t next_timeout = elapsed < FEEDBACK_STATE_TIMEOUT_MAX_MS
+				? FEEDBACK_STATE_TIMEOUT_MAX_MS - elapsed : 0;
+			if(feedback_sender->controller_state_changed && elapsed < feedback_sender->state_min_interval_ms)
+			{
+				uint64_t min_wait = feedback_sender->state_min_interval_ms - elapsed;
+				if(min_wait < next_timeout)
+					next_timeout = min_wait;
+			}
 
 			err = chiaki_cond_timedwait_pred(&feedback_sender->state_cond, &feedback_sender->state_mutex, next_timeout, state_cond_check, feedback_sender);
 			if(err != CHIAKI_ERR_SUCCESS && err != CHIAKI_ERR_TIMEOUT)
@@ -303,22 +314,22 @@ static void *feedback_sender_thread_func(void *user)
 			break;
 
 		uint64_t now_ms = chiaki_time_now_monotonic_ms();
-		bool send_feedback_state = now_ms - last_feedback_state_ms >= FEEDBACK_STATE_TIMEOUT_MAX_MS;
+		bool send_feedback_state = now_ms - feedback_sender->last_feedback_state_ms >= FEEDBACK_STATE_TIMEOUT_MAX_MS;
 		ChiakiControllerState state_now = feedback_sender->controller_state;
 		bool send_feedback_history = false;
 		uint8_t history_buf[CHIAKI_FEEDBACK_HISTORY_PACKET_BUF_SIZE];
 		size_t history_buf_size = 0;
 
-		if(feedback_sender->controller_state_changed)
+		if(feedback_sender->controller_state_changed
+			&& now_ms - feedback_sender->last_feedback_state_ms >= feedback_sender->state_min_interval_ms)
 		{
-			// TODO: FEEDBACK_STATE_TIMEOUT_MIN_MS
 			feedback_sender->controller_state_changed = false;
 			send_feedback_state = true;
 
 			// don't need to send feedback state if nothing relevant changed
 			if(controller_state_equals_for_feedback_state(&state_now, &feedback_sender->controller_state_prev))
 				send_feedback_state = false;
-		} // else: timeout
+		} // else: timeout, or change still throttled by state_min_interval_ms
 
 		if(feedback_sender->history_packet_len > 0)
 		{
@@ -344,7 +355,7 @@ static void *feedback_sender_thread_func(void *user)
 		if(send_feedback_state)
 		{
 			feedback_sender->controller_state_prev = state_now;
-			last_feedback_state_ms = chiaki_time_now_monotonic_ms();
+			feedback_sender->last_feedback_state_ms = chiaki_time_now_monotonic_ms();
 		}
 	}
 

@@ -38,9 +38,15 @@ typedef struct chiaki_feedback_sender_t
 	bool history_dirty;
 	ChiakiMutex state_mutex;
 	ChiakiCond state_cond;
+	uint32_t state_min_interval_ms;
+	uint64_t last_feedback_state_ms;
 } ChiakiFeedbackSender;
 
-CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion);
+/**
+ * @param state_min_interval_ms minimum time in ms to wait between sending 2 controller state
+ *        packets, or 0 to use the default (8ms)
+ */
+CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion, uint32_t state_min_interval_ms);
 CHIAKI_EXPORT void chiaki_feedback_sender_fini(ChiakiFeedbackSender *feedback_sender);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_set_controller_state(ChiakiFeedbackSender *feedback_sender, ChiakiControllerState *state);
 
