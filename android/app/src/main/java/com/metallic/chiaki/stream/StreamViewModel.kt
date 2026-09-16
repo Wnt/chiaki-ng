@@ -29,7 +29,7 @@ class StreamViewModel(
 	val logManager = LogManager(application)
 
 	val input = StreamInput(application, preferences)
-	val session = StreamSession(connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
+	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
 		preferences.videoPacingMode.nativeValue, input, externallyManaged = psnDevice != null)
 
@@ -42,7 +42,8 @@ class StreamViewModel(
 			preferences.decoderInputThreadEnabled,
 			onSessionCreated = session::attachRemoteSession,
 			onSessionClosed = session::detachRemoteSession,
-			onSessionEvent = session::remoteEvent
+			onSessionEvent = session::remoteEvent,
+			context = application
 		)
 		AndroidPsnRemoteClient(application).controller(bridge)
 	}

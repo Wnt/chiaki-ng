@@ -346,6 +346,9 @@ static void *vsync_thread_func(void *user)
 {
 	AndroidChiakiVideoPresenter *presenter = user;
 	chiaki_thread_set_affinity(CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
+	if(presenter->performance_hint_thread_start_cb)
+		presenter->performance_hint_thread_start_cb(presenter->performance_hint_cb_user,
+				CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
 	ALooper *looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
 	AChoreographer *choreographer = AChoreographer_getInstance();
 	chiaki_mutex_lock(&presenter->mutex);
@@ -359,11 +362,17 @@ static void *vsync_thread_func(void *user)
 		chiaki_mutex_lock(&presenter->mutex);
 		presenter->timestamped_release_enabled = false;
 		chiaki_mutex_unlock(&presenter->mutex);
+		if(presenter->performance_hint_thread_stop_cb)
+			presenter->performance_hint_thread_stop_cb(presenter->performance_hint_cb_user,
+					CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
 		return NULL;
 	}
 	if(shutdown)
 	{
 		CHIAKI_LOGI(presenter->log, "Video Presenter Vsync Thread exiting before first callback");
+		if(presenter->performance_hint_thread_stop_cb)
+			presenter->performance_hint_thread_stop_cb(presenter->performance_hint_cb_user,
+					CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
 		return NULL;
 	}
 
@@ -381,6 +390,9 @@ static void *vsync_thread_func(void *user)
 	}
 
 	CHIAKI_LOGI(presenter->log, "Video Presenter Vsync Thread exiting");
+	if(presenter->performance_hint_thread_stop_cb)
+		presenter->performance_hint_thread_stop_cb(presenter->performance_hint_cb_user,
+				CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
 	return NULL;
 }
 
@@ -485,6 +497,10 @@ static void *output_thread_func(void *user)
 {
 	AndroidChiakiVideoPresenter *presenter = user;
 	chiaki_thread_set_affinity(CHIAKI_THREAD_NAME_VIDEO_DECODER);
+	if(presenter->performance_hint_thread_start_cb)
+		presenter->performance_hint_thread_start_cb(presenter->performance_hint_cb_user,
+				CHIAKI_THREAD_NAME_VIDEO_DECODER);
+	int64_t last_report_ns = monotonic_time_ns();
 	while(true)
 	{
 		AMediaCodecBufferInfo info;
@@ -516,6 +532,11 @@ static void *output_thread_func(void *user)
 				CHIAKI_LOGI(presenter->log, "AMediaCodec reported EOS");
 				break;
 			}
+			int64_t now_ns = monotonic_time_ns();
+			if(presenter->performance_hint_report_cb)
+				presenter->performance_hint_report_cb(presenter->performance_hint_cb_user,
+						CHIAKI_THREAD_NAME_VIDEO_DECODER, (uint64_t)(now_ns - last_report_ns));
+			last_report_ns = now_ns;
 		}
 		else
 		{
@@ -527,6 +548,9 @@ static void *output_thread_func(void *user)
 		}
 	}
 	CHIAKI_LOGI(presenter->log, "Video Decoder Output Thread exiting");
+	if(presenter->performance_hint_thread_stop_cb)
+		presenter->performance_hint_thread_stop_cb(presenter->performance_hint_cb_user,
+				CHIAKI_THREAD_NAME_VIDEO_DECODER);
 	return NULL;
 }
 
@@ -556,6 +580,17 @@ void android_chiaki_video_presenter_fini(AndroidChiakiVideoPresenter *presenter)
 	android_chiaki_video_presenter_join(presenter);
 	chiaki_cond_fini(&presenter->queue_cond);
 	chiaki_mutex_fini(&presenter->mutex);
+}
+
+void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiakiVideoPresenter *presenter,
+		AndroidChiakiPerformanceHintThreadCallback start_cb,
+		AndroidChiakiPerformanceHintReportCallback report_cb,
+		AndroidChiakiPerformanceHintThreadCallback stop_cb, void *user)
+{
+	presenter->performance_hint_thread_start_cb = start_cb;
+	presenter->performance_hint_report_cb = report_cb;
+	presenter->performance_hint_thread_stop_cb = stop_cb;
+	presenter->performance_hint_cb_user = user;
 }
 
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,

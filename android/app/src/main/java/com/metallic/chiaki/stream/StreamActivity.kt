@@ -62,6 +62,8 @@ class StreamActivity : AppCompatActivity()
 	private lateinit var binding: ActivityStreamBinding
 	private lateinit var insetsController: WindowInsetsControllerCompat
 	private var originalPreferredDisplayModeId: Int? = null
+	private var performanceModeRequested = false
+	private var sustainedPerformanceModeEnabled = false
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -85,6 +87,7 @@ class StreamActivity : AppCompatActivity()
 
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		performanceModeRequested = connectInfo.performanceModeEnabled
 
 		val preferences = Preferences(this)
 		WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -255,6 +258,30 @@ class StreamActivity : AppCompatActivity()
 		window.attributes = attributes
 	}
 
+	private fun configurePerformanceMode(enabled: Boolean)
+	{
+		if(!enabled)
+		{
+			if(sustainedPerformanceModeEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
+				window.setSustainedPerformanceMode(false)
+			sustainedPerformanceModeEnabled = false
+			return
+		}
+		if(sustainedPerformanceModeEnabled)
+			return
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+			&& getSystemService(PowerManager::class.java).isSustainedPerformanceModeSupported)
+		{
+			window.setSustainedPerformanceMode(true)
+			sustainedPerformanceModeEnabled = true
+			Log.i("StreamActivity", "Sustained performance mode enabled")
+		}
+		else
+		{
+			Log.w("StreamActivity", "Sustained performance mode is unavailable")
+		}
+	}
+
 	private fun configureDisplayRefreshRate(mode: Preferences.DisplayRefreshRateMode, streamFrameRate: Float)
 	{
 		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT)
@@ -311,6 +338,7 @@ class StreamActivity : AppCompatActivity()
 	override fun onResume()
 	{
 		super.onResume()
+		configurePerformanceMode(performanceModeRequested)
 		hideSystemUI()
 		if(debandRenderer != null) {
 			binding.debandSurfaceView.onResume()
@@ -324,6 +352,7 @@ class StreamActivity : AppCompatActivity()
 	override fun onPause()
 	{
 		super.onPause()
+		configurePerformanceMode(false)
 		if(debandRenderer != null) {
 			binding.debandSurfaceView.onPause()
 		}
@@ -338,6 +367,7 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		configurePerformanceMode(false)
 		restoreDisplayRefreshRate()
 		super.onDestroy()
 		controlsJob?.cancel()

@@ -1,5 +1,6 @@
 package com.metallic.chiaki.lib
 
+import android.content.Context
 import android.os.Parcelable
 import android.util.Log
 import android.view.Surface
@@ -76,7 +77,8 @@ data class ConnectInfo(
 	val packetLossMax: Double,
 	val takionVideoPacketReorderingDisabled: Boolean,
 	val feedbackStateMinIntervalMs: Int = 0,
-	val autoRegister: Boolean = false
+	val autoRegister: Boolean = false,
+	val performanceModeEnabled: Boolean = false
 ): Parcelable
 
 data class NativeRemoteConnection(
@@ -355,7 +357,8 @@ data class RegistrationEvent(val host: RegistHost): Event()
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
 class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean = false,
-	decoderInputThread: Boolean = false, remoteConnection: NativeRemoteConnection? = null)
+	decoderInputThread: Boolean = false, remoteConnection: NativeRemoteConnection? = null,
+	context: Context? = null)
 {
 	interface EventCallback
 	{
@@ -363,6 +366,11 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	}
 
 	private var nativePtr: Long
+	private val performanceHints = PerformanceHints.create(
+		context,
+		connectInfo.performanceModeEnabled,
+		connectInfo.videoProfile.maxFPS
+	)
 	var eventCallback: ((event: Event) -> Unit)? = null
 
 	init
@@ -395,7 +403,18 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			ChiakiNative.sessionJoin(nativePtr)
 		ChiakiNative.sessionFree(nativePtr)
 		nativePtr = 0L
+		performanceHints.close()
 	}
+
+	@Suppress("unused") // Called from the native decoder and presenter threads.
+	private fun performanceHintThreadStarted(role: Int, tid: Int) = performanceHints.threadStarted(role, tid)
+
+	@Suppress("unused") // Called from the native decoder and presenter threads.
+	private fun performanceHintReportActualWorkDuration(role: Int, durationNanos: Long) =
+		performanceHints.reportActualWorkDuration(role, durationNanos)
+
+	@Suppress("unused") // Called from the native decoder and presenter threads.
+	private fun performanceHintThreadStopped(role: Int) = performanceHints.threadStopped(role)
 
 	private fun event(event: Event)
 	{

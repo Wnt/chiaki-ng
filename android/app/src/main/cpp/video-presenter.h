@@ -33,6 +33,9 @@ typedef struct android_chiaki_video_presenter_stats_t
 } AndroidChiakiVideoPresenterStats;
 
 typedef void (*AndroidChiakiVideoPresenterReleaseCallback)(void *user, bool dropped);
+typedef void (*AndroidChiakiPerformanceHintThreadCallback)(void *user, ChiakiThreadName role);
+typedef void (*AndroidChiakiPerformanceHintReportCallback)(void *user, ChiakiThreadName role,
+		uint64_t actual_duration_ns);
 
 typedef struct android_chiaki_video_presenter_frame_t
 {
@@ -82,12 +85,20 @@ typedef struct android_chiaki_video_presenter_t
 	uint64_t dropped_frames;
 	AndroidChiakiVideoPresenterReleaseCallback release_cb;
 	void *release_cb_user;
+	AndroidChiakiPerformanceHintThreadCallback performance_hint_thread_start_cb;
+	AndroidChiakiPerformanceHintReportCallback performance_hint_report_cb;
+	AndroidChiakiPerformanceHintThreadCallback performance_hint_thread_stop_cb;
+	void *performance_hint_cb_user;
 } AndroidChiakiVideoPresenter;
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
 		bool late_frame_recovery_enabled, bool real_pts_enabled,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user);
 void android_chiaki_video_presenter_fini(AndroidChiakiVideoPresenter *presenter);
+void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiakiVideoPresenter *presenter,
+		AndroidChiakiPerformanceHintThreadCallback start_cb,
+		AndroidChiakiPerformanceHintReportCallback report_cb,
+		AndroidChiakiPerformanceHintThreadCallback stop_cb, void *user);
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode);

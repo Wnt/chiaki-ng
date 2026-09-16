@@ -141,6 +141,13 @@
             app:icon="@drawable/ic_fps" />
 
         <SwitchPreference
+            app:key="@string/preferences_performance_mode_enabled_key"
+            app:title="@string/preferences_performance_mode_enabled_title"
+            app:summary="@string/preferences_performance_mode_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
+
+        <SwitchPreference
             app:key="@string/preferences_decoder_late_frame_recovery_enabled_key"
             app:title="@string/preferences_decoder_late_frame_recovery_enabled_title"
             app:summary="@string/preferences_decoder_late_frame_recovery_enabled_summary"
