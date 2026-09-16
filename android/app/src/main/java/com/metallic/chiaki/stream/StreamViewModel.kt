@@ -31,11 +31,7 @@ class StreamViewModel(
 
 	val input = StreamInput(application, preferences)
 	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
-		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
-		preferences.videoPacingMode.nativeValue, preferences.videoPresenterLead.nativeValue,
-		preferences.videoPacingBoundedAgeEnabled, preferences.videoPresenterNonblockingProducer,
-		preferences.videoPacingMaxFrameAgePeriods,
-		preferences.videoRecoveryStrategy.nativeValue, input,
+		preferences.decoderInputThreadEnabled, input,
 		externallyManaged = psnDevice != null || diagnosticsPreview)
 
 	private val remoteController: PsnRemoteController? = psnDevice?.let {
@@ -43,7 +39,7 @@ class StreamViewModel(
 			connectInfo,
 			logManager.createNewFile().file.absolutePath,
 			preferences.logVerbose,
-			preferences.realVideoTimestamps || preferences.videoPacingEnabled,
+			preferences.realVideoTimestamps || connectInfo.videoPresenterConfig.pacingEnabled,
 			preferences.decoderInputThreadEnabled,
 			onSessionCreated = session::attachRemoteSession,
 			onSessionClosed = session::detachRemoteSession,

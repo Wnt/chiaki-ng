@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
 import com.metallic.chiaki.R
+import com.metallic.chiaki.lib.AndroidChiakiVideoPresenterConfig
 import com.metallic.chiaki.lib.Codec
 import com.metallic.chiaki.lib.ConnectVideoProfile
 import com.metallic.chiaki.lib.VideoFPSPreset
@@ -396,6 +397,16 @@ class Preferences(context: Context)
 			videoPacingMaxFrameAgePeriodsKey, videoPacingMaxFrameAgePeriodsDefault))
 		set(value) { sharedPreferences.edit().putInt(videoPacingMaxFrameAgePeriodsKey,
 			validateVideoPacingMaxFrameAgePeriods(value)).apply() }
+
+	val videoPresenterConfig get() = AndroidChiakiVideoPresenterConfig(
+		pacingEnabled = videoPacingEnabled,
+		pacingMode = videoPacingMode.nativeValue,
+		presenterLead = videoPresenterLead.nativeValue,
+		boundedAgeEnabled = videoPacingBoundedAgeEnabled,
+		maxFrameAgePeriods = videoPacingMaxFrameAgePeriods,
+		nonblockingProducer = videoPresenterNonblockingProducer,
+		recoveryStrategy = videoRecoveryStrategy.nativeValue
+	)
 
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)

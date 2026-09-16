@@ -727,10 +727,12 @@ static void *output_thread_func(void *user)
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
 		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled, bool stats_log_enabled,
+		const AndroidChiakiVideoPresenterConfig *config,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user)
 {
 	memset(presenter, 0, sizeof(*presenter));
 	presenter->log = log;
+	presenter->config = *config;
 	presenter->late_frame_recovery_enabled = late_frame_recovery_enabled;
 	presenter->real_pts_enabled = real_pts_enabled;
 	presenter->diagnostics_enabled = diagnostics_enabled;
@@ -767,11 +769,16 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 }
 
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns)
 {
+	AndroidChiakiVideoPacingMode mode = presenter->config.pacing_enabled
+			? presenter->config.pacing_mode : ANDROID_CHIAKI_VIDEO_PACING_DISABLED;
+	AndroidChiakiVideoPresenterLead lead_mode = presenter->config.presenter_lead;
+	uint32_t max_queue_age_periods = presenter->config.pacing_enabled
+			&& presenter->config.bounded_age_enabled ? presenter->config.max_frame_age_periods : 0;
+	bool nonblocking_producer = presenter->config.nonblocking_producer;
+	AndroidChiakiVideoRecoveryStrategy recovery_strategy = presenter->config.pacing_enabled
+			? presenter->config.recovery_strategy : ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT;
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
 	recovery_strategy = android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy);
@@ -911,11 +918,16 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 }
 
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns)
 {
+	AndroidChiakiVideoPacingMode mode = presenter->config.pacing_enabled
+			? presenter->config.pacing_mode : ANDROID_CHIAKI_VIDEO_PACING_DISABLED;
+	AndroidChiakiVideoPresenterLead lead_mode = presenter->config.presenter_lead;
+	uint32_t max_queue_age_periods = presenter->config.pacing_enabled
+			&& presenter->config.bounded_age_enabled ? presenter->config.max_frame_age_periods : 0;
+	bool nonblocking_producer = presenter->config.nonblocking_producer;
+	AndroidChiakiVideoRecoveryStrategy recovery_strategy = presenter->config.pacing_enabled
+			? presenter->config.recovery_strategy : ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT;
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
 	recovery_strategy = android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy);

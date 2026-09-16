@@ -37,6 +37,27 @@ typedef enum android_chiaki_video_presenter_lead_t
 	ANDROID_CHIAKI_VIDEO_PRESENTER_LEAD_HALF_VSYNC = 1,
 } AndroidChiakiVideoPresenterLead;
 
+typedef struct android_chiaki_video_presenter_config_t
+{
+	bool pacing_enabled;
+	AndroidChiakiVideoPacingMode pacing_mode;
+	AndroidChiakiVideoPresenterLead presenter_lead;
+	bool bounded_age_enabled;
+	uint32_t max_frame_age_periods;
+	bool nonblocking_producer;
+	AndroidChiakiVideoRecoveryStrategy recovery_strategy;
+} AndroidChiakiVideoPresenterConfig;
+
+#define ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT { \
+	.pacing_enabled = false, \
+	.pacing_mode = ANDROID_CHIAKI_VIDEO_PACING_BALANCED, \
+	.presenter_lead = ANDROID_CHIAKI_VIDEO_PRESENTER_LEAD_2MS, \
+	.bounded_age_enabled = false, \
+	.max_frame_age_periods = 2, \
+	.nonblocking_producer = false, \
+	.recovery_strategy = ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, \
+}
+
 typedef struct android_chiaki_video_presenter_stats_t
 {
 	uint64_t missed_vsyncs;
@@ -108,6 +129,7 @@ typedef struct android_chiaki_video_presenter_t
 	uint32_t queue_head;
 	uint32_t queue_size;
 
+	AndroidChiakiVideoPresenterConfig config;
 	AndroidChiakiVideoPacingMode mode;
 	AndroidChiakiVideoPresenterLead lead_mode;
 	AndroidChiakiVideoRecoveryStrategy recovery_strategy;
@@ -159,6 +181,7 @@ typedef struct android_chiaki_video_presenter_t
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
 		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled, bool stats_log_enabled,
+		const AndroidChiakiVideoPresenterConfig *config,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user);
 void android_chiaki_video_presenter_fini(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiakiVideoPresenter *presenter,
@@ -166,19 +189,13 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 		AndroidChiakiPerformanceHintReportCallback report_cb,
 		AndroidChiakiPerformanceHintThreadCallback stop_cb, void *user);
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy);
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns);
 void android_chiaki_video_presenter_request_stop(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_join(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPacingMode mode);
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy);
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns);
 void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterStats *stats);
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
