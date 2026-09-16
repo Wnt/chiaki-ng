@@ -94,6 +94,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.videoPacingModeKey -> preferences.videoPacingMode.value
 		key == preferences.videoPresenterLeadKey -> preferences.videoPresenterLead.value
 		key == preferences.videoPacingMaxFrameAgePeriodsKey -> preferences.videoPacingMaxFrameAgePeriods.toString()
+		key == preferences.videoRecoveryStrategyKey -> preferences.videoRecoveryStrategy.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.decoderOperatingRateKey -> preferences.decoderOperatingRate.toString()
@@ -133,6 +134,11 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val lead = Preferences.VideoPresenterLead.values().firstOrNull { it.value == value } ?: return
 				preferences.videoPresenterLead = lead
+			}
+			key == preferences.videoRecoveryStrategyKey ->
+			{
+				val strategy = Preferences.VideoRecoveryStrategy.values().firstOrNull { it.value == value } ?: return
+				preferences.videoRecoveryStrategy = strategy
 			}
 			key == preferences.videoPacingMaxFrameAgePeriodsKey ->
 			{
@@ -213,6 +219,11 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_presenter_lead_key))?.let {
 			it.entryValues = Preferences.videoPresenterLeadAll.map { lead -> lead.value }.toTypedArray()
 			it.entries = Preferences.videoPresenterLeadAll.map { lead -> getString(lead.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_recovery_strategy_key))?.let {
+			it.entryValues = Preferences.videoRecoveryStrategyAll.map { strategy -> strategy.value }.toTypedArray()
+			it.entries = Preferences.videoRecoveryStrategyAll.map { strategy -> getString(strategy.title) }.toTypedArray()
 		}
 
 		preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_video_pacing_max_frame_age_periods_key))?.let {

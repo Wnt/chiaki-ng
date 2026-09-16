@@ -106,6 +106,10 @@
 	<string name="preferences_video_presenter_lead_title">Video presenter lead</string>
 	<string name="preferences_video_presenter_lead_title_2ms">2 ms</string>
 	<string name="preferences_video_presenter_lead_title_half_vsync">Half vsync period</string>
+	<string name="preferences_video_recovery_strategy_title">Pacing recovery strategy</string>
+	<string name="preferences_video_recovery_strategy_summary">What the presenter does when a queued frame is already late: shift the timeline (today) or flush the queue to the newest frame, GFN-style (experimental; reconnect required)</string>
+	<string name="preferences_video_recovery_strategy_title_timeline_shift">Shift timeline</string>
+	<string name="preferences_video_recovery_strategy_title_flush">Flush queue</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_title">Bound paced-frame age</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_summary">Drop queued head frames that are too old relative to the newest decoded frame (experimental; reconnect required)</string>
 	<string name="preferences_video_presenter_nonblocking_producer_title">Non-blocking video producer</string>
@@ -220,6 +224,7 @@
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>
 	<string name="preferences_video_presenter_lead_key">stream_video_presenter_lead</string>
+	<string name="preferences_video_recovery_strategy_key">stream_video_recovery_strategy</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_key">stream_video_pacing_bounded_age</string>
 	<string name="preferences_video_presenter_nonblocking_producer_key">stream_video_presenter_nonblocking_producer</string>
 	<string name="preferences_video_pacing_max_frame_age_periods_key">stream_video_pacing_max_frame_age_periods</string>

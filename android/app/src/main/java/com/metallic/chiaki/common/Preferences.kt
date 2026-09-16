@@ -53,6 +53,12 @@ class Preferences(context: Context)
 		HALF_VSYNC("half_vsync", 1, R.string.preferences_video_presenter_lead_title_half_vsync)
 	}
 
+	enum class VideoRecoveryStrategy(val value: String, val nativeValue: Int, @StringRes val title: Int)
+	{
+		TIMELINE_SHIFT("timeline_shift", 0, R.string.preferences_video_recovery_strategy_title_timeline_shift),
+		FLUSH("flush", 1, R.string.preferences_video_recovery_strategy_title_flush)
+	}
+
 	enum class Codec(val value: String, @StringRes val title: Int, val codec: com.metallic.chiaki.lib.Codec)
 	{
 		CODEC_H264("h264", R.string.preferences_codec_title_h264, com.metallic.chiaki.lib.Codec.CODEC_H264),
@@ -72,6 +78,8 @@ class Preferences(context: Context)
 		val videoPresenterLeadDefault = VideoPresenterLead.TWO_MS
 		val videoPresenterLeadAll = VideoPresenterLead.values()
 		const val videoPacingMaxFrameAgePeriodsDefault = 2
+		val videoRecoveryStrategyDefault = VideoRecoveryStrategy.TIMELINE_SHIFT
+		val videoRecoveryStrategyAll = VideoRecoveryStrategy.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 		const val packetLossMaxPercentDefault = 5
@@ -373,6 +381,13 @@ class Preferences(context: Context)
 			VideoPresenterLead.values().firstOrNull { it.value == value }
 		} ?: videoPresenterLeadDefault
 		set(value) { sharedPreferences.edit().putString(videoPresenterLeadKey, value.value).apply() }
+
+	val videoRecoveryStrategyKey get() = resources.getString(R.string.preferences_video_recovery_strategy_key)
+	var videoRecoveryStrategy
+		get() = sharedPreferences.getString(videoRecoveryStrategyKey, videoRecoveryStrategyDefault.value)?.let { value ->
+			VideoRecoveryStrategy.values().firstOrNull { it.value == value }
+		} ?: videoRecoveryStrategyDefault
+		set(value) { sharedPreferences.edit().putString(videoRecoveryStrategyKey, value.value).apply() }
 
 	fun validateVideoPacingMaxFrameAgePeriods(periods: Int) = max(1, min(10, periods))
 	val videoPacingMaxFrameAgePeriodsKey get() = resources.getString(R.string.preferences_video_pacing_max_frame_age_periods_key)

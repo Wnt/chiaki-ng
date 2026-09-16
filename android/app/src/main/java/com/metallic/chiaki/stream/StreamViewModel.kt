@@ -34,7 +34,8 @@ class StreamViewModel(
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
 		preferences.videoPacingMode.nativeValue, preferences.videoPresenterLead.nativeValue,
 		preferences.videoPacingBoundedAgeEnabled, preferences.videoPresenterNonblockingProducer,
-		preferences.videoPacingMaxFrameAgePeriods, input,
+		preferences.videoPacingMaxFrameAgePeriods,
+		preferences.videoRecoveryStrategy.nativeValue, input,
 		externallyManaged = psnDevice != null || diagnosticsPreview)
 
 	private val remoteController: PsnRemoteController? = psnDevice?.let {

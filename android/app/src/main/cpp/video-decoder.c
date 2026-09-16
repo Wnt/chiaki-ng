@@ -290,7 +290,8 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer)
+		uint32_t max_queue_age_periods, bool nonblocking_producer,
+		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 
@@ -312,7 +313,7 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		decoder->window = new_window;
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
 				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-				nonblocking_producer);
+				nonblocking_producer, recovery_strategy);
 #else
 		CHIAKI_LOGE(decoder->log, "Video Decoder already initialized");
 #endif
@@ -396,7 +397,7 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 
 	ChiakiErrorCode err = android_chiaki_video_presenter_start(&decoder->presenter, decoder->codec, stream_fps,
 			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-			nonblocking_producer);
+			nonblocking_producer, recovery_strategy);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(decoder->log, "Failed to start video presenter: %s", chiaki_error_string(err));
@@ -421,13 +422,14 @@ beach:
 void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer)
+		uint32_t max_queue_age_periods, bool nonblocking_producer,
+		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 	if(decoder->codec)
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
 				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-				nonblocking_producer);
+				nonblocking_producer, recovery_strategy);
 	chiaki_mutex_unlock(&decoder->codec_mutex);
 }
 
@@ -667,6 +669,8 @@ void android_chiaki_video_decoder_get_diagnostics(AndroidChiakiVideoDecoder *dec
 	diagnostics->missed_vsyncs = presenter.missed_vsyncs;
 	diagnostics->presenter_frames_dropped = presenter.dropped_frames;
 	diagnostics->presenter_bounded_age_frames_dropped = presenter.bounded_age_dropped_frames;
+	diagnostics->presenter_recovery_flushes = presenter.recovery_flushes;
+	diagnostics->presenter_recovery_flushed_frames = presenter.recovery_flushed_frames;
 	diagnostics->dejitter_buffer_ns = presenter.dejitter_buffer_ns;
 	diagnostics->cadence_depth_ns = presenter.cadence_depth_ns;
 	diagnostics->cadence_target_ns = presenter.cadence_target_ns;

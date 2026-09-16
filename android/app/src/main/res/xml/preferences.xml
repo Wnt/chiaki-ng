@@ -211,6 +211,14 @@
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
+		<ListPreference
+			app:key="@string/preferences_video_recovery_strategy_key"
+			app:title="@string/preferences_video_recovery_strategy_title"
+			app:summary="%s"
+			app:defaultValue="timeline_shift"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
 		<SwitchPreference
 			app:key="@string/preferences_video_pacing_bounded_age_enabled_key"
 			app:title="@string/preferences_video_pacing_bounded_age_enabled_title"
