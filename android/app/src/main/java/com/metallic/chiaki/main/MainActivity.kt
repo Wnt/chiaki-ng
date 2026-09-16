@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity()
 		const val EXTRA_ONBOARDING_PREVIEW = "onboarding_preview"
 		private const val PREVIEW_WELCOME = "welcome"
 		private const val PREVIEW_CONSOLES = "consoles"
+		private const val PREVIEW_SUMMARY = "summary"
 	}
 
 	private lateinit var viewModel: MainViewModel
@@ -106,16 +107,13 @@ class MainActivity : AppCompatActivity()
 		binding.onboardingLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 		preferences = Preferences(this)
 		previewState = intent.getStringExtra(EXTRA_ONBOARDING_PREVIEW)
-			?.takeIf { BuildConfig.DEBUG && it in setOf(PREVIEW_WELCOME, PREVIEW_CONSOLES) }
+			?.takeIf { BuildConfig.DEBUG && it in setOf(PREVIEW_WELCOME, PREVIEW_CONSOLES, PREVIEW_SUMMARY) }
 		setSupportActionBar(binding.toolbar)
 		setupQualityPresetChooser()
 
 		binding.addConsoleButton.setOnClickListener { showAddConsoleMenu() }
-		if(BuildConfig.CHIAKI_HOME_NON_OVERLAPPING_ACTIONS)
-		{
-			binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-				updateConsoleActionInsets()
-			}
+		binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+			updateConsoleActionInsets()
 		}
 		binding.onboardingSignInButton.setOnClickListener { startPsnSignIn() }
 		binding.onboardingAddAddressButton.setOnClickListener {
@@ -138,8 +136,10 @@ class MainActivity : AppCompatActivity()
 				AndroidPsnRemoteClient(this)
 			)
 		})[MainViewModel::class.java]
-		if(previewState == PREVIEW_CONSOLES)
+		if(previewState == PREVIEW_CONSOLES || previewState == PREVIEW_SUMMARY)
 			showPreviewConsoles()
+		if(previewState == PREVIEW_SUMMARY)
+			showStreamSummary(StreamSummary(754_000L, 24.0, 2L, StreamSummaryQuality.GOOD))
 
 		consoleAdapter = DisplayHostRecyclerViewAdapter(
 			this::playConsole,
@@ -199,12 +199,15 @@ class MainActivity : AppCompatActivity()
 		)
 		if(container.paddingRight != insets.end || container.paddingBottom != insets.bottom)
 			container.updatePadding(right = insets.end, bottom = insets.bottom)
+		val summaryEnd = maxOf(resources.getDimensionPixelSize(R.dimen.home_summary_end_padding), insets.end)
+		if(binding.streamSummaryContent.paddingRight != summaryEnd)
+			binding.streamSummaryContent.updatePadding(right = summaryEnd)
 	}
 
 	private fun currentHomeState(): OnboardingHomeState = when(previewState)
 	{
 		PREVIEW_WELCOME -> OnboardingHomeState.WELCOME
-		PREVIEW_CONSOLES -> OnboardingHomeState.ACCOUNT_CONSOLES
+		PREVIEW_CONSOLES, PREVIEW_SUMMARY -> OnboardingHomeState.ACCOUNT_CONSOLES
 		else -> onboardingHomeState(configuredConsoleCount, preferences.psnRemotePlayEnabled)
 	}
 

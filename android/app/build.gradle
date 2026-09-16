@@ -22,8 +22,6 @@ println("Determined Chiaki Version: $chiakiVersion")
 
 def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching") ?: "false").toBoolean()
 def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "false").toBoolean()
-// PLE-235: off by default; opt in while A/B validating the non-overlapping home actions.
-def homeNonOverlappingActions = (project.findProperty("chiakiHomeNonOverlappingActions") ?: "false").toBoolean()
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
 def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
 def chiakiAbiFilters = (project.findProperty("chiakiAbiFilters") ?: "")
@@ -47,7 +45,6 @@ android {
             abiFilters.addAll(chiakiAbiFilters)
         }
         buildConfigField "boolean", "CHIAKI_ANDROID_EGL_RENDERER", androidEglRenderer.toString()
-        buildConfigField "boolean", "CHIAKI_HOME_NON_OVERLAPPING_ACTIONS", homeNonOverlappingActions.toString()
         externalNativeBuild {
             cmake {
                 arguments "-DCHIAKI_ENABLE_TESTS=OFF",
