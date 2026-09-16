@@ -454,7 +454,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.live_rtt_us,
 					(jlong)event->stream_stats.server_loss,
 					(jdouble)event->stream_stats.congestion_measured_loss,
-					(jdouble)event->stream_stats.congestion_reported_loss);
+					(jdouble)event->stream_stats.congestion_reported_loss,
+					(jboolean)diagnostics.cadence_half_rate_detected);
 			break;
 		}
 		default:
@@ -533,6 +534,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			E->GetFieldID(env, presenter_config_class, "dejitterCapMs", "I"));
 	presenter_config.dejitter_queue_age_frames = (uint32_t)E->GetIntField(env, presenter_config_obj,
 			E->GetFieldID(env, presenter_config_class, "dejitterQueueAgeFrames", "I"));
+	presenter_config.dejitter_half_rate_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "dejitterHalfRateEnabled", "Z"));
 	jint audio_buffer_bursts = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioBufferBursts", "I"));
 	jint audio_fifo_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioFifoMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
@@ -696,7 +699,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDD)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");
