@@ -2,6 +2,8 @@
 
 package com.metallic.chiaki.regist
 
+import com.metallic.chiaki.remote.PsnServiceEndpoints
+
 /** Name of the object the passkey hook calls; see [PSN_PASSKEY_HOOK_JS]. */
 internal const val PSN_PASSKEY_BRIDGE = "PleikkariSignIn"
 
@@ -44,10 +46,15 @@ internal val PSN_PASSKEY_HOOK_JS = """
 
 private val PSN_SIGN_IN_HOST_SUFFIXES = listOf("sony.com", "sonyentertainmentnetwork.com", "playstation.com")
 
-/** Only Sony's own sign-in pages may move the sign-in to the browser. */
-internal fun isPsnSignInHost(host: String?): Boolean
+/**
+ * Only Sony's own sign-in pages may move the sign-in to the browser. A PSN mock build (PLE-284)
+ * also accepts the mock's host, which is null in every other build.
+ */
+internal fun isPsnSignInHost(host: String?, mockHost: String? = PsnServiceEndpoints.current.mockHost): Boolean
 {
 	val normalized = host?.lowercase()?.trimEnd('.') ?: return false
+	if(mockHost != null && normalized == mockHost.lowercase())
+		return true
 	return PSN_SIGN_IN_HOST_SUFFIXES.any { normalized == it || normalized.endsWith(".$it") }
 }
 

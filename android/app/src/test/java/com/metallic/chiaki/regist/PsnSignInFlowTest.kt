@@ -28,6 +28,15 @@ class PsnSignInFlowTest
 	}
 
 	@Test
+	fun mockHost_mayMoveSignInToBrowserOnlyInMockBuild()
+	{
+		assertFalse(isPsnSignInHost("psn.example"))
+		assertTrue(isPsnSignInHost("PSN.example.", mockHost = "psn.example"))
+		assertFalse(isPsnSignInHost("sub.psn.example", mockHost = "psn.example"))
+		assertTrue(isPsnSignInHost("my.account.sony.com", mockHost = "psn.example"))
+	}
+
+	@Test
 	fun clipCopiedAfterBrowserOpened_isTaken()
 	{
 		assertTrue(isPsnClipFromThisSignIn(clipTimestampMs = 2_000, browserOpenedAtMs = 1_000))

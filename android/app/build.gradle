@@ -24,6 +24,20 @@ def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching")
 def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "false").toBoolean()
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
 def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
+// PLE-284: -PchiakiPsnMock=verified|nolink builds a debug APK that signs in against the PSN mock
+// (android/psn-mock) instead of Sony. It is a separate app (com.metallic.chiaki.psnmock), so it can
+// never overwrite a real install's PSN credentials, and a release build refuses the property.
+def psnMockHosts = [verified: "pleikkari-psn.lab.madekivi.fi", nolink: "pleikkari-psn-nolink.lab.madekivi.fi"]
+def psnMockArg = (project.findProperty("chiakiPsnMock") ?: "").toString().trim()
+if(psnMockArg && !psnMockHosts.containsKey(psnMockArg))
+    throw new GradleException("chiakiPsnMock must be one of ${psnMockHosts.keySet()}, not '$psnMockArg'")
+def psnMockHost = psnMockArg ? psnMockHosts[psnMockArg] : ""
+if(psnMockHost) {
+    gradle.taskGraph.whenReady { graph ->
+        if(graph.allTasks.any { it.name.toLowerCase().contains("release") })
+            throw new GradleException("chiakiPsnMock is debug-only; refusing to build a release variant with it")
+    }
+}
 def chiakiAbiFilters = (project.findProperty("chiakiAbiFilters") ?: "")
         .toString()
         .split(',')
@@ -86,6 +100,10 @@ android {
         freeCompilerArgs += "-opt-in=kotlin.ExperimentalUnsignedTypes"
     }
 
+    if(psnMockHost) {
+        sourceSets.debug.manifest.srcFile "src/psnMock/AndroidManifest.xml"
+    }
+
     externalNativeBuild {
         cmake {
             version "3.22.1"
@@ -98,6 +116,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField "String", "PSN_MOCK_HOST", "\"$psnMockHost\""
+            if(psnMockHost) {
+                applicationIdSuffix ".psnmock"
+                versionNameSuffix "-psnmock"
+            }
+        }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
