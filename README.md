@@ -1,3 +1,13 @@
+> **This is Wnt/chiaki-ng, an Android-only fork.** It chases GeForce-NOW-class
+> end-to-end latency for PS5 Remote Play on a Galaxy S22 Ultra: decoder,
+> presenter, transport and input changes, each behind a setting so it can be
+> A/B measured with Perfetto. **All work happens on the
+> [`android-port`](https://github.com/Wnt/chiaki-ng/tree/android-port) branch**;
+> this `main` branch only tracks upstream
+> [streetpea/chiaki-ng](https://github.com/streetpea/chiaki-ng). Read the
+> [android-port README](https://github.com/Wnt/chiaki-ng/blob/android-port/README.md)
+> for what changed and what was measured. Desktop targets are not maintained here.
+
 
 ![chiaki-ng Logo](gui/res/chiaking-logo.svg)
 
