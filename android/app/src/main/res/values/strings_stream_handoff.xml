@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    PLE-335. Kept out of strings.xml on purpose: that file is owned by another ticket in flight.
+    Fold these into strings.xml whenever the two land together.
+-->
+<resources>
+    <string name="stream_linked_starting">Console linked. Waiting for it to accept the stream…</string>
+</resources>

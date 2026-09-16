@@ -41,6 +41,24 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center" />
 
+    <!-- PLE-335: shown while a console that has just been linked finishes settling, so the
+         handoff never looks like a failure. -->
+    <TextView
+        android:id="@+id/connectingStatusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="96dp"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:textAlignment="center"
+        android:textSize="16sp"
+        android:textColor="@android:color/white"
+        android:visibility="gone"
+        tools:text="@string/stream_linked_starting"
+        tools:visibility="visible" />
+
     <fragment
         android:id="@+id/controlsFragment"
         android:name="com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment"

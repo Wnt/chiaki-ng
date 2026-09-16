@@ -5,6 +5,9 @@ package com.metallic.chiaki.session
 import android.content.Context
 import android.graphics.SurfaceTexture
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.*
 import androidx.lifecycle.LiveData
@@ -17,18 +20,33 @@ import com.metallic.chiaki.stream.useFrameIndexVideoTimestamps
 sealed class StreamState
 object StreamStateIdle: StreamState()
 object StreamStateConnecting: StreamState()
+/**
+ * Connecting, on a console that has just been linked and is still settling (PLE-335). A separate
+ * state only so the screen can say the truth — the console *is* linked — instead of a bare spinner
+ * or, as before, a "Session has quit" dialog.
+ */
+object StreamStateLinkedStarting: StreamState()
+
 object StreamStateConnected: StreamState()
 data class StreamStateCreateError(val error: CreateError): StreamState()
 data class StreamStateRemoteError(val message: String): StreamState()
 data class StreamStateQuit(val reason: QuitReason, val reasonString: String?): StreamState()
 data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
+private const val HANDOFF_TAG = "StreamHandoff"
+
 class StreamSession(private val context: Context, val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean,
-		val input: StreamInput, private val externallyManaged: Boolean = false)
+		val input: StreamInput, private val externallyManaged: Boolean = false,
+		/** This stream was started straight off a successful registration — see [SessionHandoffRetry]. */
+		justLinked: Boolean = false)
 {
 	var session: Session? = null
 		private set
+
+	private val handoffRetry = SessionHandoffRetry(clock = SystemClock::elapsedRealtime)
+		.also { if(justLinked && !externallyManaged) it.arm() }
+	private val handoffHandler = Handler(Looper.getMainLooper())
 
 	private val _state = MutableLiveData<StreamState>(StreamStateIdle)
 	val state: LiveData<StreamState> get() = _state
@@ -52,6 +70,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 
 	fun shutdown()
 	{
+		handoffHandler.removeCallbacksAndMessages(null)
 		session?.stop()
 		session?.dispose()
 		session = null
@@ -78,7 +97,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 					connectInfo.videoPresenterConfig.pacingEnabled),
 				decoderInputThread, context = context)
 			session.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
-			_state.value = StreamStateConnecting
+			_state.value = if(handoffRetry.handoffInProgress) StreamStateLinkedStarting else StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
 			val surface = surface
@@ -125,17 +144,51 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		_state.value = StreamStateRemoteError(error.message ?: "PSN remote connection failed")
 	}
 
+	/**
+	 * A console that has just been linked refuses the local session for a moment (PLE-335). Absorb
+	 * that refusal, keep the screen honest — linked, starting — and try again shortly.
+	 *
+	 * Returns true when the quit was absorbed, i.e. the caller must not report it. Runs on the
+	 * native session thread; the restart itself is posted to the main thread, so the session that
+	 * raised the event has returned from its callback before it is disposed.
+	 */
+	private fun absorbHandoffQuit(event: QuitEvent): Boolean
+	{
+		val decision = handoffRetry.onQuit(event.reason.value)
+		if(decision !is HandoffDecision.Retry)
+			return false
+		Log.i(HANDOFF_TAG, "Console is linked but not ready yet (${event.reason}); " +
+			"starting the stream again in ${decision.delayMs} ms, attempt ${decision.attempt}")
+		_state.postValue(StreamStateLinkedStarting)
+		handoffHandler.postDelayed({ restartAfterHandoff() }, decision.delayMs)
+		return true
+	}
+
+	private fun restartAfterHandoff()
+	{
+		session?.stop()
+		session?.dispose()
+		session = null
+		_state.value = StreamStateLinkedStarting
+		resume()
+	}
+
 	private fun eventCallback(event: Event)
 	{
 		when(event)
 		{
-			is ConnectedEvent -> _state.postValue(StreamStateConnected)
-			is QuitEvent -> _state.postValue(
-				StreamStateQuit(
-					event.reason,
-					event.reasonString
+			is ConnectedEvent ->
+			{
+				handoffRetry.onConnected()
+				_state.postValue(StreamStateConnected)
+			}
+			is QuitEvent -> if(!absorbHandoffQuit(event))
+				_state.postValue(
+					StreamStateQuit(
+						event.reason,
+						event.reasonString
+					)
 				)
-			)
 			is LoginPinRequestEvent -> _state.postValue(
 				StreamStateLoginPinRequest(
 					event.pinIncorrect

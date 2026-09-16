@@ -27,7 +27,11 @@ enum class PsnConsoleAction { PLAY }
 
 data class PsnConsoleActionState(val duid: String, val action: PsnConsoleAction)
 
-data class PsnPlayRequest(val console: PsnConsole)
+/**
+ * @param justLinked this console was registered moments ago, so it may refuse the first session
+ *   request while it settles (PLE-335).
+ */
+data class PsnPlayRequest(val console: PsnConsole, val justLinked: Boolean = false)
 
 enum class PsnErrorRecovery { RETRY, SIGN_IN }
 

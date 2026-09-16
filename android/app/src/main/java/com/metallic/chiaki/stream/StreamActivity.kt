@@ -77,6 +77,8 @@ class StreamActivity : AppCompatActivity()
 	{
 		const val EXTRA_CONNECT_INFO = "connect_info"
 		const val EXTRA_PSN_DEVICE = "psn_device"
+		/** The console was linked moments ago, so it may still refuse the session (PLE-335). */
+		const val EXTRA_JUST_LINKED = "just_linked"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		const val EXTRA_STREAM_SUMMARY = "stream_summary"
 		// Private device experiment setting, intentionally absent from the user-facing Settings
@@ -134,6 +136,7 @@ class StreamActivity : AppCompatActivity()
 		val connectInfo = IntentCompat.getParcelableExtra(intent, EXTRA_CONNECT_INFO, ConnectInfo::class.java)
 			?: if(diagnosticsPreview) diagnosticsPreviewConnectInfo() else null
 		val psnDevice = IntentCompat.getParcelableExtra(intent, EXTRA_PSN_DEVICE, PsnDevice::class.java)
+		val justLinked = intent.getBooleanExtra(EXTRA_JUST_LINKED, false)
 		if(connectInfo == null)
 		{
 			finish()
@@ -141,7 +144,7 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel = ViewModelProvider(this, viewModelFactory {
-			StreamViewModel(application, connectInfo, psnDevice, diagnosticsPreview)
+			StreamViewModel(application, connectInfo, psnDevice, diagnosticsPreview, justLinked)
 		})[StreamViewModel::class.java]
 
 		viewModel.input.observe(this)
@@ -899,7 +902,14 @@ class StreamActivity : AppCompatActivity()
 
 	private fun stateChanged(state: StreamState)
 	{
-		binding.progressBar.visibility = if(state == StreamStateConnecting) View.VISIBLE else View.GONE
+		val connecting = state == StreamStateConnecting || state == StreamStateLinkedStarting
+		binding.progressBar.visibility = if(connecting) View.VISIBLE else View.GONE
+		// PLE-335: a console that has just been linked needs a moment before it accepts the stream.
+		// Say so, rather than leaving a bare spinner or - as before - raising "Session has quit".
+		binding.connectingStatusText.visibility =
+			if(state == StreamStateLinkedStarting) View.VISIBLE else View.GONE
+		if(state == StreamStateLinkedStarting)
+			binding.connectingStatusText.setText(R.string.stream_linked_starting)
 		if(state == StreamStateConnected)
 			summaryAccumulator.connected(SystemClock.elapsedRealtime())
 
