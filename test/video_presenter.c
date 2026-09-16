@@ -4,6 +4,7 @@
 
 #include "../android/app/src/main/cpp/video-presenter-age.h"
 #include "../android/app/src/main/cpp/video-presenter-histogram.h"
+#include "../android/app/src/main/cpp/video-presenter-timing.h"
 
 #include <stdlib.h>
 
@@ -78,6 +79,30 @@ static MunitResult test_frame_exceeds_age(const MunitParameter params[], void *u
 	return MUNIT_OK;
 }
 
+static MunitResult test_period_observation(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+
+	const int64_t period_120_hz = 8333333;
+	const int64_t period_60_hz = 16666667;
+
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_120_hz, period_60_hz), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK);
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_60_hz, period_120_hz), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK);
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_120_hz, 16500000), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK);
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_60_hz, 8400000), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK);
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_60_hz, 17000000), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_SMOOTH);
+	munit_assert_int(android_chiaki_video_presenter_classify_period(period_120_hz, 25000000), ==,
+			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_GAP);
+
+	return MUNIT_OK;
+}
+
 MunitTest tests_video_presenter[] = {
 	{
 		"/histogram_matches_sorted_percentile",
@@ -90,6 +115,14 @@ MunitTest tests_video_presenter[] = {
 	{
 		"/frame_exceeds_age",
 		test_frame_exceeds_age,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL,
+	},
+	{
+		"/period_observation",
+		test_period_observation,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

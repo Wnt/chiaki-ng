@@ -229,6 +229,18 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods)
 	}
 
+	fun updateDisplayTiming(refreshHz: Double, appVsyncOffsetNanos: Long)
+	{
+		if(surfaceRefreshHz == refreshHz && surfaceVsyncOffsetNanos == appVsyncOffsetNanos)
+			return
+		surfaceRefreshHz = refreshHz
+		surfaceVsyncOffsetNanos = appVsyncOffsetNanos
+		if(surface != null)
+			session?.setTiming(connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
+				nativeMaxQueueAgePeriods)
+	}
+
 	fun detachSurface()
 	{
 		this.surface = null

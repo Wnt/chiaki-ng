@@ -5,6 +5,7 @@ package com.metallic.chiaki.stream
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.AlertDialog
+import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.PixelFormat
@@ -84,6 +85,8 @@ class StreamActivity : AppCompatActivity()
 	private var sustainedPerformanceModeEnabled = false
 	private var wifiLock: WifiManager.WifiLock? = null
 	private var diagnosticsOverlay: StreamDiagnosticsOverlay? = null
+	private var displayManager: DisplayManager? = null
+	private var displayListener: DisplayManager.DisplayListener? = null
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -429,10 +432,12 @@ class StreamActivity : AppCompatActivity()
 			binding.debandSurfaceView.requestRender()
 		}
 		viewModel.resume()
+		registerDisplayListener()
 	}
 
 	override fun onPause()
 	{
+		unregisterDisplayListener()
 		configureWifiLock(false)
 		super.onPause()
 		configurePerformanceMode(false)
@@ -440,6 +445,45 @@ class StreamActivity : AppCompatActivity()
 			binding.debandSurfaceView.onPause()
 		}
 		viewModel.pause()
+	}
+
+	private fun registerDisplayListener()
+	{
+		if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N
+				|| !Preferences(this).videoPacingEnabled
+				|| displayListener != null)
+			return
+
+		val manager = getSystemService(DisplayManager::class.java)
+		val listener = object: DisplayManager.DisplayListener
+		{
+			override fun onDisplayAdded(displayId: Int) = Unit
+			override fun onDisplayRemoved(displayId: Int) = Unit
+				override fun onDisplayChanged(displayId: Int)
+				{
+					val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
+					if(displayId != streamDisplay.displayId)
+						return
+					manager.getDisplay(displayId)?.let(::updatePresenterDisplayTiming)
+				}
+		}
+		displayManager = manager
+		displayListener = listener
+		manager.registerDisplayListener(listener, uiVisibilityHandler)
+	}
+
+	private fun unregisterDisplayListener()
+	{
+		displayListener?.let { displayManager?.unregisterDisplayListener(it) }
+		displayListener = null
+		displayManager = null
+	}
+
+	private fun updatePresenterDisplayTiming(display: Display)
+	{
+		val refreshHz = display.mode.refreshRate.toDouble()
+		viewModel.session.updateDisplayTiming(refreshHz, display.appVsyncOffsetNanos)
+		Log.i("StreamActivity", "Display timing changed: ${"%.2f".format(Locale.US, refreshHz)} Hz")
 	}
 
 	override fun onConfigurationChanged(newConfig: Configuration)

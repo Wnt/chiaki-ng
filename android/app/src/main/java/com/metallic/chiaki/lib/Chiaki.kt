@@ -132,6 +132,8 @@ private class ChiakiNative
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
 			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int,
 			maxQueueAgePeriods: Int)
+		@JvmStatic external fun sessionSetTiming(ptr: Long, streamFps: Int, refreshHz: Double,
+			appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int)
 		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
 		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
@@ -534,6 +536,13 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int)
 	{
 		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos,
+			pacingMode, presenterLead, maxQueueAgePeriods)
+	}
+
+	fun setTiming(streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
+		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int)
+	{
+		ChiakiNative.sessionSetTiming(nativePtr, streamFps, refreshHz, appVsyncOffsetNanos,
 			pacingMode, presenterLead, maxQueueAgePeriods)
 	}
 
