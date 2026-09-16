@@ -17,6 +17,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
@@ -35,11 +36,26 @@ class PsnLoginActivity : AppCompatActivity()
 	{
 		const val EXTRA_ACCOUNT_ID = "psn_account_id"
 		private const val STATE_EMBEDDED_BROWSER = "embedded_browser"
+		private const val STATE_EXTERNAL_LOGIN_LAUNCHED = "external_login_launched"
+		private const val STATE_BROWSER_PAUSE_OBSERVED = "browser_pause_observed"
 	}
 
 	private lateinit var binding: ActivityPsnLoginBinding
 	private var handlingRedirect = false
 	private var embeddedBrowser = false
+	private var externalLoginLaunched = false
+	private var browserPauseObserved = false
+	private val appLinkSettingsLauncher = registerForActivityResult(
+		ActivityResultContracts.StartActivityForResult()
+	) {
+		if(isPsnRedirectAppLinkAllowed(this))
+		{
+			showExternalInstructions()
+			launchExternalLogin()
+		}
+		else
+			showAppLinkSettingsRequired()
+	}
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -52,7 +68,8 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.toolbar.setNavigationOnClickListener { finish() }
 		configureWebView()
 		binding.pasteAddressButton.setOnClickListener { pasteRedirectAddress() }
-		binding.openSignInButton.setOnClickListener { launchExternalLogin() }
+		binding.openSignInButton.setOnClickListener { prepareExternalLogin() }
+		binding.continueWithoutAppLinksButton.setOnClickListener { launchExternalLogin() }
 		onBackPressedDispatcher.addCallback(this) {
 			if(embeddedBrowser && binding.webView.canGoBack() && !handlingRedirect)
 				binding.webView.goBack()
@@ -65,6 +82,8 @@ class PsnLoginActivity : AppCompatActivity()
 
 		embeddedBrowser = savedInstanceState?.getBoolean(STATE_EMBEDDED_BROWSER)
 			?: Preferences(this).psnLoginInAppBrowser
+		externalLoginLaunched = savedInstanceState?.getBoolean(STATE_EXTERNAL_LOGIN_LAUNCHED) ?: false
+		browserPauseObserved = savedInstanceState?.getBoolean(STATE_BROWSER_PAUSE_OBSERVED) ?: false
 		if(embeddedBrowser)
 		{
 			showEmbeddedBrowser()
@@ -77,8 +96,33 @@ class PsnLoginActivity : AppCompatActivity()
 		{
 			showExternalInstructions()
 			if(savedInstanceState == null)
-				launchExternalLogin()
+				prepareExternalLogin()
 		}
+	}
+
+	override fun onPause()
+	{
+		if(externalLoginLaunched)
+			browserPauseObserved = true
+		super.onPause()
+	}
+
+	override fun onResume()
+	{
+		super.onResume()
+		if(!shouldHandlePsnBrowserReturn(
+			reliableRedirectEnabled,
+			embeddedBrowser,
+			handlingRedirect,
+			externalLoginLaunched,
+			browserPauseObserved
+		))
+			return
+
+		externalLoginLaunched = false
+		browserPauseObserved = false
+		if(!consumeClipboardRedirect())
+			showExternalInstructions(R.string.psn_login_returned_without_code)
 	}
 
 	override fun onNewIntent(intent: Intent)
@@ -132,6 +176,9 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun launchExternalLogin()
 	{
+		externalLoginLaunched = true
+		browserPauseObserved = false
+		binding.continueWithoutAppLinksButton.visibility = View.GONE
 		val uri = Uri.parse(PsnAuth.loginUrl())
 		val customTabsPackage = findCustomTabsPackage(uri)
 		if(customTabsPackage != null)
@@ -157,10 +204,36 @@ class PsnLoginActivity : AppCompatActivity()
 		}
 		catch(_: ActivityNotFoundException)
 		{
+			externalLoginLaunched = false
 			embeddedBrowser = true
 			showEmbeddedBrowser()
 			binding.webView.loadUrl(PsnAuth.loginUrl())
 		}
+	}
+
+	private fun prepareExternalLogin()
+	{
+		if(reliableRedirectEnabled && !isPsnRedirectAppLinkAllowed(this))
+		{
+			showExternalInstructions(R.string.psn_login_link_settings_instructions)
+			binding.openSignInButton.setText(R.string.action_open_link_settings)
+			val settingsIntent = psnAppLinkSettingsIntent(this)
+			if(settingsIntent == null)
+			{
+				launchExternalLogin()
+				return
+			}
+			try
+			{
+				appLinkSettingsLauncher.launch(settingsIntent)
+			}
+			catch(_: ActivityNotFoundException)
+			{
+				showAppLinkSettingsRequired()
+			}
+			return
+		}
+		launchExternalLogin()
 	}
 
 	private fun findCustomTabsPackage(uri: Uri): String?
@@ -181,21 +254,42 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun pasteRedirectAddress()
 	{
+		val address = clipboardAddress()
+		if(address.isBlank())
+		{
+			showPasteError(R.string.psn_login_no_clipboard_address)
+			return
+		}
+		binding.redirectUrl.setText(address)
+		if(!handleRedirect(address))
+			showPasteError(R.string.psn_login_redirect_invalid)
+	}
+
+	private fun showPasteError(message: Int)
+	{
+		if(reliableRedirectEnabled)
+			showExternalInstructions(message)
+		else
+			binding.redirectUrl.error = getString(message)
+	}
+
+	private fun consumeClipboardRedirect(): Boolean
+	{
+		val address = clipboardAddress()
+		if(parsePsnRedirect(address) !is PsnRedirect.Code)
+			return false
+		return handleRedirect(address)
+	}
+
+	private fun clipboardAddress(): String
+	{
 		val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-		val address = clipboard.primaryClip
+		return clipboard.primaryClip
 			?.takeIf { it.itemCount > 0 }
 			?.getItemAt(0)
 			?.coerceToText(this)
 			?.toString()
 			.orEmpty()
-		if(address.isBlank())
-		{
-			binding.redirectUrl.error = getString(R.string.psn_login_no_clipboard_address)
-			return
-		}
-		binding.redirectUrl.setText(address)
-		if(!handleRedirect(address))
-			binding.redirectUrl.error = getString(R.string.psn_login_redirect_invalid)
 	}
 
 	private fun handleRedirect(url: String): Boolean
@@ -238,7 +332,12 @@ class PsnLoginActivity : AppCompatActivity()
 					setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_ACCOUNT_ID, result.accountId))
 					finish()
 				}
-				.onFailure { error -> showError(error.message ?: getString(R.string.psn_login_failed)) }
+				.onFailure { error ->
+					showError(
+						if(reliableRedirectEnabled) getString(R.string.psn_login_link_expired)
+						else error.message ?: getString(R.string.psn_login_failed)
+					)
+				}
 		}
 	}
 
@@ -272,15 +371,34 @@ class PsnLoginActivity : AppCompatActivity()
 		{
 			embeddedBrowser = false
 			showExternalInstructions()
-			launchExternalLogin()
+			prepareExternalLogin()
 		}
 	}
 
-	private fun showExternalInstructions()
+	private fun showExternalInstructions(message: Int? = null)
 	{
 		binding.progressBar.visibility = View.GONE
 		binding.webView.visibility = View.GONE
 		binding.externalLoginContainer.visibility = View.VISIBLE
+		binding.externalInstructions.setText(
+			message ?: if(reliableRedirectEnabled)
+				R.string.psn_login_reliable_instructions
+			else
+				R.string.psn_login_external_instructions
+		)
+		binding.redirectUrl.visibility = if(reliableRedirectEnabled) View.GONE else View.VISIBLE
+		binding.pasteAddressButton.setText(
+			if(reliableRedirectEnabled) R.string.action_paste_sign_in_link else R.string.action_paste_address
+		)
+		binding.openSignInButton.setText(R.string.action_open_psn_sign_in)
+		binding.continueWithoutAppLinksButton.visibility = View.GONE
+	}
+
+	private fun showAppLinkSettingsRequired()
+	{
+		showExternalInstructions(R.string.psn_login_link_settings_required)
+		binding.openSignInButton.setText(R.string.action_open_link_settings)
+		binding.continueWithoutAppLinksButton.visibility = View.VISIBLE
 	}
 
 	private fun showEmbeddedBrowser()
@@ -294,10 +412,15 @@ class PsnLoginActivity : AppCompatActivity()
 	override fun onSaveInstanceState(outState: Bundle)
 	{
 		outState.putBoolean(STATE_EMBEDDED_BROWSER, embeddedBrowser)
+		outState.putBoolean(STATE_EXTERNAL_LOGIN_LAUNCHED, externalLoginLaunched)
+		outState.putBoolean(STATE_BROWSER_PAUSE_OBSERVED, browserPauseObserved)
 		if(embeddedBrowser)
 			binding.webView.saveState(outState)
 		super.onSaveInstanceState(outState)
 	}
+
+	private val reliableRedirectEnabled: Boolean
+		get() = Preferences(this).psnReliableRedirectEnabled
 
 	override fun onDestroy()
 	{
