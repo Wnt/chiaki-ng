@@ -133,10 +133,13 @@ CHIAKI_EXPORT void chiaki_ffmpeg_decoder_fini(ChiakiFfmpegDecoder *decoder)
 	chiaki_mutex_fini(&decoder->mutex);
 }
 
-CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user)
+CHIAKI_EXPORT bool chiaki_ffmpeg_decoder_video_sample_cb(uint8_t *buf, size_t buf_size,
+		ChiakiSeqNum16 frame_index, uint64_t frame_ready_time_us, int32_t frames_lost,
+		bool frame_recovered, void *user)
 {
 	ChiakiFfmpegDecoder *decoder = user;
 	(void)frame_index;
+	(void)frame_ready_time_us;
 
 	chiaki_mutex_lock(&decoder->mutex);
 	decoder->frames_lost += frames_lost;

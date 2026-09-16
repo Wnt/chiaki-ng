@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
 #include <chiaki/videoreceiver.h>
+#include <chiaki/time.h>
 #include "../include/chiaki/session.h"
 
 #include <string.h>
@@ -148,7 +149,8 @@ CHIAKI_EXPORT void chiaki_video_receiver_av_packet(ChiakiVideoReceiver *video_re
 		ChiakiVideoProfile *profile = video_receiver->profiles + video_receiver->profile_cur;
 		CHIAKI_LOGI(video_receiver->log, "Switched to profile %d, resolution: %ux%u", video_receiver->profile_cur, profile->width, profile->height);
 		if(video_receiver->session->video_sample_cb)
-			video_receiver->session->video_sample_cb(profile->header, profile->header_sz, frame_index, 0, false, video_receiver->session->video_sample_cb_user);
+			video_receiver->session->video_sample_cb(profile->header, profile->header_sz, frame_index,
+					0, 0, false, video_receiver->session->video_sample_cb_user);
 		if(!chiaki_bitstream_header(&video_receiver->bitstream, profile->header, profile->header_sz))
 			CHIAKI_LOGW(video_receiver->log, "Failed to parse video header");
 	}
@@ -250,6 +252,7 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 		return CHIAKI_ERR_UNKNOWN;
 	}
 
+	uint64_t frame_ready_time_us = chiaki_time_now_monotonic_us();
 	bool succ = flush_result != CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FEC_FAILED;
 	bool recovered = false;
 
@@ -304,7 +307,9 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 
 	if(succ && video_receiver->session->video_sample_cb)
 	{
-		bool cb_succ = video_receiver->session->video_sample_cb(frame, frame_size, (ChiakiSeqNum16)video_receiver->frame_index_cur, video_receiver->frames_lost, recovered, video_receiver->session->video_sample_cb_user);
+		bool cb_succ = video_receiver->session->video_sample_cb(frame, frame_size,
+				(ChiakiSeqNum16)video_receiver->frame_index_cur, frame_ready_time_us,
+				video_receiver->frames_lost, recovered, video_receiver->session->video_sample_cb_user);
 		chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
 		video_receiver->frames_received_total++;
 		video_receiver->frames_lost = 0;
