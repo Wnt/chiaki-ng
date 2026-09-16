@@ -64,6 +64,27 @@
             app:layout_constraintTop_toBottomOf="@id/statusTextView"
             tools:text="Astro's Playroom" />
 
+        <!-- PLE-338: a green check + "Linked" tag on an already-linked console's resting
+             state. Never shown together with the PLE-337 connect-progress rows below;
+             onBindViewHolder keeps the two mutually exclusive. -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/linkedTagTextView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:drawablePadding="6dp"
+            android:gravity="center_vertical"
+            android:text="@string/console_linked_tag"
+            android:textAppearance="?attr/textAppearanceLabelLarge"
+            android:textColor="?attr/colorLinkedIndicator"
+            android:visibility="gone"
+            app:drawableStartCompat="@drawable/ic_check_circle"
+            app:drawableTint="?attr/colorLinkedIndicator"
+            app:layout_constraintStart_toStartOf="@id/nameTextView"
+            app:layout_constraintTop_toBottomOf="@id/detailTextView"
+            tools:text="Linked"
+            tools:visibility="visible" />
+
         <!-- PLE-337: while this console is being connected, the card says which wait we are in and
              how long it has run, so tens of seconds never read as a hang. -->
         <com.google.android.material.textview.MaterialTextView
@@ -100,7 +121,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:barrierDirection="bottom"
-            app:constraint_referenced_ids="stateIndicatorImageView,detailTextView,actionDetailTextView" />
+            app:constraint_referenced_ids="stateIndicatorImageView,detailTextView,actionDetailTextView,linkedTagTextView" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/menuButton"
