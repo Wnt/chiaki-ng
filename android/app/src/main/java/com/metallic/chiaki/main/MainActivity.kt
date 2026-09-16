@@ -15,6 +15,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.*
 import com.metallic.chiaki.common.ext.putRevealExtra
@@ -38,6 +39,14 @@ class MainActivity : AppCompatActivity()
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		if(BuildConfig.DEBUG && intent.getBooleanExtra(StreamActivity.EXTRA_DIAGNOSTICS_PREVIEW, false))
+		{
+			startActivity(Intent(this, StreamActivity::class.java).apply {
+				putExtra(StreamActivity.EXTRA_DIAGNOSTICS_PREVIEW, true)
+			})
+			finish()
+			return
+		}
 		binding = ActivityMainBinding.inflate(layoutInflater)
 		setContentView(binding.root)
 
@@ -245,11 +254,14 @@ class MainActivity : AppCompatActivity()
 					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 					feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
+					audioBufferBursts = preferences.audioBufferBursts,
+					audioFifoMs = preferences.audioFifoMs,
 					performanceModeEnabled = preferences.performanceModeEnabled,
 					decoderOperatingRate = preferences.decoderOperatingRate,
 					decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 					decoderRealtimePriority = preferences.decoderRealtimePriority,
-					videoTimestampRateHz = preferences.videoTimestampRateHz
+					videoTimestampRateHz = preferences.videoTimestampRateHz,
+					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 				)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)

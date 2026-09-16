@@ -8,6 +8,7 @@
 #include <chiaki/base64.h>
 #include <chiaki/audio.h>
 #include <chiaki/video.h>
+#include <chiaki/time.h>
 
 #include <string.h>
 #include <inttypes.h>
@@ -167,6 +168,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	takion_info.enable_dualsense = session->connect_info.enable_dualsense;
 	takion_info.protocol_version = chiaki_target_is_ps5(session->target) ? 12 : 9;
 	takion_info.disable_video_packet_reordering = session->connect_info.disable_video_packet_reordering;
+	bool stream_stats_enabled = session->connect_info.stream_diagnostics_enabled
+		|| session->connect_info.feedback_stats_log_interval_ms > 0;
+	takion_info.diagnostics_enabled = stream_stats_enabled;
 
 	takion_info.cb = stream_connection_takion_cb;
 	takion_info.cb_user = stream_connection;
@@ -314,6 +318,19 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	err = chiaki_mutex_lock(&stream_connection->state_mutex);
 	assert(err == CHIAKI_ERR_SUCCESS);
 
+	uint64_t diagnostics_window_start_ms = chiaki_time_now_monotonic_ms();
+	uint64_t previous_stream_frames = 0;
+	uint64_t previous_packets_received = 0;
+	uint64_t previous_packets_lost = 0;
+	uint64_t previous_feedback_packets = 0;
+	if(stream_stats_enabled)
+	{
+		previous_stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
+		chiaki_packet_stats_get_generation_totals(&stream_connection->packet_stats,
+			&previous_packets_received, &previous_packets_lost);
+		previous_feedback_packets = chiaki_feedback_sender_get_packets_total(&stream_connection->feedback_sender);
+	}
+
 	while(true)
 	{
 		err = chiaki_cond_timedwait_pred(&stream_connection->state_cond, &stream_connection->state_mutex, HEARTBEAT_INTERVAL_MS, state_finished_cond_check, stream_connection);
@@ -325,6 +342,40 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			CHIAKI_LOGE(stream_connection->log, "StreamConnection failed to send heartbeat");
 		else
 			CHIAKI_LOGV(stream_connection->log, "StreamConnection sent heartbeat");
+
+		if(stream_stats_enabled)
+		{
+			uint64_t now_ms = chiaki_time_now_monotonic_ms();
+			uint64_t stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
+			uint64_t packets_received;
+			uint64_t packets_lost;
+			chiaki_packet_stats_get_generation_totals(&stream_connection->packet_stats,
+				&packets_received, &packets_lost);
+			uint64_t feedback_packets = chiaki_feedback_sender_get_packets_total(&stream_connection->feedback_sender);
+
+			ChiakiEvent stats_event = { 0 };
+			stats_event.type = CHIAKI_EVENT_STREAM_STATS;
+			stats_event.stream_stats.interval_ms = now_ms - diagnostics_window_start_ms;
+			stats_event.stream_stats.rtt_us = session->rtt_us;
+			stats_event.stream_stats.stream_frames = stream_frames - previous_stream_frames;
+			stats_event.stream_stats.video_frames_lost = (uint64_t)chiaki_video_receiver_get_frames_lost_total(stream_connection->video_receiver);
+			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);
+			stats_event.stream_stats.takion_packets_received = packets_received - previous_packets_received;
+			stats_event.stream_stats.takion_packets_lost = packets_lost - previous_packets_lost;
+			stats_event.stream_stats.feedback_packets = feedback_packets - previous_feedback_packets;
+
+			diagnostics_window_start_ms = now_ms;
+			previous_stream_frames = stream_frames;
+			previous_packets_received = packets_received;
+			previous_packets_lost = packets_lost;
+			previous_feedback_packets = feedback_packets;
+
+			// JNI callbacks may call back into the session. Do not hold the stream state lock.
+			chiaki_mutex_unlock(&stream_connection->state_mutex);
+			chiaki_session_send_event(session, &stats_event);
+			err = chiaki_mutex_lock(&stream_connection->state_mutex);
+			assert(err == CHIAKI_ERR_SUCCESS);
+		}
 	}
 
 	err = chiaki_mutex_lock(&stream_connection->feedback_sender_mutex);

@@ -6,13 +6,20 @@
 
 #include <chiaki/log.h>
 #include <chiaki/thread.h>
+#include <chiaki/time.h>
 
 #include <oboe/Oboe.h>
+#include <oboe/OboeExtensions.h>
+
+#include <atomic>
+#include <cstring>
 
 #define BUFFER_CHUNK_SIZE 1024
-#define BUFFER_CHUNKS_COUNT 32
+#define BUFFER_DEFAULT_CHUNKS_COUNT 32
+#define BUFFER_MAX_CHUNKS_COUNT 1024
+#define BUFFER_DEFAULT_FIFO_MS 171
 
-using AudioBuffer = CircularBuffer<BUFFER_CHUNKS_COUNT, BUFFER_CHUNK_SIZE>;
+using AudioBuffer = CircularBuffer<BUFFER_MAX_CHUNKS_COUNT, BUFFER_CHUNK_SIZE>;
 
 class AudioOutput;
 
@@ -34,13 +41,35 @@ struct AudioOutput
 	oboe::ManagedStream stream;
 	AudioOutputCallback stream_callback;
 	AudioBuffer buf;
+	uint32_t buffer_bursts;
+	uint32_t fifo_ms;
+	bool diagnostics_enabled;
+	std::atomic<uint64_t> underruns;
 
-	AudioOutput() : stream_callback(this) {}
+	AudioOutput(uint32_t buffer_bursts, uint32_t fifo_ms, bool diagnostics_enabled)
+		: stream_callback(this), buf(BUFFER_DEFAULT_CHUNKS_COUNT), buffer_bursts(buffer_bursts),
+		  fifo_ms(fifo_ms), diagnostics_enabled(diagnostics_enabled), underruns(0) {}
 };
 
-extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log)
+static size_t audio_fifo_chunks(uint32_t channels, uint32_t rate, uint32_t fifo_ms)
 {
-	auto r = new AudioOutput();
+	// 171 ms at the PS Remote Play 48 kHz stereo format represents today's exact 32 KiB FIFO.
+	if(fifo_ms == BUFFER_DEFAULT_FIFO_MS)
+		return BUFFER_DEFAULT_CHUNKS_COUNT;
+
+	uint64_t bytes = (uint64_t)fifo_ms * rate * channels * sizeof(int16_t) / 1000;
+	size_t chunks = (size_t)((bytes + BUFFER_CHUNK_SIZE / 2) / BUFFER_CHUNK_SIZE);
+	if(chunks < 1)
+		chunks = 1;
+	if(chunks > BUFFER_MAX_CHUNKS_COUNT)
+		chunks = BUFFER_MAX_CHUNKS_COUNT;
+	return chunks;
+}
+
+extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log, uint32_t buffer_bursts,
+		uint32_t fifo_ms, bool diagnostics_enabled)
+{
+	auto r = new AudioOutput(buffer_bursts, fifo_ms, diagnostics_enabled);
 	r->log = log;
 	return r;
 }
@@ -57,6 +86,9 @@ extern "C" void android_chiaki_audio_output_free(void *audio_output)
 extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t rate, void *audio_output)
 {
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
+	ao->stream = nullptr;
+	ao->buf.SetChunksCount(audio_fifo_chunks(channels, rate, ao->fifo_ms));
+	ao->underruns.store(0, std::memory_order_relaxed);
 
 	oboe::AudioStreamBuilder builder;
 	builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
@@ -67,10 +99,33 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 		->setCallback(&ao->stream_callback);
 
 	auto result = builder.openManagedStream(ao->stream);
-	if(result == oboe::Result::OK)
-		CHIAKI_LOGI(ao->log, "Audio Output opened Oboe stream");
-	else
+	if(result != oboe::Result::OK)
+	{
 		CHIAKI_LOGE(ao->log, "Audio Output failed to open Oboe stream: %s", oboe::convertToText(result));
+		return;
+	}
+
+	if(ao->buffer_bursts > 0)
+	{
+		int32_t requested_frames = ao->stream->getFramesPerBurst() * (int32_t)ao->buffer_bursts;
+		auto buffer_result = ao->stream->setBufferSizeInFrames(requested_frames);
+		if(!buffer_result)
+			CHIAKI_LOGW(ao->log, "Audio Output failed to set Oboe buffer to %d frames: %s",
+				requested_frames, oboe::convertToText(buffer_result.error()));
+	}
+
+	if(ao->diagnostics_enabled)
+	{
+		CHIAKI_LOGI(ao->log,
+			"Audio output opened: api %s frames_per_burst %d buffer_frames %d capacity_frames %d"
+			" sample_rate %d mmap %s fifo_ms %u",
+			oboe::convertToText(ao->stream->getAudioApi()), ao->stream->getFramesPerBurst(),
+			ao->stream->getBufferSizeInFrames(), ao->stream->getBufferCapacityInFrames(),
+			ao->stream->getSampleRate(), oboe::OboeExtensions::isMMapUsed(ao->stream.get()) ? "yes" : "no",
+			ao->fifo_ms);
+	}
+	else
+		CHIAKI_LOGI(ao->log, "Audio Output opened Oboe stream");
 
 	result = ao->stream->start();
 	if(result == oboe::Result::OK)
@@ -106,11 +161,38 @@ oboe::DataCallbackResult AudioOutputCallback::onAudioReady(oboe::AudioStream *st
 
 	if(buf_size_delivered < buf_size_requested)
 	{
+		if(audio_output->diagnostics_enabled)
+			audio_output->underruns.fetch_add(1, std::memory_order_relaxed);
 		CHIAKI_LOGV(audio_output->log, "Audio Output Buffer Underflow!");
 		memset(buf + buf_size_delivered, 0, buf_size_requested - buf_size_delivered);
 	}
 
 	return oboe::DataCallbackResult::Continue;
+}
+
+extern "C" void android_chiaki_audio_output_get_diagnostics(void *audio_output,
+		AndroidChiakiAudioDiagnostics *diagnostics)
+{
+	memset(diagnostics, 0, sizeof(*diagnostics));
+	if(!audio_output)
+		return;
+	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
+	diagnostics->underruns = ao->underruns.load(std::memory_order_relaxed);
+	if(!ao->stream)
+		return;
+
+	auto latency = ao->stream->calculateLatencyMillis();
+	if(latency)
+	{
+		diagnostics->latency_valid = true;
+		diagnostics->latency_us = static_cast<uint64_t>(latency.value() * 1000.0);
+	}
+	auto xruns = ao->stream->getXRunCount();
+	if(xruns)
+	{
+		diagnostics->xruns_valid = true;
+		diagnostics->xruns = xruns.value();
+	}
 }
 
 void AudioOutputCallback::onErrorBeforeClose(oboe::AudioStream *stream, oboe::Result error)

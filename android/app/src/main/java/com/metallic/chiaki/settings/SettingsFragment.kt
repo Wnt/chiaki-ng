@@ -41,6 +41,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
+		preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled
+		preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
 		else -> defValue
@@ -69,6 +71,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value
+			preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled = value
+			preferences.gamepadTriggerFallbackEnabledKey -> preferences.gamepadTriggerFallbackEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
 		}
@@ -88,6 +92,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.decoderOperatingRateKey -> preferences.decoderOperatingRate.toString()
 		key == preferences.videoTimestampRateHzKey -> preferences.videoTimestampRateHz.toString()
+		key == preferences.audioBufferBurstsKey -> preferences.audioBufferBursts.toString()
+		key == preferences.audioFifoMsKey -> preferences.audioFifoMs.toString()
 		key == preferences.codecKey -> preferences.codec.value
 		key.startsWith("mapping_") -> preferences.sharedPreferences.getString(key, defValue)
 		else -> defValue
@@ -129,6 +135,14 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			key == preferences.videoTimestampRateHzKey ->
 			{
 				value?.toIntOrNull()?.let { preferences.videoTimestampRateHz = it }
+			}
+			key == preferences.audioBufferBurstsKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.audioBufferBursts = it }
+			}
+			key == preferences.audioFifoMsKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.audioFifoMs = it }
 			}
 			key == preferences.codecKey ->
 			{
@@ -225,6 +239,29 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 			it.setOnBindEditTextListener { editText ->
 				editText.inputType = InputType.TYPE_CLASS_NUMBER
 				editText.setText(preferences.videoTimestampRateHz.toString())
+			}
+		}
+
+		val audioBufferBurstsPreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_audio_buffer_bursts_key))
+		audioBufferBurstsPreference?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				if(preferences.audioBufferBursts == 0) getString(R.string.preferences_audio_buffer_bursts_default)
+				else getString(R.string.preferences_audio_buffer_bursts_value, preferences.audioBufferBursts)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.audioBufferBursts.toString())
+			}
+		}
+
+		val audioFifoMsPreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_audio_fifo_ms_key))
+		audioFifoMsPreference?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_audio_fifo_ms_value, preferences.audioFifoMs)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.audioFifoMs.toString())
 			}
 		}
 

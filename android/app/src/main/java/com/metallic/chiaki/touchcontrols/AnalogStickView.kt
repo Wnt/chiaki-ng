@@ -137,7 +137,7 @@ class AnalogStickView @JvmOverloads constructor(
 
 	override fun onTouchEvent(event: MotionEvent): Boolean
 	{
-		if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+		if(coalesceRedraw && event.actionMasked == MotionEvent.ACTION_DOWN && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
 			requestUnbufferedDispatch(InputDevice.SOURCE_CLASS_POINTER)
 		touchTracker.touchEvent(event)
 		return true

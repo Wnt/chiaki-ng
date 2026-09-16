@@ -132,6 +132,11 @@ and +1.6 ms p95 on the table; 1000 Hz spacing (exp 2b) did not beat 480.
 | `stream_decoder_operating_rate` (explicit), `stream_video_timestamp_rate_hz`, `stream_decoder_realtime_priority` | keep 0 / 0 / off | experiment knobs; documented here for the next investigation |
 | PLE-6 `stream_decoder_low_latency` | unchanged (keep off) | its 240 operating rate is the part that helped; note its `priority=1` means *non*-realtime in MediaCodec terms (no effect measured either way) |
 
+The PLE-6 tier values quoted above (`operating-rate=240`, `priority=1`) are what tiers 0/1 set when
+these captures were taken. PLE-111 has since raised the low-latency tiers to `operating-rate=480`
+(`DECODER_LOW_LATENCY_OPERATING_RATE`), so exp 3 no longer reproduces as run here; the PLE-75 auto
+value and an explicit `stream_decoder_operating_rate` still win over the tier value at every tier.
+
 ## Artefacts
 
 Everything under `/home/wnt/gta6/build/dispatch/ple-75/captures/` (gitignored, not committed):

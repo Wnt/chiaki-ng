@@ -23,6 +23,16 @@ class StreamInput(val context: Context, val preferences: Preferences)
 	private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 	private var displayRotation = currentDisplayRotation()
 	private val coalesceControllerInput = preferences.controllerInputCoalescingEnabled
+	private val triggerAxisFallbackEnabled = preferences.gamepadTriggerFallbackEnabled
+	private val triggerAxisResolver = TriggerAxisResolver { deviceId ->
+		val device = InputDevice.getDevice(deviceId)
+		listOf(
+			MotionEvent.AXIS_LTRIGGER,
+			MotionEvent.AXIS_RTRIGGER,
+			MotionEvent.AXIS_BRAKE,
+			MotionEvent.AXIS_GAS
+		).associateWith { axis -> device?.getMotionRange(axis)?.range }
+	}
 	private val mainHandler = Handler(Looper.getMainLooper())
 	private var controllerStateDirty = false
 	private var controllerStateFlushScheduled = false
@@ -250,8 +260,12 @@ class StreamInput(val context: Context, val preferences: Preferences)
 		motionControllerState.leftY = event.getAxisValue(MotionEvent.AXIS_Y).signedAxis()
 		motionControllerState.rightX = event.getAxisValue(MotionEvent.AXIS_Z).signedAxis()
 		motionControllerState.rightY = event.getAxisValue(MotionEvent.AXIS_RZ).signedAxis()
-		motionControllerState.l2State = event.getAxisValue(MotionEvent.AXIS_LTRIGGER).unsignedAxis()
-		motionControllerState.r2State = event.getAxisValue(MotionEvent.AXIS_RTRIGGER).unsignedAxis()
+		val triggerAxes = if(triggerAxisFallbackEnabled)
+			triggerAxisResolver.axesFor(event.deviceId)
+		else
+			TriggerAxes(MotionEvent.AXIS_LTRIGGER, MotionEvent.AXIS_RTRIGGER)
+		motionControllerState.l2State = event.getAxisValue(triggerAxes.l2).unsignedAxis()
+		motionControllerState.r2State = event.getAxisValue(triggerAxes.r2).unsignedAxis()
 		motionControllerState.buttons = motionControllerState.buttons.let {
 			val dpadX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
 			val dpadY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
