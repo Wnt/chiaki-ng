@@ -75,7 +75,8 @@ data class ConnectInfo(
 	val decoderLateFrameRecoveryEnabled: Boolean,
 	val packetLossMax: Double,
 	val takionVideoPacketReorderingDisabled: Boolean,
-	val feedbackStateMinIntervalMs: Int = 0
+	val feedbackStateMinIntervalMs: Int = 0,
+	val autoRegister: Boolean = false
 ): Parcelable
 
 data class NativeRemoteConnection(
@@ -349,6 +350,7 @@ data class LoginPinRequestEvent(val pinIncorrect: Boolean): Event()
 data class QuitEvent(val reason: QuitReason, val reasonString: String?): Event()
 data class RumbleEvent(val left: UByte, val right: UByte): Event()
 object RemoteDataSocketNeededEvent: Event()
+data class RegistrationEvent(val host: RegistHost): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
@@ -423,6 +425,11 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	private fun eventRemoteDataSocketNeeded()
 	{
 		event(RemoteDataSocketNeededEvent)
+	}
+
+	private fun eventRegistrationSuccess(host: RegistHost)
+	{
+		event(RegistrationEvent(host))
 	}
 
 	/** Native takes ownership of fd only when the returned error is successful. */

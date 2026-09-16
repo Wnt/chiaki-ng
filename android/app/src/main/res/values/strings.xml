@@ -143,10 +143,17 @@
     <string name="action_keep">Keep</string>
     <string name="action_delete">Delete</string>
     <string name="action_edit">Edit</string>
+    <string name="action_connect">Connect</string>
+    <string name="action_refresh">Refresh</string>
     <string name="session_logs_empty_info">No Session Logs recorded.</string>
     <string name="registered_hosts_empty_info">No Consoles registered.</string>
     <string name="display_hosts_empty_discovery_off_info">No consoles added yet.\nEnable Discovery to automatically find consoles on your local network.</string>
     <string name="display_hosts_empty_discovery_on_info">No consoles added or discovered.</string>
+    <string name="psn_consoles_title">Consoles on your PSN account</string>
+    <string name="psn_consoles_empty">No Remote Play consoles were found on this PSN account.</string>
+    <string name="psn_console_registered">Registered</string>
+    <string name="psn_console_not_registered">Registration required</string>
+    <string name="alert_message_psn_remote_error">PSN remote connection failed:\n%s</string>
     <string name="stream_on_screen_controls">On-Screen Controls</string>
     <string name="stream_touchpad_only">Touchpad only</string>
 

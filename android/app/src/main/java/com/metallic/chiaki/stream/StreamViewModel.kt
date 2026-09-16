@@ -10,17 +10,44 @@ import com.metallic.chiaki.session.StreamSession
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.lib.*
 import com.metallic.chiaki.session.StreamInput
+import com.metallic.chiaki.remote.AndroidPsnRemoteClient
+import com.metallic.chiaki.remote.AndroidPsnRemoteNativeBridge
+import com.metallic.chiaki.remote.PsnDevice
+import com.metallic.chiaki.remote.PsnRemoteController
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 
-class StreamViewModel(val application: Application, val connectInfo: ConnectInfo): ViewModel()
+class StreamViewModel(
+	val application: Application,
+	val connectInfo: ConnectInfo,
+	private val psnDevice: PsnDevice? = null
+): ViewModel()
 {
 	val preferences = Preferences(application)
 	val logManager = LogManager(application)
 
-	private var _session: StreamSession? = null
 	val input = StreamInput(application, preferences)
 	val session = StreamSession(connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
-		preferences.videoPacingMode.nativeValue, input)
+		preferences.videoPacingMode.nativeValue, input, externallyManaged = psnDevice != null)
+
+	private val remoteController: PsnRemoteController? = psnDevice?.let {
+		val bridge = AndroidPsnRemoteNativeBridge(
+			connectInfo,
+			logManager.createNewFile().file.absolutePath,
+			preferences.logVerbose,
+			preferences.realVideoTimestamps || preferences.videoPacingEnabled,
+			preferences.decoderInputThreadEnabled,
+			onSessionCreated = session::attachRemoteSession,
+			onSessionClosed = session::detachRemoteSession,
+			onSessionEvent = session::remoteEvent
+		)
+		AndroidPsnRemoteClient(application).controller(bridge)
+	}
+	private var remoteJob: Job? = null
+	private var remoteActive = false
 
 	private var _onScreenControlsEnabled = MutableLiveData<Boolean>(preferences.onScreenControlsEnabled)
 	val onScreenControlsEnabled: LiveData<Boolean> get() = _onScreenControlsEnabled
@@ -29,7 +56,60 @@ class StreamViewModel(val application: Application, val connectInfo: ConnectInfo
 	override fun onCleared()
 	{
 		super.onCleared()
-		_session?.shutdown()
+		remoteActive = false
+		remoteJob?.cancel()
+		remoteController?.close()
+		session.shutdown()
+	}
+
+	fun resume()
+	{
+		val device = psnDevice
+		val controller = remoteController
+		if(device == null || controller == null)
+		{
+			session.resume()
+			return
+		}
+		if(remoteActive)
+			return
+		remoteActive = true
+		val previous = remoteJob
+		remoteJob = viewModelScope.launch {
+			previous?.cancelAndJoin()
+			controller.disconnect()
+			try
+			{
+				controller.connect(device)
+			}
+			catch(cancelled: CancellationException)
+			{
+				throw cancelled
+			}
+			catch(error: Throwable)
+			{
+				session.remoteConnectionFailed(error)
+			}
+		}
+	}
+
+	fun pause()
+	{
+		if(psnDevice == null)
+		{
+			session.pause()
+			return
+		}
+		if(!remoteActive)
+			return
+		remoteActive = false
+		val controller = remoteController ?: return
+		val previous = remoteJob
+		remoteJob = viewModelScope.launch {
+			previous?.cancelAndJoin()
+			controller.disconnect()
+			session.detachRemoteSession()
+		}
 	}
 
 	fun setOnScreenControlsEnabled(enabled: Boolean)

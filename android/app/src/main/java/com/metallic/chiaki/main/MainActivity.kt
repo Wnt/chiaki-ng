@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Observer
@@ -23,6 +24,7 @@ import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.lib.DiscoveryHost
 import com.metallic.chiaki.manualconsole.EditManualConsoleActivity
 import com.metallic.chiaki.regist.RegistActivity
+import com.metallic.chiaki.remote.AndroidPsnRemoteClient
 import com.metallic.chiaki.settings.SettingsActivity
 import com.metallic.chiaki.stream.StreamActivity
 
@@ -57,7 +59,14 @@ class MainActivity : AppCompatActivity()
 
 		setupBackNavigation()
 
-		viewModel = ViewModelProvider(this, viewModelFactory { MainViewModel(getDatabase(this), Preferences(this)) })
+		viewModel = ViewModelProvider(this, viewModelFactory {
+			MainViewModel(
+				getDatabase(this),
+				Preferences(this),
+				LogManager(this),
+				AndroidPsnRemoteClient(this)
+			)
+		})
 			.get(MainViewModel::class.java)
 
 		val recyclerViewAdapter = DisplayHostRecyclerViewAdapter(this::hostTriggered, this::wakeupHost, this::editHost, this::deleteHost)
@@ -75,11 +84,52 @@ class MainActivity : AppCompatActivity()
 			discoveryMenuItem?.let { updateDiscoveryMenuItem(it, active) }
 			updateEmptyInfo()
 		})
+
+		val psnAdapter = PsnConsoleRecyclerViewAdapter(
+			viewModel::registerPsnConsole,
+			this::connectPsnConsole,
+			viewModel::wakePsnConsole
+		)
+		binding.psnConsolesRecyclerView.adapter = psnAdapter
+		binding.psnConsolesRecyclerView.layoutManager = LinearLayoutManager(this)
+		binding.refreshPsnConsolesButton.setOnClickListener { viewModel.loadPsnConsoles() }
+		viewModel.psnConsoles.observe(this) { consoles ->
+			psnAdapter.consoles = consoles
+			updatePsnListState(viewModel.psnListState.value, consoles.isEmpty())
+		}
+		viewModel.psnListState.observe(this) { state ->
+			updatePsnListState(state, viewModel.psnConsoles.value.isNullOrEmpty())
+			updateEmptyInfo()
+		}
+		viewModel.psnAction.observe(this) { psnAdapter.action = it }
+		viewModel.psnMessage.observe(this) { message ->
+			if(message != null)
+			{
+				Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+				viewModel.clearPsnMessage()
+			}
+		}
+	}
+
+	private fun updatePsnListState(state: PsnConsoleListState?, empty: Boolean)
+	{
+		binding.psnConsolesLayout.visibility = if(state == null || state == PsnConsoleListState.Hidden) View.GONE else View.VISIBLE
+		binding.psnConsolesProgressBar.visibility = if(state == PsnConsoleListState.Loading) View.VISIBLE else View.GONE
+		binding.refreshPsnConsolesButton.isEnabled = state != PsnConsoleListState.Loading
+		val info = when
+		{
+			state is PsnConsoleListState.Error -> state.message
+			state == PsnConsoleListState.Ready && empty -> getString(R.string.psn_consoles_empty)
+			else -> null
+		}
+		binding.psnConsolesInfoTextView.text = info
+		binding.psnConsolesInfoTextView.visibility = if(info == null) View.GONE else View.VISIBLE
+		binding.psnConsolesRecyclerView.visibility = if(state == PsnConsoleListState.Ready && !empty) View.VISIBLE else View.GONE
 	}
 
 	private fun updateEmptyInfo()
 	{
-		if(viewModel.displayHosts.value?.isEmpty() ?: true)
+		if((viewModel.displayHosts.value?.isEmpty() ?: true) && viewModel.psnListState.value == PsnConsoleListState.Hidden)
 		{
 			binding.emptyInfoLayout.visibility = View.VISIBLE
 			val discoveryActive = viewModel.discoveryActive.value ?: false
@@ -99,6 +149,7 @@ class MainActivity : AppCompatActivity()
 	override fun onStart()
 	{
 		super.onStart()
+		viewModel.setPsnEnabled(Preferences(this).psnRemotePlayEnabled)
 		viewModel.discoveryManager.resume()
 	}
 
@@ -228,6 +279,16 @@ class MainActivity : AppCompatActivity()
 	{
 		val registeredHost = host.registeredHost ?: return
 		viewModel.discoveryManager.sendWakeup(host.host, registeredHost.rpRegistKey, registeredHost.target.isPS5)
+	}
+
+	private fun connectPsnConsole(console: PsnConsole)
+	{
+		val registered = console.registeredHost ?: return
+		Intent(this, StreamActivity::class.java).also {
+			it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, viewModel.connectInfo(registered))
+			it.putExtra(StreamActivity.EXTRA_PSN_DEVICE, console.device)
+			startActivity(it)
+		}
 	}
 
 	private fun editHost(host: DisplayHost)

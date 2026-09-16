@@ -13,7 +13,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-internal class PsnCredentialStore(context: Context) : PsnRefreshTokenStore
+class PsnCredentialStore(context: Context) : PsnRefreshTokenStore
 {
 	companion object
 	{
