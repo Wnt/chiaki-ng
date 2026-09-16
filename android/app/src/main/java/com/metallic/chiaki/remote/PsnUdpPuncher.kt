@@ -131,13 +131,19 @@ object PsnCandidateHandshake
 	private fun type(packet: ByteArray): Int = ByteBuffer.wrap(packet, 0, 4).order(ByteOrder.BIG_ENDIAN).int
 }
 
+/**
+ * The STUN servers are kept unresolved until [prepare] runs on [Dispatchers.IO]. `InetSocketAddress(host, port)`
+ * resolves the name in the constructor, and this puncher is constructed on the main thread
+ * (`AndroidPsnRemoteClient.controller()`), where Android throws NetworkOnMainThreadException for a DNS
+ * lookup (PLE-312). Any address given here must be unresolved or literal.
+ */
 class DatagramPsnHolePuncher(
 	private val random: SecureRandom = SecureRandom(),
-	private val stunServers: List<InetSocketAddress> = listOf(
-		InetSocketAddress("stun.moonlight-stream.org", 3478),
-		InetSocketAddress("stun.l.google.com", 19302),
-		InetSocketAddress("stun1.l.google.com", 19302),
-		InetSocketAddress("stun2.l.google.com", 19302)
+	internal val stunServers: List<InetSocketAddress> = listOf(
+		InetSocketAddress.createUnresolved("stun.moonlight-stream.org", 3478),
+		InetSocketAddress.createUnresolved("stun.l.google.com", 19302),
+		InetSocketAddress.createUnresolved("stun1.l.google.com", 19302),
+		InetSocketAddress.createUnresolved("stun2.l.google.com", 19302)
 	)
 ) : PsnHolePuncher
 {
@@ -150,7 +156,7 @@ class DatagramPsnHolePuncher(
 		{
 			val mapping = discoverMapping(socket)
 			val localAddress = socket.localAddress.takeUnless { it.isAnyLocalAddress } as? Inet4Address
-				?: routeAddress(stunServers.first())
+				?: routeAddress(resolve(stunServers.first()))
 			val sid = random.nextInt(0x10000)
 			val localHash = ByteArray(20).also(random::nextBytes)
 			val candidates = listOf(
@@ -184,7 +190,7 @@ class DatagramPsnHolePuncher(
 			{
 				val transactionId = ByteArray(12).also(random::nextBytes)
 				val request = PsnStunCodec.request(transactionId)
-				socket.send(DatagramPacket(request, request.size, server))
+				socket.send(DatagramPacket(request, request.size, resolve(server)))
 				socket.soTimeout = 5_000
 				val packet = DatagramPacket(ByteArray(1024), 1024)
 				socket.receive(packet)
@@ -194,6 +200,10 @@ class DatagramPsnHolePuncher(
 		}
 		throw PsnUnsupportedNatException("No configured STUN server returned an IPv4 mapping: ${lastError?.message}")
 	}
+
+	/** DNS happens here, inside [prepare] on IO, never where the puncher is constructed. */
+	private fun resolve(server: InetSocketAddress): InetSocketAddress =
+		if(server.isUnresolved) InetSocketAddress(InetAddress.getByName(server.hostString), server.port) else server
 
 	private fun routeAddress(server: InetSocketAddress): Inet4Address
 	{

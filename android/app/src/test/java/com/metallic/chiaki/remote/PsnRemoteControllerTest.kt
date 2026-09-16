@@ -4,6 +4,7 @@
 package com.metallic.chiaki.remote
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -116,6 +117,82 @@ class PsnRemoteControllerTest
 		assertTrue(requests.any { it.method == "DELETE" })
 	}
 
+	/**
+	 * PLE-312: the S25 threw NetworkOnMainThreadException on Play, from a DNS lookup in the hole
+	 * puncher's constructor, after PLE-261 had moved only OkHttp body reads off the main thread. Every
+	 * public entry point of the controller is now run from a single caller thread with collaborators
+	 * that record where they are called, and the entry-point list is checked by reflection.
+	 */
+	@Test fun nothingRunsOnTheCallerThread()
+	{
+		val threads = recordedThreads()
+		val api = PsnRemoteApi(
+			OkHttpClient.Builder().socketFactory(ReadRecordingSocketFactory(threads)).build(),
+			PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
+			object : PsnRefreshTokenStore {
+				override fun read() = "refresh-token-placeholder"
+				override fun write(value: String) = Unit
+			},
+			json
+		)
+		val puncher = object : PsnHolePuncher {
+			private val inner = FixtureHolePuncher()
+			override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation
+			{
+				recordThread(threads)
+				val preparation = inner.prepare(peer, accountId)
+				return object : PsnPunchPreparation by preparation {
+					override suspend fun punch(): PsnPunchedSocket { recordThread(threads); return preparation.punch() }
+				}
+			}
+		}
+		val native = object : PsnRemoteNativeBridge {
+			override suspend fun start(control: PsnPunchedSocket, registration: PsnRegistrationMaterial): PsnNativeStartResult
+			{
+				recordThread(threads)
+				return PsnNativeStartResult.DataSocketNeeded
+			}
+			override suspend fun setDataSocket(data: PsnPunchedSocket) = recordThread(threads)
+			override fun stop() = recordThread(threads)
+		}
+		val transport = object : PsnPushTransport {
+			private val inner = OkHttpPsnPushTransport(OkHttpClient.Builder().socketFactory(ReadRecordingSocketFactory(threads)).build(), json)
+			override suspend fun open(url: String, accessToken: String): PsnPushConnection
+			{
+				recordThread(threads)
+				return inner.open(url, accessToken)
+			}
+		}
+		val controller = PsnRemoteController(
+			api, transport, puncher, native,
+			randomBytes = PsnRandomBytes { size -> ByteArray(size) { (it + 1).toByte() } },
+			uuid = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+			json = json
+		)
+		val device = PsnDevice(duid, "Fixture PS5")
+		val covered = mutableSetOf<String>()
+		val executor = callerExecutor()
+		try
+		{
+			runBlocking(executor.asCoroutineDispatcher()) {
+				controller.connect(device).also { covered += "connect" }
+				assertTrue(controller.state.value is PsnRemoteState.Streaming)
+				controller.disconnect().also { covered += "disconnect" }
+				controller.wake(device).also { covered += "wake" }
+				assertTrue(controller.state.value is PsnRemoteState.Woken)
+				assertEquals(1, controller.listDevices().size).also { covered += "listDevices" }
+			}
+		}
+		finally
+		{
+			executor.shutdownNow()
+		}
+		assertEquals("every public suspend function of PsnRemoteController must be exercised here",
+			publicSuspendFunctions(PsnRemoteController::class.java), covered)
+		assertTrue("collaborators were called on: $threads", threads.size >= 2)
+		assertEquals("PSN work on the caller thread", emptyList<String>(), threads.onCallerThread())
+	}
+
 	private fun fixtureDispatcher(): Dispatcher = object : Dispatcher()
 	{
 		override fun dispatch(request: RecordedRequest): MockResponse
@@ -134,6 +211,8 @@ class PsnRemoteControllerTest
 					}
 				})
 				request.path == "/api/sessionManager/v1/remotePlaySessions" -> MockResponse().setBody(fixture("session_create.json"))
+				request.path?.startsWith("/api/cloudAssistedNavigation/v2/users/me/clients") == true ->
+					MockResponse().setBody(fixture("devices.json")).throttleBody(32, 30, java.util.concurrent.TimeUnit.MILLISECONDS)
 				request.path?.endsWith("/commands") == true -> MockResponse().setResponseCode(204)
 				request.path?.endsWith("/sessionMessage") == true -> MockResponse().setResponseCode(204)
 				request.method == "DELETE" -> MockResponse().setResponseCode(204)

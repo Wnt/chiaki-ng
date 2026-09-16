@@ -14,14 +14,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.io.FilterInputStream
-import java.io.InputStream
-import java.net.InetAddress
-import java.net.Socket
-import java.util.Collections
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import javax.net.SocketFactory
 
 class PsnRemoteApiTest
 {
@@ -77,10 +70,14 @@ class PsnRemoteApiTest
 		assertEquals("Bearer retry-access", server.takeRequest().getHeader("Authorization"))
 	}
 
-	// PLE-261: reading the body on the caller's dispatcher threw NetworkOnMainThreadException on Android.
+	/**
+	 * PLE-261: reading the body on the caller's dispatcher threw NetworkOnMainThreadException on Android.
+	 * PLE-312: every public suspend function is exercised from the caller thread, and the list is
+	 * checked against the class by reflection, so a new call site cannot ship without being covered.
+	 */
 	@Test fun responseBodiesAreNotReadOnTheCallerThread()
 	{
-		val readThreads = Collections.synchronizedSet(mutableSetOf<String>())
+		val readThreads = recordedThreads()
 		val recordingApi = PsnRemoteApi(
 			OkHttpClient.Builder().socketFactory(ReadRecordingSocketFactory(readThreads)).build(),
 			PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
@@ -89,22 +86,45 @@ class PsnRemoteApiTest
 			clockMillis = { 1_000L }
 		)
 		// Trickle the bodies so most of them are still on the wire when execute() has returned the headers.
-		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")).throttleBody(32, 30, TimeUnit.MILLISECONDS))
-		server.enqueue(MockResponse().setBody(fixture("devices.json")).throttleBody(32, 30, TimeUnit.MILLISECONDS))
+		fun trickle(body: String, code: Int = 200) =
+			MockResponse().setResponseCode(code).setBody(body).throttleBody(32, 30, TimeUnit.MILLISECONDS)
+		server.enqueue(trickle(fixture("token_refresh.json")))
+		server.enqueue(trickle(fixture("devices.json")))
+		server.enqueue(trickle(fixture("devices.json")))
+		server.enqueue(trickle("""{"fqdn":"push.example.invalid"}"""))
+		server.enqueue(trickle(fixture("session_create.json")))
+		server.enqueue(trickle("""{"accepted":true,"padding":"${"x".repeat(200)}"}"""))
+		server.enqueue(trickle("""{"accepted":true,"padding":"${"x".repeat(200)}"}"""))
+		server.enqueue(trickle("""{"accepted":true,"padding":"${"x".repeat(200)}"}"""))
+		server.enqueue(trickle("""{"access_token":"forced-access","refresh_token":"forced-refresh","expires_in":3600}"""))
 
-		val executor = Executors.newSingleThreadExecutor { Thread(it, "psn-caller") }
+		val device = PsnDevice("00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "Fixture PS5")
+		val covered = mutableSetOf<String>()
+		val executor = callerExecutor()
 		try
 		{
-			val listing = runBlocking(executor.asCoroutineDispatcher()) { recordingApi.listDeviceListing() }
-			assertEquals(1, listing.devices.size)
-			assertTrue("clients before filtering", listing.clientCount >= listing.devices.size)
+			runBlocking(executor.asCoroutineDispatcher()) {
+				assertEquals("access-token-placeholder", recordingApi.accessToken()).also { covered += "accessToken" }
+				assertEquals(1, recordingApi.listDevices().size).also { covered += "listDevices" }
+				val listing = recordingApi.listDeviceListing().also { covered += "listDeviceListing" }
+				assertTrue("clients before filtering", listing.clientCount >= listing.devices.size)
+				assertEquals("wss://push.example.invalid/np/pushNotification", recordingApi.resolvePushWebSocket())
+					.also { covered += "resolvePushWebSocket" }
+				val session = recordingApi.createSession("push-context").also { covered += "createSession" }
+				recordingApi.startConsole(session, device, "AAAA", "BBBB").also { covered += "startConsole" }
+				recordingApi.sendSignal(session, device, PsnSignalMessage("RESULT", 1)).also { covered += "sendSignal" }
+				recordingApi.deleteSession(session.sessionId).also { covered += "deleteSession" }
+				assertEquals("forced-access", recordingApi.accessToken(forceRefresh = true))
+			}
 		}
 		finally
 		{
 			executor.shutdownNow()
 		}
+		assertEquals("every public suspend function of PsnRemoteApi must be exercised here",
+			publicSuspendFunctions(PsnRemoteApi::class.java), covered)
 		assertTrue("socket reads happened on: $readThreads", readThreads.isNotEmpty())
-		assertTrue("socket read on the caller thread: $readThreads", readThreads.none { it.startsWith("psn-caller") })
+		assertEquals("socket read on the caller thread", emptyList<String>(), readThreads.onCallerThread())
 	}
 
 	@Test fun httpFailureCarriesStatusAndErrorExcerpt() = runBlocking {
@@ -118,27 +138,6 @@ class PsnRemoteApiTest
 		assertEquals(500, error.httpCode)
 		assertEquals("PSN request failed (HTTP 500)", error.message)
 		assertEquals("{\"error\":{\"code\":2285, \"message\":\"server\"}}", error.detail)
-	}
-
-	private class ReadRecordingSocketFactory(private val threads: MutableSet<String>) : SocketFactory()
-	{
-		override fun createSocket(): Socket = object : Socket()
-		{
-			override fun getInputStream(): InputStream = object : FilterInputStream(super.getInputStream())
-			{
-				override fun read(): Int { threads += Thread.currentThread().name; return super.read() }
-				override fun read(b: ByteArray, off: Int, len: Int): Int
-				{
-					threads += Thread.currentThread().name
-					return super.read(b, off, len)
-				}
-			}
-		}
-		override fun createSocket(host: String, port: Int): Socket = unsupported()
-		override fun createSocket(host: String, port: Int, localHost: InetAddress, localPort: Int): Socket = unsupported()
-		override fun createSocket(host: InetAddress, port: Int): Socket = unsupported()
-		override fun createSocket(address: InetAddress, port: Int, localAddress: InetAddress, localPort: Int): Socket = unsupported()
-		private fun unsupported(): Nothing = throw UnsupportedOperationException()
 	}
 
 	private fun fixture(name: String): String = javaClass.getResource("/psn/$name")!!.readText()
