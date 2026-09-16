@@ -103,11 +103,12 @@ class StreamDiagnosticsFormatterTest
 	@Test
 	fun performanceFlagsOnlyNameLiveLegs()
 	{
-		assertEquals(emptyList<String>(), StreamActivity.performanceModeDiagnosticFlags(false, false, false))
-		assertEquals(listOf("perf-oprate"), StreamActivity.performanceModeDiagnosticFlags(true, false, false))
+		assertEquals(emptyList<String>(), StreamActivity.performanceModeDiagnosticFlags(false, false))
+		assertEquals(listOf("perf-sustained"), StreamActivity.performanceModeDiagnosticFlags(true, false))
+		assertEquals(listOf("perf-adpf"), StreamActivity.performanceModeDiagnosticFlags(false, true))
 		assertEquals(
-			listOf("perf-oprate", "perf-sustained", "perf-adpf"),
-			StreamActivity.performanceModeDiagnosticFlags(true, true, true)
+			listOf("perf-sustained", "perf-adpf"),
+			StreamActivity.performanceModeDiagnosticFlags(true, true)
 		)
 	}
 }

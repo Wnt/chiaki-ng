@@ -22,6 +22,16 @@ Default site. `GET /sites/{siteId}/networks` returns:
 | Default | 1 | yes | gateway |
 | Greenhouse | 30 | yes | gateway |
 
+PLE-228 resolved an address collision on 2026-09-16. The Default network's
+DHCP pool is `192.168.1.6-192.168.1.254`; its live client table identified
+`192.168.1.250` as wireless MAC `74:40:be:be:4f:e6`, saved name `Telkkari`,
+hostname `LGwebOSTV`. LXC 240 simultaneously had static MAC
+`bc:24:11:4b:fa:8b` on that address. The guest moved to `192.168.1.5`, after
+checks found no saved or live UniFi client, ARP response, ICMP response, or
+existing lab claim for `.5`. The LXC configuration, UDM static route, CT950
+direct route, and local impairment environment all use `.5` now. Do not reuse
+`.250` for the guest.
+
 VLAN 40 is unused and is reserved for the impairment network. The Integration
 API client list identifies the Galaxy S22 Ultra as MAC
 `8e:75:9e:7b:ab:32`, IP `192.168.1.105`, with default network access.
@@ -82,7 +92,9 @@ The API responses, filtered to non-secret addressing fields, were:
 CT950 cannot open a raw ping socket (`Operation not permitted`), so the free-IP
 probe ran through the one lab door. Three ICMP requests from `pve-nvme` to
 `192.168.1.250` received no replies. `labctl who` subsequently listed both
-`ip/192.168.1.250` and `vmid/240` as held by `ple-189`.
+`ip/192.168.1.250` and `vmid/240` as held by `ple-189`. This was only the
+Phase 0 snapshot; PLE-228 later found that the address was inside the Default
+DHCP pool and had been leased to the TV described above.
 
 Use these values in later phases:
 
@@ -93,7 +105,7 @@ Use these values in later phases:
 | `IMPAIR_VLAN_ID` | `40` | absent from the UniFi network list |
 | `IMPAIR_SUBNET` | `192.168.40.0/24` | paired with VLAN 40 |
 | `IMPAIR_GW` | `192.168.40.1` | future netem guest VLAN-side address |
-| `IMPAIR_GUEST_LAN_IP` | `192.168.1.250` | no UniFi client entry, no ping reply from `pve-nvme`, and `kh-claim` class `ip` owned by `ple-189` |
+| `IMPAIR_GUEST_LAN_IP` | `192.168.1.5` | outside the Default DHCP pool; no saved/live UniFi client, no ARP/ICMP response before assignment, and `kh-claim` class `ip` owned by `ple-194` |
 | `PHONE_MAC` | `8e:75:9e:7b:ab:32` | UniFi client at `192.168.1.105` |
 | `PS5_IP` | `192.168.1.164` | ticket-provided fixed address; availability not probed in phase 0 |
 
@@ -103,7 +115,7 @@ intentionally retained for downstream PLE-194. Before provisioning, verify
 ownership with:
 
 ```sh
-ssh -n lab 'kh-claim who vmid 240; kh-claim who ip 192.168.1.250'
+ssh -n lab 'kh-claim who vmid 240; kh-claim who ip 192.168.1.5'
 ```
 
 Do not substitute a value after a check-then-create race. If either claim is no
@@ -115,7 +127,7 @@ longer owned by the impairment work, atomically take a new value with
 Deployed by PLE-194 on 2026-09-16. The permanent guest is privileged Debian 13
 LXC **240**, hostname `pleikkari-netem`, on `pve-nvme`. It has 1 vCPU, 1 GiB
 RAM, a 4 GiB `data` rootfs, `onboot=1`, and `nesting=1`. The retained claims
-for VMID 240 and `192.168.1.250` are owned by `ple-194`; do not release them
+for VMID 240 and `192.168.1.5` are owned by `ple-194`; do not release them
 while the guest is the active impairment gateway.
 
 The LXC choice was tested before deployment: with the host `ifb` module loaded,
@@ -124,7 +136,7 @@ qdisc, and removed both successfully. A VM is therefore unnecessary.
 
 | Guest NIC | Proxmox attachment | Guest address | Purpose |
 | --- | --- | --- | --- |
-| `eth0` | `vmbr0`, untagged | `192.168.1.250/24`, gateway `192.168.1.1` | main LAN, SSH, PS5 side |
+| `eth0` | `vmbr0`, untagged | `192.168.1.5/24`, gateway `192.168.1.1` | main LAN, SSH, PS5 side |
 | `eth1` | `vmbr0`, VLAN tag 40 | `192.168.40.1/24`, no gateway | `ps-impair` gateway |
 
 Persistent configuration comes from `scripts/net/guest/`:
@@ -147,7 +159,7 @@ After a guest reboot, forwarding remained `1`, `eth1` remained IPv4-only,
 Root SSH accepts CT950's `~/.ssh/id_ed25519` key. The untracked env contains:
 
 ```sh
-IMPAIR_HOST=root@192.168.1.250
+IMPAIR_HOST=root@192.168.1.5
 IMPAIR_PEER=192.168.1.164
 ```
 
@@ -167,7 +179,7 @@ The UniFi Network application is `10.6.106` on the UDM Pro. PLE-194 created
 the enabled route `pleikkari-impair` with distance 1:
 
 ```text
-192.168.40.0/24 via 192.168.1.250
+192.168.40.0/24 via 192.168.1.5
 ```
 
 The authenticated local readback endpoint is
@@ -180,7 +192,7 @@ command transcript or repository.
 
 To recreate it in the UI instead, open UniFi Network and create a static route
 named `pleikkari-impair` under the routing/policy table: destination
-`192.168.40.0/24`, next-hop IP `192.168.1.250`, distance 1, enabled. Confirm the
+`192.168.40.0/24`, next-hop IP `192.168.1.5`, distance 1, enabled. Confirm the
 local API readback before moving a device.
 
 CT950 and the netem LXC are veth peers on the same Proxmox `vmbr0`. The UDM
@@ -191,7 +203,7 @@ as `/etc/systemd/network/eth0.network.d/pleikkari-impair-route.conf`, sourced
 from `scripts/net/guest/ct950-impair-route.conf`:
 
 ```text
-192.168.40.0/24 via 192.168.1.250 dev eth0 metric 10
+192.168.40.0/24 via 192.168.1.5 dev eth0 metric 10
 ```
 
 This is the clean ADB/control return path. It does not bypass impairment for

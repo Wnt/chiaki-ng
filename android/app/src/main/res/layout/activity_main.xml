@@ -3,9 +3,10 @@
     android:id="@+id/rootLayout"
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:clipChildren="false">
+    android:background="?attr/colorSurface">
 
     <LinearLayout
         android:id="@+id/mainContentLayout"
@@ -83,218 +84,170 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <LinearLayout
-            android:id="@+id/psnConsolesLayout"
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/streamSummaryCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorSurface"
-            android:elevation="8dp"
-            android:orientation="vertical"
-            android:paddingTop="12dp"
-            android:visibility="gone">
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="12dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="?attr/colorSecondaryContainer"
+            app:cardCornerRadius="24dp"
+            app:cardElevation="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp">
+                android:orientation="vertical"
+                android:paddingStart="20dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="16dp">
 
-                <com.google.android.material.textview.MaterialTextView
-                    android:layout_width="0dp"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/psn_consoles_title"
-                    android:textColor="?attr/colorOnSurface"
-                    android:textAppearance="?attr/textAppearanceTitleLarge" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/refreshPsnConsolesButton"
-                    style="@style/Widget.MaterialComponents.Button.TextButton"
-                    android:layout_width="wrap_content"
+                    <com.google.android.material.textview.MaterialTextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/stream_summary_title"
+                        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/summaryDismissButton"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:contentDescription="@string/action_dismiss"
+                        app:icon="@drawable/ic_close"
+                        app:iconTint="?attr/colorOnSecondaryContainer" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/action_refresh" />
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <include
+                        android:id="@+id/summaryDuration"
+                        layout="@layout/item_stream_summary_metric" />
+
+                    <include
+                        android:id="@+id/summaryLatency"
+                        layout="@layout/item_stream_summary_metric" />
+
+                    <include
+                        android:id="@+id/summaryDrops"
+                        layout="@layout/item_stream_summary_metric" />
+
+                    <include
+                        android:id="@+id/summaryQuality"
+                        layout="@layout/item_stream_summary_metric" />
+                </LinearLayout>
             </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <LinearLayout
+            android:id="@+id/psnProgressLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="8dp"
+            android:visibility="gone">
 
             <ProgressBar
-                android:id="@+id/psnConsolesProgressBar"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_margin="8dp" />
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="24dp"
+                android:layout_height="24dp" />
 
             <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/psnConsolesInfoTextView"
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:padding="16dp"
-                android:textColor="?attr/colorOnSurface"
-                android:visibility="gone" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/psnConsolesRecyclerView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:nestedScrollingEnabled="false" />
+                android:layout_marginStart="12dp"
+                android:text="@string/console_status_refreshing"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/hostsRecyclerView"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:paddingBottom="96dp"
-            android:clipToPadding="false"
-            android:clipChildren="false" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/emptyInfoLayout"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:orientation="vertical"
-        android:gravity="center_horizontal">
-        <ImageView
-            android:id="@+id/emptyInfoImageView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:src="@drawable/ic_discover_off"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toTopOf="@id/emptyInfoTextView"
-            app:layout_constraintVertical_chainStyle="packed"
-            android:alpha="0.5"/>
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/emptyInfoTextView"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:fontFamily="sans-serif-condensed"
-            android:text="@string/display_hosts_empty_discovery_off_info"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/emptyInfoImageView"
-            android:gravity="center_horizontal"
-            android:maxWidth="300dp"/>
-    </LinearLayout>
-
-    <FrameLayout
-        android:id="@+id/floatingActionButtonDialBackground"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#44000000"
-        android:visibility="gone"
-        android:clickable="true"
-        app:layout_behavior=".main.FloatingActionButtonBackgroundBehavior"/>
-
-    <LinearLayout
-        android:id="@+id/floatingActionButtonDial"
-        android:layout_gravity="top|end"
-        android:visibility="invisible"
-        app:layout_anchor="@id/floatingActionButton"
-        app:layout_anchorGravity="top|end"
-        android:orientation="vertical"
-        android:layout_marginRight="20dp"
-        android:layout_height="wrap_content"
-        android:layout_width="wrap_content"
-        app:layout_behavior=".main.FloatingActionButtonSpeedDialBehavior"
-        android:gravity="right"
-        android:clipChildren="false">
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/registerLabelButton"
-                style="@style/AppTheme.FloatingActionButtonSpeedDial"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
-                android:text="@string/action_register"
-                android:textStyle="bold"
-                app:rippleColor="@color/floating_action_button_speed_dial_tint"
-                app:cornerRadius="8dp" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/registerButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:src="@drawable/ic_register"
-                app:fabSize="mini"
-                style="@style/AppTheme.FloatingActionButtonSpeedDial" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/addManualLabelButton"
-                style="@style/AppTheme.FloatingActionButtonSpeedDial"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
-                android:text="@string/action_add_manual"
-                android:textStyle="bold"
-                app:rippleColor="@color/floating_action_button_speed_dial_tint"
-                app:cornerRadius="8dp" />
-
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/addManualButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:src="@drawable/ic_add"
-                app:fabSize="mini"
-                style="@style/AppTheme.FloatingActionButtonSpeedDial" />
-        </LinearLayout>
-
-    </LinearLayout>
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/floatingActionButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:srcCompat="@drawable/selector_add_fab"
-        android:layout_margin="16dp"
-        android:layout_gravity="bottom|end"
-        app:fabSize="normal" />
-
-
-    <com.google.android.material.appbar.AppBarLayout
-        android:id="@+id/appBarLayout"
-        android:layout_height="wrap_content"
-        android:layout_width="match_parent">
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_height="wrap_content"
+            android:id="@+id/psnConsolesInfoTextView"
             android:layout_width="match_parent"
-            android:background="?attr/colorPrimarySurface"
-            app:layout_scrollFlags="scroll|enterAlways"
-            android:theme="@style/AppTheme.Toolbar">
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="8dp"
+            android:textColor="?attr/colorError"
+            android:visibility="gone" />
 
-            <androidx.appcompat.widget.AppCompatTextView
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/hostsRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingTop="4dp"
+                android:paddingBottom="104dp"
+                tools:listitem="@layout/item_display_host" />
+
+            <LinearLayout
+                android:id="@+id/emptyInfoLayout"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
-                android:fontFamily="sans-serif-condensed"
-                android:text="@string/title_main"
-                android:textColor="?attr/colorOnPrimary"
-                android:textSize="20dp" />
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
 
-        </com.google.android.material.appbar.MaterialToolbar>
+                <ImageView
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:alpha="0.56"
+                    android:contentDescription="@null"
+                    android:tint="?attr/colorOnSurfaceVariant"
+                    app:srcCompat="@drawable/ic_console_simple" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/consoles_empty"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:id="@+id/addConsoleButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:text="@string/action_add_console"
+        app:icon="@drawable/ic_add" />
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/appBarLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurface">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="?attr/colorSurface"
+            app:title="@string/title_main"
+            app:titleTextAppearance="?attr/textAppearanceHeadlineSmall" />
     </com.google.android.material.appbar.AppBarLayout>
-
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
