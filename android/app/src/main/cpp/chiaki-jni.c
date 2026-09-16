@@ -525,6 +525,14 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			E->GetFieldID(env, presenter_config_class, "nonblockingProducer", "Z"));
 	presenter_config.recovery_strategy = (AndroidChiakiVideoRecoveryStrategy)E->GetIntField(env,
 			presenter_config_obj, E->GetFieldID(env, presenter_config_class, "recoveryStrategy", "I"));
+	presenter_config.dejitter_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "dejitterEnabled", "Z"));
+	presenter_config.dejitter_floor_ms = (uint32_t)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "dejitterFloorMs", "I"));
+	presenter_config.dejitter_cap_ms = (uint32_t)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "dejitterCapMs", "I"));
+	presenter_config.dejitter_queue_age_frames = (uint32_t)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "dejitterQueueAgeFrames", "I"));
 	jint audio_buffer_bursts = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioBufferBursts", "I"));
 	jint audio_fifo_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioFifoMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));

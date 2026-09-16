@@ -43,6 +43,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
 		preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled
+		preferences.videoDejitterEnabledKey -> preferences.videoDejitterEnabled
 		preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled
 		preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
@@ -78,6 +79,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
 			preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled = value
+			preferences.videoDejitterEnabledKey -> preferences.videoDejitterEnabled = value
 			preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled = value
 			preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value
@@ -100,6 +102,9 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.videoPacingModeKey -> preferences.videoPacingMode.value
 		key == preferences.videoPresenterLeadKey -> preferences.videoPresenterLead.value
 		key == preferences.videoPacingMaxFrameAgePeriodsKey -> preferences.videoPacingMaxFrameAgePeriods.toString()
+		key == preferences.videoDejitterFloorMsKey -> preferences.videoDejitterFloorMs.toString()
+		key == preferences.videoDejitterCapMsKey -> preferences.videoDejitterCapMs.toString()
+		key == preferences.videoDejitterQueueAgeFramesKey -> preferences.videoDejitterQueueAgeFrames.toString()
 		key == preferences.videoRecoveryStrategyKey -> preferences.videoRecoveryStrategy.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
@@ -149,6 +154,18 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			key == preferences.videoPacingMaxFrameAgePeriodsKey ->
 			{
 				value?.toIntOrNull()?.let { preferences.videoPacingMaxFrameAgePeriods = it }
+			}
+			key == preferences.videoDejitterFloorMsKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.videoDejitterFloorMs = it }
+			}
+			key == preferences.videoDejitterCapMsKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.videoDejitterCapMs = it }
+			}
+			key == preferences.videoDejitterQueueAgeFramesKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.videoDejitterQueueAgeFrames = it }
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
 			key == preferences.packetLossMaxPercentKey ->
@@ -240,6 +257,32 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 			it.setOnBindEditTextListener { editText ->
 				editText.inputType = InputType.TYPE_CLASS_NUMBER
 				editText.setText(preferences.videoPacingMaxFrameAgePeriods.toString())
+			}
+		}
+
+		listOf(
+			R.string.preferences_video_dejitter_floor_ms_key to { preferences.videoDejitterFloorMs },
+			R.string.preferences_video_dejitter_cap_ms_key to { preferences.videoDejitterCapMs }
+		).forEach { (key, value) ->
+			preferenceScreen.findPreference<EditTextPreference>(getString(key))?.let {
+				it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+					getString(R.string.preferences_video_dejitter_depth_ms_value, value())
+				}
+				it.setOnBindEditTextListener { editText ->
+					editText.inputType = InputType.TYPE_CLASS_NUMBER
+					editText.setText(value().toString())
+				}
+			}
+		}
+
+		preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_video_dejitter_queue_age_frames_key))?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_video_dejitter_queue_age_frames_value,
+					preferences.videoDejitterQueueAgeFrames)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.videoDejitterQueueAgeFrames.toString())
 			}
 		}
 

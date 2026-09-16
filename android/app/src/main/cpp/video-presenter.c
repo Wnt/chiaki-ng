@@ -2,6 +2,7 @@
 
 #include "video-presenter.h"
 #include "video-presenter-age.h"
+#include "video-presenter-dejitter.h"
 #include "video-presenter-recovery.h"
 #include "video-presenter-histogram.h"
 #include "video-presenter-timing.h"
@@ -129,6 +130,30 @@ static AndroidChiakiVideoPresenterLead sanitize_lead_mode(AndroidChiakiVideoPres
 static const char *recovery_name(AndroidChiakiVideoRecoveryStrategy strategy)
 {
 	return strategy == ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH ? "flush" : "timeline_shift";
+}
+
+static bool dejitter_active(const AndroidChiakiVideoPresenter *presenter,
+		AndroidChiakiVideoPacingMode mode)
+{
+	return presenter->config.pacing_enabled && presenter->config.dejitter_enabled
+			&& (mode == ANDROID_CHIAKI_VIDEO_PACING_BALANCED
+					|| mode == ANDROID_CHIAKI_VIDEO_PACING_SMOOTHEST);
+}
+
+static uint32_t sanitize_dejitter_floor_ms(uint32_t floor_ms)
+{
+	if(floor_ms == 0)
+		return 1;
+	return floor_ms > ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_MAX_MS
+			? ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_MAX_MS : floor_ms;
+}
+
+static uint32_t sanitize_dejitter_cap_ms(uint32_t cap_ms, uint32_t floor_ms)
+{
+	if(cap_ms < floor_ms)
+		return floor_ms;
+	return cap_ms > ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_MAX_MS
+			? ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_MAX_MS : cap_ms;
 }
 
 static int64_t presenter_lead_ns(const AndroidChiakiVideoPresenter *presenter)
@@ -262,6 +287,8 @@ static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 					(double)presenter->cadence.decode_ewma_ns / 1000000.0,
 					(unsigned long long)presenter->cadence_window_dropped_frames);
 	}
+	if(presenter->dejitter_enabled)
+		return;
 
 	int64_t sample_ns;
 	if(presenter->real_pts_enabled)
@@ -405,6 +432,24 @@ static void on_vsync(AndroidChiakiVideoPresenter *presenter, int64_t app_vsync_n
 	while(presenter->queue_size > 0)
 	{
 		AndroidChiakiVideoPresenterFrame *head = &presenter->queue[presenter->queue_head];
+		if(presenter->dejitter_enabled)
+		{
+			int64_t release_ns = head->input_metadata_valid
+					? android_chiaki_video_dejitter_release_time_ns(
+							head->frame_ready_time_us, presenter->cadence.target_ns,
+							next_vsync_ns, presenter->vsync_period_ns,
+							presenter_lead_ns(presenter))
+					: next_vsync_ns - presenter_lead_ns(presenter);
+			if(release_ns <= 0)
+				release_ns = next_vsync_ns - presenter_lead_ns(presenter);
+			int64_t target_vsync_ns = release_ns + presenter_lead_ns(presenter);
+			if(target_vsync_ns > next_vsync_ns + presenter->vsync_period_ns / 3)
+				break;
+			AndroidChiakiVideoPresenterFrame frame;
+			queue_pop(presenter, &frame);
+			release_frame_locked(presenter, &frame, true, release_ns);
+			break;
+		}
 		int64_t pts_ns = head->info.presentationTimeUs * 1000LL;
 		if(!presenter->timeline_valid)
 		{
@@ -761,9 +806,12 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	AndroidChiakiVideoPacingMode mode = presenter->config.pacing_enabled
 			? presenter->config.pacing_mode : ANDROID_CHIAKI_VIDEO_PACING_DISABLED;
 	AndroidChiakiVideoPresenterLead lead_mode = presenter->config.presenter_lead;
-	uint32_t max_queue_age_periods = presenter->config.pacing_enabled
-			&& presenter->config.bounded_age_enabled ? presenter->config.max_frame_age_periods : 0;
-	bool nonblocking_producer = presenter->config.nonblocking_producer;
+	bool use_dejitter = dejitter_active(presenter, mode);
+	uint32_t max_queue_age_periods = use_dejitter
+			? presenter->config.dejitter_queue_age_frames
+			: (presenter->config.pacing_enabled && presenter->config.bounded_age_enabled
+					? presenter->config.max_frame_age_periods : 0);
+	bool nonblocking_producer = presenter->config.nonblocking_producer || use_dejitter;
 	AndroidChiakiVideoRecoveryStrategy recovery_strategy = presenter->config.pacing_enabled
 			? presenter->config.recovery_strategy : ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT;
 	mode = sanitize_mode(mode);
@@ -785,6 +833,7 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->max_queue_age_periods = max_queue_age_periods;
 	presenter->recovery_strategy = recovery_strategy;
 	presenter->nonblocking_producer = nonblocking_producer;
+	presenter->dejitter_enabled = use_dejitter;
 	presenter->timestamped_release_enabled = android_chiaki_video_presenter_timestamped_release_eligible(
 			mode, presenter->refresh_hz, presenter->stream_fps,
 			presenter->config.pacing_high_refresh_enabled);
@@ -810,7 +859,10 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->diagnostics_decode_count = 0;
 	presenter->diagnostics_decode_next = 0;
 	presenter->diagnostics_output_frames = 0;
-	android_chiaki_video_cadence_reset(&presenter->cadence);
+	uint32_t floor_ms = sanitize_dejitter_floor_ms(presenter->config.dejitter_floor_ms);
+	uint32_t cap_ms = sanitize_dejitter_cap_ms(presenter->config.dejitter_cap_ms, floor_ms);
+	android_chiaki_video_cadence_reset(&presenter->cadence,
+			(uint64_t)floor_ms * 1000000ULL, (uint64_t)cap_ms * 1000000ULL);
 	presenter->cadence_last_dropped_frames = 0;
 	presenter->cadence_window_dropped_frames = 0;
 	memset(presenter->input_metadata, 0, sizeof(presenter->input_metadata));
@@ -823,13 +875,14 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 		CHIAKI_LOGW(presenter->log, "Video presenter: pacing requested but immediate release in effect (vsync %.2f Hz >= gate)",
 				presenter->refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s",
-				mode_name(mode), presenter->stream_fps, presenter->refresh_hz,
+		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: policy=%s stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s depth=%u..%u ms",
+				mode_name(mode), use_dejitter ? "dejitter" : "timeline",
+				presenter->stream_fps, presenter->refresh_hz,
 				presenter->timestamped_release_enabled ? "enabled" : "disabled",
 				(double)presenter->app_vsync_offset_ns / 1000000.0,
 				(double)presenter_lead_ns(presenter) / 1000000.0,
 				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled",
-				recovery_name(recovery_strategy));
+				recovery_name(recovery_strategy), floor_ms, cap_ms);
 
 	start_vsync_thread_if_needed(presenter);
 	ChiakiErrorCode err = chiaki_thread_create(&presenter->output_thread, output_thread_func, presenter);
@@ -887,6 +940,13 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 	mode = sanitize_mode(mode);
 	chiaki_mutex_lock(&presenter->mutex);
 	presenter->mode = mode;
+	presenter->dejitter_enabled = dejitter_active(presenter, mode);
+	presenter->max_queue_age_periods = presenter->dejitter_enabled
+			? presenter->config.dejitter_queue_age_frames
+			: (presenter->config.pacing_enabled && presenter->config.bounded_age_enabled
+					? presenter->config.max_frame_age_periods : 0);
+	presenter->nonblocking_producer = presenter->config.nonblocking_producer
+			|| presenter->dejitter_enabled;
 	presenter->timestamped_release_enabled = android_chiaki_video_presenter_timestamped_release_eligible(
 			mode, presenter->refresh_hz, presenter->stream_fps,
 			presenter->config.pacing_high_refresh_enabled);
@@ -918,9 +978,12 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	AndroidChiakiVideoPacingMode mode = presenter->config.pacing_enabled
 			? presenter->config.pacing_mode : ANDROID_CHIAKI_VIDEO_PACING_DISABLED;
 	AndroidChiakiVideoPresenterLead lead_mode = presenter->config.presenter_lead;
-	uint32_t max_queue_age_periods = presenter->config.pacing_enabled
-			&& presenter->config.bounded_age_enabled ? presenter->config.max_frame_age_periods : 0;
-	bool nonblocking_producer = presenter->config.nonblocking_producer;
+	bool use_dejitter = dejitter_active(presenter, mode);
+	uint32_t max_queue_age_periods = use_dejitter
+			? presenter->config.dejitter_queue_age_frames
+			: (presenter->config.pacing_enabled && presenter->config.bounded_age_enabled
+					? presenter->config.max_frame_age_periods : 0);
+	bool nonblocking_producer = presenter->config.nonblocking_producer || use_dejitter;
 	AndroidChiakiVideoRecoveryStrategy recovery_strategy = presenter->config.pacing_enabled
 			? presenter->config.recovery_strategy : ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT;
 	mode = sanitize_mode(mode);
@@ -938,6 +1001,7 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	presenter->max_queue_age_periods = max_queue_age_periods;
 	presenter->recovery_strategy = recovery_strategy;
 	presenter->nonblocking_producer = nonblocking_producer;
+	presenter->dejitter_enabled = use_dejitter;
 	presenter->timestamped_release_enabled = android_chiaki_video_presenter_timestamped_release_eligible(
 			mode, presenter->refresh_hz, presenter->stream_fps,
 			presenter->config.pacing_high_refresh_enabled);
@@ -959,8 +1023,9 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 		CHIAKI_LOGW(presenter->log, "Video presenter: pacing requested but immediate release in effect (vsync %.2f Hz >= gate)",
 				presenter->refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s",
-				mode_name(mode), presenter->stream_fps, presenter->refresh_hz, timestamped ? "enabled" : "disabled",
+		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s policy=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s",
+				mode_name(mode), use_dejitter ? "dejitter" : "timeline",
+				presenter->stream_fps, presenter->refresh_hz, timestamped ? "enabled" : "disabled",
 				(double)presenter_lead_ns(presenter) / 1000000.0,
 				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled",
 				recovery_name(recovery_strategy));

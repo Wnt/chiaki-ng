@@ -210,6 +210,35 @@
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_video_dejitter_enabled_key"
+			app:title="@string/preferences_video_dejitter_enabled_title"
+			app:summary="@string/preferences_video_dejitter_enabled_summary"
+			app:defaultValue="false"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_video_dejitter_floor_ms_key"
+			app:title="@string/preferences_video_dejitter_floor_ms_title"
+			app:defaultValue="12"
+			app:dependency="@string/preferences_video_dejitter_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_video_dejitter_cap_ms_key"
+			app:title="@string/preferences_video_dejitter_cap_ms_title"
+			app:defaultValue="32"
+			app:dependency="@string/preferences_video_dejitter_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_video_dejitter_queue_age_frames_key"
+			app:title="@string/preferences_video_dejitter_queue_age_frames_title"
+			app:defaultValue="2"
+			app:dependency="@string/preferences_video_dejitter_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
 		<ListPreference
 			app:key="@string/preferences_video_pacing_mode_key"
 			app:title="@string/preferences_video_pacing_mode_title"

@@ -73,7 +73,11 @@ data class AndroidChiakiVideoPresenterConfig(
 	val boundedAgeEnabled: Boolean = false,
 	val maxFrameAgePeriods: Int = 2,
 	val nonblockingProducer: Boolean = false,
-	val recoveryStrategy: Int = 0
+	val recoveryStrategy: Int = 0,
+	val dejitterEnabled: Boolean = false,
+	val dejitterFloorMs: Int = 12,
+	val dejitterCapMs: Int = 32,
+	val dejitterQueueAgeFrames: Int = 2
 ): Parcelable
 
 @Parcelize

@@ -30,6 +30,8 @@ typedef struct android_chiaki_video_cadence_t
 	uint64_t decode_high_windows[ANDROID_CHIAKI_VIDEO_DECODE_HIGH_WINDOWS];
 	uint32_t decode_high_count;
 	uint32_t decode_high_next;
+	uint64_t depth_floor_ns;
+	uint64_t depth_cap_ns;
 	uint64_t depth_ns;
 	uint64_t target_ns;
 	uint64_t err_p50_ns;
@@ -39,7 +41,8 @@ typedef struct android_chiaki_video_cadence_t
 	uint64_t generation;
 } AndroidChiakiVideoCadence;
 
-void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence);
+void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence,
+		uint64_t depth_floor_ns, uint64_t depth_cap_ns);
 void android_chiaki_video_cadence_record_decode(AndroidChiakiVideoCadence *cadence,
 		uint64_t decode_ns);
 bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadence,

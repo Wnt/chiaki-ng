@@ -20,6 +20,8 @@ add_library(chiaki-jni SHARED
         src/main/cpp/video-presenter-histogram.c
         src/main/cpp/video-presenter-cadence.h
         src/main/cpp/video-presenter-cadence.c
+        src/main/cpp/video-presenter-dejitter.h
+        src/main/cpp/video-presenter-dejitter.c
         src/main/cpp/video-presenter-timing.h
         src/main/cpp/video-presenter-timing.c
         src/main/cpp/video-presenter.c

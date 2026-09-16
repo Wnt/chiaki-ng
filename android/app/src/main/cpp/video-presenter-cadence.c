@@ -9,19 +9,23 @@
 #define VIDEO_CADENCE_ANCHOR_SLEW_NS 1000000LL
 #define VIDEO_CADENCE_ANCHOR_SLEW_DIVISOR 64
 #define VIDEO_CADENCE_ANCHOR_RELOCK_NS 4000000LL
-#define VIDEO_CADENCE_DEPTH_FLOOR_NS 4000000ULL
-#define VIDEO_CADENCE_DEPTH_CAP_NS 32000000ULL
 #define VIDEO_CADENCE_DEPTH_GUARD_NS 1000000ULL
 #define VIDEO_CADENCE_DEPTH_DECAY_MARGIN_NS 4000000ULL
 #define VIDEO_CADENCE_DEPTH_DECAY_NS 1000000ULL
 
-void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence)
+void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence,
+		uint64_t depth_floor_ns, uint64_t depth_cap_ns)
 {
 	memset(cadence, 0, sizeof(*cadence));
 	chiaki_seq_num_16_unwrapper_init(&cadence->frame_index_unwrapper);
 	android_chiaki_video_histogram_reset(&cadence->err_histogram);
 	android_chiaki_video_histogram_reset(&cadence->jitter_histogram);
-	cadence->depth_ns = VIDEO_CADENCE_DEPTH_FLOOR_NS;
+	if(depth_cap_ns < depth_floor_ns)
+		depth_cap_ns = depth_floor_ns;
+	cadence->depth_floor_ns = depth_floor_ns;
+	cadence->depth_cap_ns = depth_cap_ns;
+	cadence->depth_ns = depth_floor_ns;
+	cadence->target_ns = depth_floor_ns;
 }
 
 void android_chiaki_video_cadence_record_decode(AndroidChiakiVideoCadence *cadence,
@@ -61,18 +65,18 @@ static void finish_window(AndroidChiakiVideoCadence *cadence)
 	uint64_t decode_margin_ns = decode_high_ns > cadence->decode_ewma_ns
 			? decode_high_ns - cadence->decode_ewma_ns : 0;
 	uint64_t target_ns = cadence->err_p99_ns + decode_margin_ns + VIDEO_CADENCE_DEPTH_GUARD_NS;
-	if(target_ns < VIDEO_CADENCE_DEPTH_FLOOR_NS)
-		target_ns = VIDEO_CADENCE_DEPTH_FLOOR_NS;
-	if(target_ns > VIDEO_CADENCE_DEPTH_CAP_NS)
-		target_ns = VIDEO_CADENCE_DEPTH_CAP_NS;
+	if(target_ns < cadence->depth_floor_ns)
+		target_ns = cadence->depth_floor_ns;
+	if(target_ns > cadence->depth_cap_ns)
+		target_ns = cadence->depth_cap_ns;
 	cadence->target_ns = target_ns;
 
 	if(target_ns > cadence->depth_ns)
 		cadence->depth_ns = target_ns;
 	else if(target_ns + VIDEO_CADENCE_DEPTH_DECAY_MARGIN_NS < cadence->depth_ns)
 	{
-		cadence->depth_ns = cadence->depth_ns > VIDEO_CADENCE_DEPTH_FLOOR_NS + VIDEO_CADENCE_DEPTH_DECAY_NS
-				? cadence->depth_ns - VIDEO_CADENCE_DEPTH_DECAY_NS : VIDEO_CADENCE_DEPTH_FLOOR_NS;
+		cadence->depth_ns = cadence->depth_ns > cadence->depth_floor_ns + VIDEO_CADENCE_DEPTH_DECAY_NS
+				? cadence->depth_ns - VIDEO_CADENCE_DEPTH_DECAY_NS : cadence->depth_floor_ns;
 	}
 
 	cadence->decode_window_max_ns = 0;

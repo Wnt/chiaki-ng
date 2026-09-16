@@ -29,6 +29,7 @@ set(CHIAKI_UNIT_SOURCES
 				../android/app/src/main/cpp/video-presenter-recovery.c
 				../android/app/src/main/cpp/video-presenter-histogram.c
 				../android/app/src/main/cpp/video-presenter-cadence.c
+				../android/app/src/main/cpp/video-presenter-dejitter.c
 				../android/app/src/main/cpp/video-presenter-timing.c
 				regist.c)
 

@@ -22,6 +22,12 @@
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW 300
 #define ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY 256
 #define ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY 256
+// PLE-205's clean stage-0 repeat observed a minimum D_target of 10.8-11.0 ms;
+// round that calibrated floor up so ordinary clean-LAN variance rests below it.
+#define ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_FLOOR_DEFAULT_MS 12
+#define ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_CAP_DEFAULT_MS 32
+#define ANDROID_CHIAKI_VIDEO_DEJITTER_QUEUE_AGE_DEFAULT_FRAMES 2
+#define ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_MAX_MS 256
 
 typedef enum android_chiaki_video_pacing_mode_t
 {
@@ -47,6 +53,10 @@ typedef struct android_chiaki_video_presenter_config_t
 	uint32_t max_frame_age_periods;
 	bool nonblocking_producer;
 	AndroidChiakiVideoRecoveryStrategy recovery_strategy;
+	bool dejitter_enabled;
+	uint32_t dejitter_floor_ms;
+	uint32_t dejitter_cap_ms;
+	uint32_t dejitter_queue_age_frames;
 } AndroidChiakiVideoPresenterConfig;
 
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT { \
@@ -58,6 +68,10 @@ typedef struct android_chiaki_video_presenter_config_t
 	.max_frame_age_periods = 2, \
 	.nonblocking_producer = false, \
 	.recovery_strategy = ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, \
+	.dejitter_enabled = false, \
+	.dejitter_floor_ms = ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_FLOOR_DEFAULT_MS, \
+	.dejitter_cap_ms = ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_CAP_DEFAULT_MS, \
+	.dejitter_queue_age_frames = ANDROID_CHIAKI_VIDEO_DEJITTER_QUEUE_AGE_DEFAULT_FRAMES, \
 }
 
 typedef struct android_chiaki_video_presenter_stats_t
@@ -139,6 +153,7 @@ typedef struct android_chiaki_video_presenter_t
 	bool late_frame_recovery_enabled;
 	bool real_pts_enabled;
 	bool nonblocking_producer;
+	bool dejitter_enabled;
 	unsigned int stream_fps;
 	double refresh_hz;
 	int64_t app_vsync_offset_ns;
