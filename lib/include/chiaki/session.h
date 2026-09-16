@@ -181,6 +181,13 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t takion_packets_received;
 	uint64_t takion_packets_lost;
 	uint64_t feedback_packets;
+	bool connection_quality_valid;
+	uint64_t target_bitrate_bps;
+	uint64_t measured_throughput_bps;
+	uint64_t live_rtt_us;
+	uint64_t server_loss;
+	double congestion_measured_loss;
+	double congestion_reported_loss;
 } ChiakiStreamStatsEvent;
 
 typedef enum {

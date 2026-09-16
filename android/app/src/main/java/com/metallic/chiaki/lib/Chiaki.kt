@@ -403,7 +403,14 @@ data class StreamStatsEvent(
 	val presenterQueueDepth: Long,
 	val audioLatencyMicros: Long,
 	val audioXruns: Long,
-	val audioUnderruns: Long
+	val audioUnderruns: Long,
+	val connectionQualityValid: Boolean = false,
+	val targetBitrateBps: Long = 0,
+	val measuredThroughputBps: Long = 0,
+	val liveRttMicros: Long = 0,
+	val serverLoss: Long = 0,
+	val congestionMeasuredLoss: Double = 0.0,
+	val congestionReportedLoss: Double = 0.0
 ): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
@@ -545,7 +552,14 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		presenterQueueDepth: Long,
 		audioLatencyMicros: Long,
 		audioXruns: Long,
-		audioUnderruns: Long
+		audioUnderruns: Long,
+		connectionQualityValid: Boolean,
+		targetBitrateBps: Long,
+		measuredThroughputBps: Long,
+		liveRttMicros: Long,
+		serverLoss: Long,
+		congestionMeasuredLoss: Double,
+		congestionReportedLoss: Double
 	)
 	{
 		event(StreamStatsEvent(
@@ -574,7 +588,14 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			presenterQueueDepth = presenterQueueDepth,
 			audioLatencyMicros = audioLatencyMicros,
 			audioXruns = audioXruns,
-			audioUnderruns = audioUnderruns
+			audioUnderruns = audioUnderruns,
+			connectionQualityValid = connectionQualityValid,
+			targetBitrateBps = targetBitrateBps,
+			measuredThroughputBps = measuredThroughputBps,
+			liveRttMicros = liveRttMicros,
+			serverLoss = serverLoss,
+			congestionMeasuredLoss = congestionMeasuredLoss,
+			congestionReportedLoss = congestionReportedLoss
 		))
 	}
 

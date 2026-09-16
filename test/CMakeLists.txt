@@ -23,6 +23,7 @@ set(CHIAKI_UNIT_SOURCES
 				bitstream.c
 				video_presenter.c
 				video_decoder_operating_rate.c
+				networkstats.c
 				../android/app/src/main/cpp/video-decoder-operating-rate.c
 				../android/app/src/main/cpp/video-presenter-age.c
 				../android/app/src/main/cpp/video-presenter-recovery.c
@@ -41,6 +42,8 @@ endif()
 
 add_executable(chiaki-unit ${CHIAKI_UNIT_SOURCES})
 add_test(NAME unit COMMAND chiaki-unit)
+
+target_include_directories(chiaki-unit PRIVATE "${CMAKE_BINARY_DIR}/lib/protobuf")
 
 target_link_libraries(chiaki-unit chiaki-lib munit)
 
