@@ -163,7 +163,7 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(feedbackStatsLogEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(feedbackStatsLogEnabledKey, value).apply() }
 
-	/** PLE-57: window of the feedback packet-rate line in the session log; 0 when the setting is off. */
+	/** Window of the general per-stream stats line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
 
 	val streamDiagnosticsOverlayEnabledKey get() = resources.getString(R.string.preferences_stream_diagnostics_overlay_enabled_key)

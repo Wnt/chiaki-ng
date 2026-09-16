@@ -207,6 +207,7 @@ typedef struct android_chiaki_session_t
 	AndroidChiakiVideoDecoder video_decoder;
 	AndroidChiakiAudioDecoder audio_decoder;
 	void *audio_output;
+	bool stream_stats_log_enabled;
 } AndroidChiakiSession;
 
 static void clear_performance_hint_exception(JNIEnv *env, AndroidChiakiSession *session, const char *operation)
@@ -332,10 +333,45 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 		case CHIAKI_EVENT_STREAM_STATS:
 		{
 			AndroidChiakiVideoDiagnostics diagnostics;
+			AndroidChiakiAudioDiagnostics audio;
 			android_chiaki_video_decoder_get_diagnostics(&session->video_decoder, &diagnostics);
+			android_chiaki_audio_output_get_diagnostics(session->audio_output, &audio);
+			if(session->stream_stats_log_enabled)
+			{
+				uint64_t interval_ms = event->stream_stats.interval_ms;
+				uint64_t takion_per_s_milli = interval_ms
+					? event->stream_stats.takion_packets_received * 1000000ULL / interval_ms : 0;
+				uint64_t feedback_per_s_milli = interval_ms
+					? event->stream_stats.feedback_packets * 1000000ULL / interval_ms : 0;
+				CHIAKI_LOGI(session->log,
+					"Feedback stats: window %llu ms video received %llu decoded %llu"
+					" dropped_input %llu dropped_presenter %llu lost %llu reorder_timeouts %llu"
+					" | per_s takion %llu.%03llu feedback %llu.%03llu"
+					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
+					" audio_xruns %s%d audio_underruns %llu",
+					(unsigned long long)interval_ms,
+					(unsigned long long)event->stream_stats.stream_frames,
+					(unsigned long long)diagnostics.output_frames,
+					(unsigned long long)diagnostics.input_frames_dropped,
+					(unsigned long long)diagnostics.presenter_frames_dropped,
+					(unsigned long long)event->stream_stats.video_frames_lost,
+					(unsigned long long)event->stream_stats.video_reorder_timeouts,
+					(unsigned long long)(takion_per_s_milli / 1000),
+					(unsigned long long)(takion_per_s_milli % 1000),
+					(unsigned long long)(feedback_per_s_milli / 1000),
+					(unsigned long long)(feedback_per_s_milli % 1000),
+					(unsigned long long)(event->stream_stats.rtt_us / 1000),
+					(unsigned long long)(event->stream_stats.rtt_us % 1000),
+					audio.latency_valid ? "" : "unavailable/",
+					(unsigned long long)(audio.latency_us / 1000),
+					(unsigned long long)(audio.latency_us % 1000),
+					audio.xruns_valid ? "" : "unavailable/", audio.xruns,
+					(unsigned long long)audio.underruns);
+			}
 			E->CallVoidMethod(env, session->java_session,
 					session->java_session_event_stream_stats_meth,
 					(jlong)event->stream_stats.interval_ms,
+					(jlong)event->stream_stats.rtt_us,
 					(jlong)event->stream_stats.stream_frames,
 					(jlong)diagnostics.output_frames,
 					(jlong)diagnostics.decode_mean_us,
@@ -349,7 +385,10 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.takion_packets_lost,
 					(jlong)event->stream_stats.feedback_packets,
 					(jlong)diagnostics.dejitter_buffer_ns,
-					(jlong)diagnostics.presenter_queue_depth);
+					(jlong)diagnostics.presenter_queue_depth,
+					(jlong)audio.latency_us,
+					(jlong)audio.xruns,
+					(jlong)audio.underruns);
 			break;
 		}
 		default:
@@ -407,10 +446,12 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	connect_info.auto_regist = auto_register;
 	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 	connect_info.feedback_stats_log_interval_ms = feedback_stats_log_interval_ms > 0 ? (uint32_t)feedback_stats_log_interval_ms : 0;
+	bool stream_stats_enabled = stream_diagnostics_enabled || feedback_stats_log_interval_ms > 0;
 	connect_info.stream_diagnostics_enabled = stream_diagnostics_enabled;
-	CHIAKI_LOGI(log, "Stream diagnostics overlay %s (%s)",
+	CHIAKI_LOGI(log, "Stream diagnostics overlay %s; stats log %s (%s)",
 			stream_diagnostics_enabled ? "enabled" : "disabled",
-			stream_diagnostics_enabled ? "1 Hz stats event" : "no stats event or periodic JNI traffic");
+			feedback_stats_log_interval_ms > 0 ? "enabled" : "disabled",
+			stream_stats_enabled ? "shared 1 Hz stats event" : "no stats event or periodic JNI traffic");
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
 	if(remote_ctrl_fd >= 0)
 	{
@@ -497,10 +538,11 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	}
 	memset(session, 0, sizeof(AndroidChiakiSession));
 	session->log = log;
+	session->stream_stats_log_enabled = feedback_stats_log_interval_ms > 0;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
-			performance_mode, stream_diagnostics_enabled);
+			performance_mode, stream_stats_enabled);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -519,7 +561,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->audio_output = android_chiaki_audio_output_new(log,
 			audio_buffer_bursts > 0 && audio_buffer_bursts <= 16 ? (uint32_t)audio_buffer_bursts : 0,
 			audio_fifo_ms >= 20 && audio_fifo_ms <= 1000 ? (uint32_t)audio_fifo_ms : 171,
-			feedback_stats_log_interval_ms > 0 ? (uint32_t)feedback_stats_log_interval_ms : 0);
+			stream_stats_enabled);
 
 	android_chiaki_audio_decoder_set_cb(&session->audio_decoder, android_chiaki_audio_output_settings, android_chiaki_audio_output_frame, session->audio_output);
 
@@ -546,7 +588,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

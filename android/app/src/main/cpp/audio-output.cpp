@@ -11,6 +11,9 @@
 #include <oboe/Oboe.h>
 #include <oboe/OboeExtensions.h>
 
+#include <atomic>
+#include <cstring>
+
 #define BUFFER_CHUNK_SIZE 1024
 #define BUFFER_DEFAULT_CHUNKS_COUNT 32
 #define BUFFER_MAX_CHUNKS_COUNT 1024
@@ -40,12 +43,12 @@ struct AudioOutput
 	AudioBuffer buf;
 	uint32_t buffer_bursts;
 	uint32_t fifo_ms;
-	uint32_t stats_log_interval_ms;
-	uint64_t stats_window_start_ms;
+	bool diagnostics_enabled;
+	std::atomic<uint64_t> underruns;
 
-	AudioOutput(uint32_t buffer_bursts, uint32_t fifo_ms, uint32_t stats_log_interval_ms)
+	AudioOutput(uint32_t buffer_bursts, uint32_t fifo_ms, bool diagnostics_enabled)
 		: stream_callback(this), buf(BUFFER_DEFAULT_CHUNKS_COUNT), buffer_bursts(buffer_bursts),
-		  fifo_ms(fifo_ms), stats_log_interval_ms(stats_log_interval_ms), stats_window_start_ms(0) {}
+		  fifo_ms(fifo_ms), diagnostics_enabled(diagnostics_enabled), underruns(0) {}
 };
 
 static size_t audio_fifo_chunks(uint32_t channels, uint32_t rate, uint32_t fifo_ms)
@@ -64,9 +67,9 @@ static size_t audio_fifo_chunks(uint32_t channels, uint32_t rate, uint32_t fifo_
 }
 
 extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log, uint32_t buffer_bursts,
-		uint32_t fifo_ms, uint32_t stats_log_interval_ms)
+		uint32_t fifo_ms, bool diagnostics_enabled)
 {
-	auto r = new AudioOutput(buffer_bursts, fifo_ms, stats_log_interval_ms);
+	auto r = new AudioOutput(buffer_bursts, fifo_ms, diagnostics_enabled);
 	r->log = log;
 	return r;
 }
@@ -85,7 +88,7 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
 	ao->stream = nullptr;
 	ao->buf.SetChunksCount(audio_fifo_chunks(channels, rate, ao->fifo_ms));
-	ao->stats_window_start_ms = 0;
+	ao->underruns.store(0, std::memory_order_relaxed);
 
 	oboe::AudioStreamBuilder builder;
 	builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
@@ -111,7 +114,7 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 				requested_frames, oboe::convertToText(buffer_result.error()));
 	}
 
-	if(ao->stats_log_interval_ms)
+	if(ao->diagnostics_enabled)
 	{
 		CHIAKI_LOGI(ao->log,
 			"Audio output opened: api %s frames_per_burst %d buffer_frames %d capacity_frames %d"
@@ -134,25 +137,6 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 extern "C" void android_chiaki_audio_output_frame(int16_t *buf, size_t samples_count, void *audio_output)
 {
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
-
-	if(ao->stats_log_interval_ms && ao->stream)
-	{
-		uint64_t now_ms = chiaki_time_now_monotonic_ms();
-		if(!ao->stats_window_start_ms)
-			ao->stats_window_start_ms = now_ms;
-		else if(now_ms - ao->stats_window_start_ms >= ao->stats_log_interval_ms)
-		{
-			auto latency = ao->stream->calculateLatencyMillis();
-			auto xruns = ao->stream->getXRunCount();
-			CHIAKI_LOGI(ao->log,
-				"Audio output stats: window %llu ms latency_ms %.3f latency_result %s"
-				" xruns %d xrun_result %s",
-				(unsigned long long)(now_ms - ao->stats_window_start_ms), latency.value(),
-				latency ? "OK" : oboe::convertToText(latency.error()), xruns.value(),
-				xruns ? "OK" : oboe::convertToText(xruns.error()));
-			ao->stats_window_start_ms = now_ms;
-		}
-	}
 
 	size_t buf_size = samples_count * sizeof(int16_t);
 	size_t pushed = ao->buf.Push(reinterpret_cast<uint8_t *>(buf), buf_size);
@@ -177,11 +161,38 @@ oboe::DataCallbackResult AudioOutputCallback::onAudioReady(oboe::AudioStream *st
 
 	if(buf_size_delivered < buf_size_requested)
 	{
+		if(audio_output->diagnostics_enabled)
+			audio_output->underruns.fetch_add(1, std::memory_order_relaxed);
 		CHIAKI_LOGV(audio_output->log, "Audio Output Buffer Underflow!");
 		memset(buf + buf_size_delivered, 0, buf_size_requested - buf_size_delivered);
 	}
 
 	return oboe::DataCallbackResult::Continue;
+}
+
+extern "C" void android_chiaki_audio_output_get_diagnostics(void *audio_output,
+		AndroidChiakiAudioDiagnostics *diagnostics)
+{
+	memset(diagnostics, 0, sizeof(*diagnostics));
+	if(!audio_output)
+		return;
+	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
+	diagnostics->underruns = ao->underruns.load(std::memory_order_relaxed);
+	if(!ao->stream)
+		return;
+
+	auto latency = ao->stream->calculateLatencyMillis();
+	if(latency)
+	{
+		diagnostics->latency_valid = true;
+		diagnostics->latency_us = static_cast<uint64_t>(latency.value() * 1000.0);
+	}
+	auto xruns = ao->stream->getXRunCount();
+	if(xruns)
+	{
+		diagnostics->xruns_valid = true;
+		diagnostics->xruns = xruns.value();
+	}
 }
 
 void AudioOutputCallback::onErrorBeforeClose(oboe::AudioStream *stream, oboe::Result error)

@@ -168,7 +168,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	takion_info.enable_dualsense = session->connect_info.enable_dualsense;
 	takion_info.protocol_version = chiaki_target_is_ps5(session->target) ? 12 : 9;
 	takion_info.disable_video_packet_reordering = session->connect_info.disable_video_packet_reordering;
-	takion_info.diagnostics_enabled = session->connect_info.stream_diagnostics_enabled;
+	bool stream_stats_enabled = session->connect_info.stream_diagnostics_enabled
+		|| session->connect_info.feedback_stats_log_interval_ms > 0;
+	takion_info.diagnostics_enabled = stream_stats_enabled;
 
 	takion_info.cb = stream_connection_takion_cb;
 	takion_info.cb_user = stream_connection;
@@ -321,7 +323,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	uint64_t previous_packets_received = 0;
 	uint64_t previous_packets_lost = 0;
 	uint64_t previous_feedback_packets = 0;
-	if(session->connect_info.stream_diagnostics_enabled)
+	if(stream_stats_enabled)
 	{
 		previous_stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
 		chiaki_packet_stats_get_generation_totals(&stream_connection->packet_stats,
@@ -341,7 +343,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 		else
 			CHIAKI_LOGV(stream_connection->log, "StreamConnection sent heartbeat");
 
-		if(session->connect_info.stream_diagnostics_enabled)
+		if(stream_stats_enabled)
 		{
 			uint64_t now_ms = chiaki_time_now_monotonic_ms();
 			uint64_t stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
@@ -354,6 +356,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			ChiakiEvent stats_event = { 0 };
 			stats_event.type = CHIAKI_EVENT_STREAM_STATS;
 			stats_event.stream_stats.interval_ms = now_ms - diagnostics_window_start_ms;
+			stats_event.stream_stats.rtt_us = session->rtt_us;
 			stats_event.stream_stats.stream_frames = stream_frames - previous_stream_frames;
 			stats_event.stream_stats.video_frames_lost = (uint64_t)chiaki_video_receiver_get_frames_lost_total(stream_connection->video_receiver);
 			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);

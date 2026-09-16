@@ -47,7 +47,8 @@ internal object StreamDiagnosticsFormatter
 			"stream %.1f fps | decoder %.1f fps\n" +
 				"decode %.2f ms mean | %.2f ms p95 | q %d\n" +
 				"drop-in %d | late %d | lost %d | reorder %d\n" +
-				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s\n" +
+				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | RTT %.2f ms\n" +
+				"audio %.2f ms | xruns %d | underruns %d\n" +
 				"vsync-miss %d | DJB %.1f ms\n" +
 				"display %dx%d@%.2f Hz mode %d | view=%s\n" +
 				"flags $flags$presenter",
@@ -63,6 +64,10 @@ internal object StreamDiagnosticsFormatter
 			rate(received, interval),
 			lossPercent,
 			rate(stats?.feedbackPackets ?: 0L, interval),
+			(stats?.rttMicros ?: 0L) / 1000.0,
+			(stats?.audioLatencyMicros ?: 0L) / 1000.0,
+			stats?.audioXruns ?: 0L,
+			stats?.audioUnderruns ?: 0L,
 			stats?.missedVsyncs ?: 0L,
 			(stats?.dejitterBufferNanos ?: 0L) / 1_000_000.0,
 			ui.display.width,

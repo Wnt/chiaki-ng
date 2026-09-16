@@ -23,6 +23,7 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("stream 0.0 fps | decoder 0.0 fps"))
 		assertTrue(text.contains("decode 0.00 ms mean | 0.00 ms p95"))
 		assertTrue(text.contains("Takion 0.0 pkt/s | loss 0.00% | feedback 0.0 pkt/s"))
+		assertTrue(text.contains("audio 0.00 ms | xruns 0 | underruns 0"))
 		assertTrue(text.contains("display 1920x1080@59.94 Hz mode 7 | view=fit"))
 		assertTrue(text.endsWith("flags lowlat pts | presenter=balanced"))
 	}
@@ -32,6 +33,7 @@ class StreamDiagnosticsFormatterTest
 	{
 		val stats = StreamStatsEvent(
 			intervalMillis = 2000,
+			rttMicros = 4_250,
 			streamFrames = 120,
 			decoderFrames = 118,
 			decodeMeanMicros = 8125,
@@ -45,13 +47,18 @@ class StreamDiagnosticsFormatterTest
 			takionPacketsLost = 200,
 			feedbackPackets = 240,
 			dejitterBufferNanos = 8_000_000,
-			presenterQueueDepth = 1
+			presenterQueueDepth = 1,
+			audioLatencyMicros = 12_500,
+			audioXruns = 7,
+			audioUnderruns = 8
 		)
 		val text = StreamDiagnosticsFormatter.format(stats, ui)
 		assertTrue(text.contains("stream 60.0 fps | decoder 59.0 fps"))
 		assertTrue(text.contains("decode 8.13 ms mean | 10.75 ms p95 | q 1"))
 		assertTrue(text.contains("drop-in 2 | late 3 | lost 5 | reorder 6"))
 		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
-		assertEquals(7, text.lines().size)
+		assertTrue(text.contains("RTT 4.25 ms"))
+		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
+		assertEquals(8, text.lines().size)
 	}
 }
