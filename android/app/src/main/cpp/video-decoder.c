@@ -286,7 +286,7 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, AndroidChiakiVideoRecoveryStrategy recovery_strategy)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 
@@ -307,7 +307,8 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		ANativeWindow_release(decoder->window);
 		decoder->window = new_window;
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
-				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods);
+				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+				recovery_strategy);
 #else
 		CHIAKI_LOGE(decoder->log, "Video Decoder already initialized");
 #endif
@@ -390,7 +391,8 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 			decoder->late_frame_recovery_enabled ? "enabled" : "disabled", OUTPUT_BACKLOG_IDR_THRESHOLD);
 
 	ChiakiErrorCode err = android_chiaki_video_presenter_start(&decoder->presenter, decoder->codec, stream_fps,
-			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods);
+			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+			recovery_strategy);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(decoder->log, "Failed to start video presenter: %s", chiaki_error_string(err));
@@ -637,6 +639,8 @@ void android_chiaki_video_decoder_get_diagnostics(AndroidChiakiVideoDecoder *dec
 	diagnostics->missed_vsyncs = presenter.missed_vsyncs;
 	diagnostics->presenter_frames_dropped = presenter.dropped_frames;
 	diagnostics->presenter_bounded_age_frames_dropped = presenter.bounded_age_dropped_frames;
+	diagnostics->presenter_recovery_flushes = presenter.recovery_flushes;
+	diagnostics->presenter_recovery_flushed_frames = presenter.recovery_flushed_frames;
 	diagnostics->dejitter_buffer_ns = presenter.dejitter_buffer_ns;
 	diagnostics->presenter_queue_depth = presenter.queue_depth;
 }

@@ -7,6 +7,8 @@
 #include <android/looper.h>
 #include <media/NdkMediaCodec.h>
 
+#include "video-presenter-recovery.h"
+
 #include <chiaki/log.h>
 #include <chiaki/thread.h>
 
@@ -47,6 +49,8 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint64_t missed_vsyncs;
 	uint64_t dropped_frames;
 	uint64_t bounded_age_dropped_frames;
+	uint64_t recovery_flushes;
+	uint64_t recovery_flushed_frames;
 	uint64_t dejitter_buffer_ns;
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;
@@ -90,6 +94,7 @@ typedef struct android_chiaki_video_presenter_t
 
 	AndroidChiakiVideoPacingMode mode;
 	AndroidChiakiVideoPresenterLead lead_mode;
+	AndroidChiakiVideoRecoveryStrategy recovery_strategy;
 	bool timestamped_release_enabled;
 	bool late_frame_recovery_enabled;
 	bool real_pts_enabled;
@@ -111,6 +116,8 @@ typedef struct android_chiaki_video_presenter_t
 	uint64_t missed_vsyncs;
 	uint64_t dropped_frames;
 	uint64_t bounded_age_dropped_frames;
+	uint64_t recovery_flushes;
+	uint64_t recovery_flushed_frames;
 	uint32_t max_queue_age_periods;
 	bool diagnostics_enabled;
 	AndroidChiakiVideoInputTimestamp diagnostics_inputs[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
@@ -138,7 +145,7 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, AndroidChiakiVideoRecoveryStrategy recovery_strategy);
 void android_chiaki_video_presenter_request_stop(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_join(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presenter,
@@ -146,7 +153,7 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, AndroidChiakiVideoRecoveryStrategy recovery_strategy);
 void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterStats *stats);
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
