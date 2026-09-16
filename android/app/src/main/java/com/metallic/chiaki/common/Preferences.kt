@@ -66,6 +66,25 @@ class Preferences(context: Context)
 		CODEC_H265("h265", R.string.preferences_codec_title_h265, com.metallic.chiaki.lib.Codec.CODEC_H265)
 	}
 
+	enum class StreamQualityPreset(
+		val value: String,
+		@StringRes val title: Int,
+		val resolution: Resolution,
+		val fps: FPS,
+		val codec: Codec,
+		val bitrate: Int? = null,
+		val decoderOperatingRateDefault: Boolean = true,
+		val decoderOperatingRateAuto: Boolean = true,
+		val decoderOperatingRate: Int = 0,
+		val decoderInputThreadEnabled: Boolean = true,
+		val debandingEnabled: Boolean = false
+	)
+	{
+		BALANCED("balanced", R.string.stream_quality_preset_balanced, Resolution.RES_1080P, FPS.FPS_60, Codec.CODEC_H265),
+		LOW_LATENCY("low_latency", R.string.stream_quality_preset_low_latency, Resolution.RES_720P, FPS.FPS_60, Codec.CODEC_H265),
+		DATA_SAVER("data_saver", R.string.stream_quality_preset_data_saver, Resolution.RES_540P, FPS.FPS_30, Codec.CODEC_H264)
+	}
+
 	companion object
 	{
 		val resolutionDefault = Resolution.RES_720P
@@ -86,6 +105,7 @@ class Preferences(context: Context)
 		val videoRecoveryStrategyAll = VideoRecoveryStrategy.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
+		val streamQualityPresetDefault = StreamQualityPreset.LOW_LATENCY
 		const val packetLossMaxPercentDefault = 5
 		const val audioBufferBurstsDefault = 0
 		const val audioFifoMsDefault = 171
@@ -523,6 +543,34 @@ class Preferences(context: Context)
 			Codec.values().firstOrNull { it.value == value }
 		}  ?: codecDefault
 		set(value) { sharedPreferences.edit().putString(codecKey, value.value).apply() }
+
+	val streamQualityPresetKey get() = resources.getString(R.string.preferences_stream_quality_preset_key)
+	var streamQualityPreset
+		get() = sharedPreferences.getString(streamQualityPresetKey, streamQualityPresetDefault.value)?.let { value ->
+			StreamQualityPreset.values().firstOrNull { it.value == value }
+		} ?: streamQualityPresetDefault
+		private set(value) { sharedPreferences.edit().putString(streamQualityPresetKey, value.value).apply() }
+
+	/**
+	 * Applies only the choices represented by a named preset. Experimental pacing, network, input,
+	 * and recovery settings remain untouched so selecting a quality preset cannot silently opt into
+	 * an unproven experiment.
+	 */
+	fun applyStreamQualityPreset(preset: StreamQualityPreset)
+	{
+		sharedPreferences.edit()
+			.putString(streamQualityPresetKey, preset.value)
+			.putString(resolutionKey, preset.resolution.value)
+			.putString(fpsKey, preset.fps.value)
+			.putString(codecKey, preset.codec.value)
+			.putInt(bitrateKey, preset.bitrate ?: 0)
+			.putBoolean(decoderOperatingRateDefaultKey, preset.decoderOperatingRateDefault)
+			.putBoolean(decoderOperatingRateAutoKey, preset.decoderOperatingRateAuto)
+			.putInt(decoderOperatingRateKey, preset.decoderOperatingRate)
+			.putBoolean(decoderInputThreadEnabledKey, preset.decoderInputThreadEnabled)
+			.putBoolean(debandingEnabledKey, preset.debandingEnabled)
+			.apply()
+	}
 
 	private val videoProfileDefaultBitrate get() = ConnectVideoProfile.preset(resolution.preset, fps.preset, codec.codec)
 	val videoProfile get() = videoProfileDefaultBitrate.let {

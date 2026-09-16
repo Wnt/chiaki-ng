@@ -48,7 +48,24 @@ class SettingsActivity: AppCompatActivity(), PreferenceFragmentCompat.OnPreferen
 			replaceFragment(SettingsRegisteredHostsFragment(), true)
 			true
 		}
+		SettingsLogsFragment::class.java.canonicalName -> {
+			replaceFragment(SettingsLogsFragment(), true)
+			true
+		}
+		ControllerSettingsFragment::class.java.canonicalName -> {
+			replaceFragment(ControllerSettingsFragment(), true)
+			true
+		}
+		ControllerMappingSettingsFragment::class.java.canonicalName -> {
+			replaceFragment(ControllerMappingSettingsFragment(), true)
+			true
+		}
 		else -> false
+	}
+
+	fun openDeveloperSettings()
+	{
+		replaceFragment(DeveloperSettingsFragment(), true)
 	}
 
 	private fun replaceFragment(fragment: Fragment, addToBackStack: Boolean)

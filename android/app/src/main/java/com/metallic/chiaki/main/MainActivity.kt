@@ -57,6 +57,7 @@ class MainActivity : AppCompatActivity()
 
 		title = ""
 		setSupportActionBar(binding.toolbar)
+		setupQualityPresetChooser()
 
 		binding.floatingActionButton.setOnClickListener {
 			expandFloatingActionButton(!binding.floatingActionButton.isExpanded)
@@ -122,6 +123,27 @@ class MainActivity : AppCompatActivity()
 				Toast.makeText(this, message, Toast.LENGTH_LONG).show()
 				viewModel.clearPsnMessage()
 			}
+		}
+	}
+
+	private fun setupQualityPresetChooser()
+	{
+		val preferences = Preferences(this)
+		val checkedButton = when(preferences.streamQualityPreset)
+		{
+			Preferences.StreamQualityPreset.BALANCED -> R.id.qualityPresetBalancedButton
+			Preferences.StreamQualityPreset.LOW_LATENCY -> R.id.qualityPresetLowLatencyButton
+			Preferences.StreamQualityPreset.DATA_SAVER -> R.id.qualityPresetDataSaverButton
+		}
+		binding.qualityPresetToggleGroup.check(checkedButton)
+		binding.qualityPresetBalancedButton.setOnClickListener {
+			preferences.applyStreamQualityPreset(Preferences.StreamQualityPreset.BALANCED)
+		}
+		binding.qualityPresetLowLatencyButton.setOnClickListener {
+			preferences.applyStreamQualityPreset(Preferences.StreamQualityPreset.LOW_LATENCY)
+		}
+		binding.qualityPresetDataSaverButton.setOnClickListener {
+			preferences.applyStreamQualityPreset(Preferences.StreamQualityPreset.DATA_SAVER)
 		}
 	}
 

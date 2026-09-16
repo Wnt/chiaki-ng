@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <PreferenceCategory
+        app:key="category_account"
+        app:title="@string/preferences_category_title_account">
+
+        <Preference
+            app:key="registered_hosts"
+            app:fragment="com.metallic.chiaki.settings.SettingsRegisteredHostsFragment"
+            app:icon="@drawable/ic_console_simple"
+            app:summary=" "
+            app:title="@string/preferences_registered_hosts_title"
+            tools:summary="@string/preferences_registered_hosts_summary" />
+
+        <SwitchPreference
+            app:key="@string/preferences_psn_sign_in_enabled_key"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_psn_id"
+            app:summary="@string/preferences_psn_sign_in_enabled_summary"
+            app:title="@string/preferences_psn_sign_in_enabled_title" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="category_controller_touch"
+        app:title="@string/preferences_category_title_controller_touch">
+
+        <Preference
+            app:key="controller_touch"
+            app:fragment="com.metallic.chiaki.settings.ControllerSettingsFragment"
+            app:icon="@drawable/ic_gamepad"
+            app:summary="@string/preferences_controller_touch_summary"
+            app:title="@string/preferences_category_title_controller_touch" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="category_about"
+        app:title="@string/preferences_category_title_about">
+
+        <Preference
+            app:key="about_version"
+            app:title="@string/preferences_version_title" />
+    </PreferenceCategory>
+</PreferenceScreen>
