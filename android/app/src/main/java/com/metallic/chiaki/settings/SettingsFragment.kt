@@ -39,6 +39,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
+		preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
 		else -> defValue
@@ -65,6 +66,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value
+			preferences.gamepadUnbufferedDispatchEnabledKey -> preferences.gamepadUnbufferedDispatchEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
 		}
