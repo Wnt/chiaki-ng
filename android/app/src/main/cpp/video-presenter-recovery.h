@@ -19,7 +19,6 @@ typedef enum android_chiaki_video_recovery_strategy_t
 typedef enum android_chiaki_video_recovery_action_t
 {
 	ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE = 0,
-	ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_DROP_HEAD = 1,
 	ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_FLUSH_QUEUE = 2,
 } AndroidChiakiVideoRecoveryAction;
 

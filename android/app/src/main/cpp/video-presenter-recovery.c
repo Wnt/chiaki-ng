@@ -2,8 +2,6 @@
 
 #include "video-presenter-recovery.h"
 
-#define PACING_MODE_BALANCED 2
-
 AndroidChiakiVideoRecoveryStrategy android_chiaki_video_recovery_sanitize_strategy(int strategy)
 {
 	if(strategy != (int)ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH)
@@ -14,10 +12,9 @@ AndroidChiakiVideoRecoveryStrategy android_chiaki_video_recovery_sanitize_strate
 AndroidChiakiVideoRecoveryAction android_chiaki_video_recovery_action(
 		AndroidChiakiVideoRecoveryStrategy strategy, int pacing_mode)
 {
+	(void)pacing_mode;
 	if(strategy == ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH)
 		return ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_FLUSH_QUEUE;
-	if(pacing_mode == PACING_MODE_BALANCED)
-		return ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_DROP_HEAD;
 	return ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE;
 }
 
