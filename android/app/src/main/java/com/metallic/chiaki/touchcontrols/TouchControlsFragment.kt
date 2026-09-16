@@ -7,6 +7,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import com.metallic.chiaki.databinding.FragmentControlsBinding
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlin.math.max
 
 abstract class TouchControlsFragment : Fragment()
 {
@@ -38,6 +41,7 @@ abstract class TouchControlsFragment : Fragment()
 		_controllerStateSource.flatMapLatest { it }
 
 	var onScreenControlsEnabled: LiveData<Boolean>? = null
+	var overlayRevealRequested: (() -> Unit)? = null
 }
 
 class DefaultTouchControlsFragment : TouchControlsFragment()
@@ -56,6 +60,21 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?)
 	{
 		super.onViewCreated(view, savedInstanceState)
+		binding.controlsBackgroundView.setOnClickListener { overlayRevealRequested?.invoke() }
+		ViewCompat.setOnApplyWindowInsetsListener(view) { safeView, insets ->
+			val safe = insets.getInsetsIgnoringVisibility(
+				WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+			)
+			val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
+			safeView.setPadding(
+				max(safe.left, gestures.left),
+				max(safe.top, gestures.top),
+				max(safe.right, gestures.right),
+				max(safe.bottom, gestures.bottom)
+			)
+			insets
+		}
+		ViewCompat.requestApplyInsets(view)
 		binding.dpadView.stateChangeCallback = this::dpadStateChanged
 		binding.crossButtonView.buttonPressedCallback = buttonStateChanged(ControllerState.BUTTON_CROSS)
 		binding.moonButtonView.buttonPressedCallback = buttonStateChanged(ControllerState.BUTTON_MOON)
