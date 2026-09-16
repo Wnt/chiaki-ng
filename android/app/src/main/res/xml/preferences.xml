@@ -29,14 +29,6 @@
             app:icon="@drawable/ic_psn_id" />
 
         <SwitchPreference
-            app:key="@string/preferences_psn_reliable_redirect_enabled_key"
-            app:title="@string/preferences_psn_reliable_redirect_enabled_title"
-            app:summary="@string/preferences_psn_reliable_redirect_enabled_summary"
-            app:dependency="@string/preferences_psn_sign_in_enabled_key"
-            app:defaultValue="false"
-            app:icon="@drawable/ic_psn_id" />
-
-        <SwitchPreference
             app:key="@string/preferences_psn_remote_play_enabled_key"
             app:title="@string/preferences_psn_remote_play_enabled_title"
             app:summary="@string/preferences_psn_remote_play_enabled_summary"

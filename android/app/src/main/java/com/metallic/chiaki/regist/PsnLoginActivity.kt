@@ -111,7 +111,6 @@ class PsnLoginActivity : AppCompatActivity()
 	{
 		super.onResume()
 		if(!shouldHandlePsnBrowserReturn(
-			reliableRedirectEnabled,
 			embeddedBrowser,
 			handlingRedirect,
 			externalLoginLaunched,
@@ -213,7 +212,7 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun prepareExternalLogin()
 	{
-		if(reliableRedirectEnabled && !isPsnRedirectAppLinkAllowed(this))
+		if(!isPsnRedirectAppLinkAllowed(this))
 		{
 			showExternalInstructions(R.string.psn_login_link_settings_instructions)
 			binding.openSignInButton.setText(R.string.action_open_link_settings)
@@ -267,10 +266,7 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun showPasteError(message: Int)
 	{
-		if(reliableRedirectEnabled)
-			showExternalInstructions(message)
-		else
-			binding.redirectUrl.error = getString(message)
+		showExternalInstructions(message)
 	}
 
 	private fun consumeClipboardRedirect(): Boolean
@@ -332,11 +328,8 @@ class PsnLoginActivity : AppCompatActivity()
 					setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_ACCOUNT_ID, result.accountId))
 					finish()
 				}
-				.onFailure { error ->
-					showError(
-						if(reliableRedirectEnabled) getString(R.string.psn_login_link_expired)
-						else error.message ?: getString(R.string.psn_login_failed)
-					)
+				.onFailure {
+					showError(getString(R.string.psn_login_link_expired))
 				}
 		}
 	}
@@ -380,16 +373,9 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.progressBar.visibility = View.GONE
 		binding.webView.visibility = View.GONE
 		binding.externalLoginContainer.visibility = View.VISIBLE
-		binding.externalInstructions.setText(
-			message ?: if(reliableRedirectEnabled)
-				R.string.psn_login_reliable_instructions
-			else
-				R.string.psn_login_external_instructions
-		)
-		binding.redirectUrl.visibility = if(reliableRedirectEnabled) View.GONE else View.VISIBLE
-		binding.pasteAddressButton.setText(
-			if(reliableRedirectEnabled) R.string.action_paste_sign_in_link else R.string.action_paste_address
-		)
+		binding.externalInstructions.setText(message ?: R.string.psn_login_reliable_instructions)
+		binding.redirectUrl.visibility = View.GONE
+		binding.pasteAddressButton.setText(R.string.action_paste_sign_in_link)
 		binding.openSignInButton.setText(R.string.action_open_psn_sign_in)
 		binding.continueWithoutAppLinksButton.visibility = View.GONE
 	}
@@ -418,9 +404,6 @@ class PsnLoginActivity : AppCompatActivity()
 			binding.webView.saveState(outState)
 		super.onSaveInstanceState(outState)
 	}
-
-	private val reliableRedirectEnabled: Boolean
-		get() = Preferences(this).psnReliableRedirectEnabled
 
 	override fun onDestroy()
 	{

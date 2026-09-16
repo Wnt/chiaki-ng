@@ -32,12 +32,11 @@ internal fun isPsnRedirectDomainAllowed(linkHandlingAllowed: Boolean, hostState:
 	linkHandlingAllowed && (hostState == 1 || hostState == 2)
 
 internal fun shouldHandlePsnBrowserReturn(
-	reliableRedirectEnabled: Boolean,
 	embeddedBrowser: Boolean,
 	handlingRedirect: Boolean,
 	externalLoginLaunched: Boolean,
 	browserPauseObserved: Boolean
-): Boolean = reliableRedirectEnabled && !embeddedBrowser && !handlingRedirect &&
+): Boolean = !embeddedBrowser && !handlingRedirect &&
 	externalLoginLaunched && browserPauseObserved
 
 @RequiresApi(Build.VERSION_CODES.S)
