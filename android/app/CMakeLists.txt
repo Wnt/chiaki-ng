@@ -12,6 +12,8 @@ add_library(chiaki-jni SHARED
         src/main/cpp/video-presenter.h
         src/main/cpp/video-presenter-age.h
         src/main/cpp/video-presenter-age.c
+        src/main/cpp/video-presenter-histogram.h
+        src/main/cpp/video-presenter-histogram.c
         src/main/cpp/video-presenter.c
         src/main/cpp/audio-decoder.h
         src/main/cpp/audio-decoder.c
