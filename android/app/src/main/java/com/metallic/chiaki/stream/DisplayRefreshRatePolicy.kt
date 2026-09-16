@@ -15,3 +15,15 @@ internal fun effectiveDisplayRefreshRateMode(
 		Preferences.DisplayRefreshRateMode.HIGHEST
 	else
 		configuredMode
+
+internal fun presenterDisplayTimingUpdatesEnabled(
+	configuredMode: Preferences.DisplayRefreshRateMode,
+	videoPacingEnabled: Boolean
+): Boolean = videoPacingEnabled || configuredMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM
+
+internal fun displayTimingChanged(
+	oldRefreshHz: Double,
+	oldAppVsyncOffsetNanos: Long,
+	newRefreshHz: Double,
+	newAppVsyncOffsetNanos: Long
+): Boolean = oldRefreshHz != newRefreshHz || oldAppVsyncOffsetNanos != newAppVsyncOffsetNanos
