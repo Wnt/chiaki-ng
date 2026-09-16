@@ -32,21 +32,6 @@ class AspectRatioFrameLayout @JvmOverloads constructor(context: Context, attrs: 
 			}
 		}
 
-	/**
-	 * A portrait stream with touch controls needs a finite video region so the controls can use
-	 * the rest of the window. Keep this opt-in: the established transform-mode behaviour remains
-	 * unchanged for the A/B baseline and for every landscape layout.
-	 */
-	var forceFitInPortrait = false
-		set(value)
-		{
-			if(field != value)
-			{
-				field = value
-				requestLayout()
-			}
-		}
-
 	override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int)
 	{
 		super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -61,7 +46,9 @@ class AspectRatioFrameLayout @JvmOverloads constructor(context: Context, attrs: 
 		val aspectDeformation = aspectRatio / viewAspectRatio - 1
 		if(Math.abs(aspectDeformation) <= MAX_ASPECT_RATIO_DEFORMATION_FRACTION)
 			return
-		val measureMode = if(forceFitInPortrait && height > width) TransformMode.FIT else mode
+		// A portrait window always fits the video, whatever the transform mode: the video keeps a
+		// finite height at the top and the touch controls own the rest of the window (PLE-341).
+		val measureMode = if(height > width) TransformMode.FIT else mode
 		when(measureMode)
 		{
 			TransformMode.ZOOM -> 
