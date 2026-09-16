@@ -119,7 +119,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_thread_set_name(ChiakiThread *thread, const
 	SetThreadDescription(thread->thread, wstr);
 	free(wstr);
 #else
-#ifdef __GLIBC__
+#if defined(__GLIBC__) || defined(__ANDROID__)
 	int r = pthread_setname_np(thread->thread, name);
 	if(r != 0)
 		return CHIAKI_ERR_THREAD;
