@@ -719,12 +719,12 @@ JNIEXPORT jint JNICALL JNI_FCN(sessionSetRemoteDataSocket)(JNIEnv *env, jobject 
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface,
-		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode)
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode, jint presenter_lead)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
 	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface,
 			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
-			(AndroidChiakiVideoPacingMode)pacing_mode);
+			(AndroidChiakiVideoPacingMode)pacing_mode, (AndroidChiakiVideoPresenterLead)presenter_lead);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetPacingMode)(JNIEnv *env, jobject obj, jlong ptr, jint pacing_mode)

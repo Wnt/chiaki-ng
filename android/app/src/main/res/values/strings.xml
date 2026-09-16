@@ -103,6 +103,9 @@
 	<string name="preferences_video_pacing_mode_title_lowest_latency">Lowest latency</string>
 	<string name="preferences_video_pacing_mode_title_balanced">Balanced</string>
 	<string name="preferences_video_pacing_mode_title_smoothest">Smoothest</string>
+	<string name="preferences_video_presenter_lead_title">Video presenter lead</string>
+	<string name="preferences_video_presenter_lead_title_2ms">2 ms</string>
+	<string name="preferences_video_presenter_lead_title_half_vsync">Half vsync period</string>
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
     <string name="preferences_packet_loss_max_percent_summary">Cap the packet loss reported to the console every 200ms (0-100). Lower values trade occasional artifacts for a steadier bitrate on lossy Wi-Fi.</string>
     <string name="preferences_packet_loss_max_percent_value">%d%%</string>
@@ -200,6 +203,7 @@
     <string name="preferences_decoder_late_frame_recovery_enabled_key">stream_decoder_late_frame_recovery</string>
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>
+	<string name="preferences_video_presenter_lead_key">stream_video_presenter_lead</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>

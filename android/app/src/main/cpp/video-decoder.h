@@ -86,7 +86,7 @@ void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode pacing_mode);
+		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead);
 void android_chiaki_video_decoder_set_pacing_mode(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoPacingMode pacing_mode);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);

@@ -84,6 +84,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.fpsKey -> preferences.fps.value
 		key == preferences.displayRefreshRateModeKey -> preferences.displayRefreshRateMode.value
 		key == preferences.videoPacingModeKey -> preferences.videoPacingMode.value
+		key == preferences.videoPresenterLeadKey -> preferences.videoPresenterLead.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.audioBufferBurstsKey -> preferences.audioBufferBursts.toString()
@@ -116,6 +117,11 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val mode = Preferences.VideoPacingMode.values().firstOrNull { it.value == value } ?: return
 				preferences.videoPacingMode = mode
+			}
+			key == preferences.videoPresenterLeadKey ->
+			{
+				val lead = Preferences.VideoPresenterLead.values().firstOrNull { it.value == value } ?: return
+				preferences.videoPresenterLead = lead
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
 			key == preferences.packetLossMaxPercentKey ->
@@ -179,6 +185,11 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_pacing_mode_key))?.let {
 			it.entryValues = Preferences.videoPacingModeAll.map { mode -> mode.value }.toTypedArray()
 			it.entries = Preferences.videoPacingModeAll.map { mode -> getString(mode.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_presenter_lead_key))?.let {
+			it.entryValues = Preferences.videoPresenterLeadAll.map { lead -> lead.value }.toTypedArray()
+			it.entries = Preferences.videoPresenterLeadAll.map { lead -> getString(lead.title) }.toTypedArray()
 		}
 
 		val bitratePreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_bitrate_key))

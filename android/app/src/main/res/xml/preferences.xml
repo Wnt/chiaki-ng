@@ -176,6 +176,14 @@
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
+		<ListPreference
+			app:key="@string/preferences_video_presenter_lead_key"
+			app:title="@string/preferences_video_presenter_lead_title"
+			app:summary="%s"
+			app:defaultValue="2ms"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
         <SwitchPreference
             app:key="preferences_stream_window_optimizations_enabled"
             app:title="Stream Window Optimizations"
