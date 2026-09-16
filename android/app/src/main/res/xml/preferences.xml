@@ -123,7 +123,7 @@
         <SwitchPreference
             app:key="@string/preferences_real_video_timestamps_key"
             app:title="@string/preferences_real_video_timestamps_title"
-            app:summary="@string/preferences_real_video_timestamps_summary"
+            app:summary="@string/preferences_real_video_timestamps_summary_synthetic"
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
 
