@@ -15,7 +15,14 @@ The app opens with one clear path into Remote Play. After sign-in, the home scre
   <img src="docs/screenshots/settings.png" width="30%" alt="Pleikkari Android settings screen with account, controller and about sections">
 </p>
 
-These are Android emulator captures of the static interface. Stream controls and the end-of-stream summary are not shown because they require a real Remote Play session.
+The three static-interface images above are Android emulator captures.
+
+<p align="center">
+  <img src="docs/screenshots/stream-overlay.jpg" width="46%" alt="Live PS5 Remote Play session on a Galaxy S22 Ultra with the in-stream control dock and network-quality chip visible">
+  <img src="docs/screenshots/stream-summary.png" width="46%" alt="Pleikkari Android stream-end summary showing session duration, average latency, dropped frames, and network quality">
+</p>
+
+These two images are from a real Remote Play session between the Galaxy S22 Ultra and PS5-466: the in-stream controls with their network-quality chip, followed by the stream-end summary.
 
 ## Download
 
