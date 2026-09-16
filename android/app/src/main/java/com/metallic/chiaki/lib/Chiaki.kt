@@ -79,7 +79,10 @@ data class ConnectInfo(
 ): Parcelable
 
 data class VideoStats(
-	val decoderInputFramesDropped: Long
+	val decoderInputFramesDropped: Long,
+	val missedVsyncs: Long,
+	val presenterFramesDropped: Long,
+	val dejitterBufferNanos: Long
 )
 
 private class ChiakiNative
@@ -100,7 +103,9 @@ private class ChiakiNative
 		@JvmStatic external fun sessionStart(ptr: Long): Int
 		@JvmStatic external fun sessionStop(ptr: Long): Int
 		@JvmStatic external fun sessionJoin(ptr: Long): Int
-		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?)
+		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
+			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int)
+		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
 		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
 		@JvmStatic external fun sessionSetLoginPin(ptr: Long, pin: String)
@@ -388,10 +393,13 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		event(RumbleEvent(left.toUByte(), right.toUByte()))
 	}
 
-	fun setSurface(surface: Surface?)
+	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
+		pacingMode: Int)
 	{
-		ChiakiNative.sessionSetSurface(nativePtr, surface)
+		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos, pacingMode)
 	}
+
+	fun setPacingMode(pacingMode: Int) = ChiakiNative.sessionSetPacingMode(nativePtr, pacingMode)
 
 	fun getVideoStats() = ChiakiNative.sessionGetVideoStats(nativePtr)
 

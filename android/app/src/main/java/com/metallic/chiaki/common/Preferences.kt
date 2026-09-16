@@ -40,6 +40,13 @@ class Preferences(context: Context)
 		HIGHEST("highest", R.string.preferences_display_refresh_rate_title_highest)
 	}
 
+	enum class VideoPacingMode(val value: String, val nativeValue: Int, @StringRes val title: Int)
+	{
+		LOWEST_LATENCY("lowest_latency", 1, R.string.preferences_video_pacing_mode_title_lowest_latency),
+		BALANCED("balanced", 2, R.string.preferences_video_pacing_mode_title_balanced),
+		SMOOTHEST("smoothest", 3, R.string.preferences_video_pacing_mode_title_smoothest)
+	}
+
 	enum class Codec(val value: String, @StringRes val title: Int, val codec: com.metallic.chiaki.lib.Codec)
 	{
 		CODEC_H264("h264", R.string.preferences_codec_title_h264, com.metallic.chiaki.lib.Codec.CODEC_H264),
@@ -54,6 +61,8 @@ class Preferences(context: Context)
 		val fpsAll = FPS.values()
 		val displayRefreshRateModeDefault = DisplayRefreshRateMode.SYSTEM_DEFAULT
 		val displayRefreshRateModeAll = DisplayRefreshRateMode.values()
+		val videoPacingModeDefault = VideoPacingMode.BALANCED
+		val videoPacingModeAll = VideoPacingMode.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 		const val packetLossMaxPercentDefault = 5
@@ -161,6 +170,11 @@ class Preferences(context: Context)
 	var decoderLateFrameRecoveryEnabled
 		get() = sharedPreferences.getBoolean(decoderLateFrameRecoveryEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLateFrameRecoveryEnabledKey, value).apply() }
+
+	val videoPacingEnabledKey get() = resources.getString(R.string.preferences_video_pacing_enabled_key)
+	var videoPacingEnabled
+		get() = sharedPreferences.getBoolean(videoPacingEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoPacingEnabledKey, value).apply() }
 
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
@@ -274,6 +288,13 @@ class Preferences(context: Context)
 			DisplayRefreshRateMode.values().firstOrNull { it.value == value }
 		} ?: displayRefreshRateModeDefault
 		set(value) { sharedPreferences.edit().putString(displayRefreshRateModeKey, value.value).apply() }
+
+	val videoPacingModeKey get() = resources.getString(R.string.preferences_video_pacing_mode_key)
+	var videoPacingMode
+		get() = sharedPreferences.getString(videoPacingModeKey, videoPacingModeDefault.value)?.let { value ->
+			VideoPacingMode.values().firstOrNull { it.value == value }
+		} ?: videoPacingModeDefault
+		set(value) { sharedPreferences.edit().putString(videoPacingModeKey, value.value).apply() }
 
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)

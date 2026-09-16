@@ -36,6 +36,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
+		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
 		else -> defValue
@@ -59,6 +60,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled = value
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
+			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
 		}
@@ -73,6 +75,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.resolutionKey -> preferences.resolution.value
 		key == preferences.fpsKey -> preferences.fps.value
 		key == preferences.displayRefreshRateModeKey -> preferences.displayRefreshRateMode.value
+		key == preferences.videoPacingModeKey -> preferences.videoPacingMode.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
 		key == preferences.codecKey -> preferences.codec.value
@@ -98,6 +101,11 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			{
 				val mode = Preferences.DisplayRefreshRateMode.values().firstOrNull { it.value == value } ?: return
 				preferences.displayRefreshRateMode = mode
+			}
+			key == preferences.videoPacingModeKey ->
+			{
+				val mode = Preferences.VideoPacingMode.values().firstOrNull { it.value == value } ?: return
+				preferences.videoPacingMode = mode
 			}
 			key == preferences.bitrateKey -> preferences.bitrate = value?.toIntOrNull()
 			key == preferences.packetLossMaxPercentKey ->
@@ -148,6 +156,11 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_display_refresh_rate_key))?.let {
 			it.entryValues = Preferences.displayRefreshRateModeAll.map { mode -> mode.value }.toTypedArray()
 			it.entries = Preferences.displayRefreshRateModeAll.map { mode -> getString(mode.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_pacing_mode_key))?.let {
+			it.entryValues = Preferences.videoPacingModeAll.map { mode -> mode.value }.toTypedArray()
+			it.entries = Preferences.videoPacingModeAll.map { mode -> getString(mode.title) }.toTypedArray()
 		}
 
 		val bitratePreference = preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_bitrate_key))
