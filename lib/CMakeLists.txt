@@ -87,9 +87,12 @@ set(SOURCE_FILES
 		src/bitstream.c
 		src/aia.c
 		src/aia.h
-		src/remote/holepunch.c
 		src/remote/rudp.c
 		src/remote/rudpsendbuffer.c)
+
+if(NOT CHIAKI_ENABLE_ANDROID)
+	list(APPEND SOURCE_FILES src/remote/holepunch.c)
+endif()
 
 if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)
 	list(APPEND SOURCE_FILES src/aia_openssl.c)
@@ -147,7 +150,10 @@ target_include_directories(chiaki-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/includ
 find_package(Threads REQUIRED)
 target_link_libraries(chiaki-lib Threads::Threads)
 
-if(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT)
+if(CHIAKI_ENABLE_ANDROID)
+	# Android owns the PSN control plane in Kotlin; holepunch.c and its JSON/UPnP
+	# dependencies are deliberately absent from the NDK data-plane build.
+elseif(CHIAKI_LIB_JSONC_EXTERNAL_PROJECT)
 	target_link_libraries(chiaki-lib json-c)
 	target_include_directories(chiaki-lib PRIVATE "${JSONC_PREFIX_INCLUDE_DIR}")
 	target_include_directories(chiaki-lib PRIVATE "${json-c_BINARY_DIR}")
@@ -162,7 +168,9 @@ else()
 	target_link_libraries(chiaki-lib PkgConfig::json-c)
 endif()
 
-if(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT)
+if(CHIAKI_ENABLE_ANDROID)
+	# See the JSON-C condition above.
+elseif(CHIAKI_LIB_MINIUPNPC_EXTERNAL_PROJECT)
 	target_link_libraries(chiaki-lib libminiupnpc-static)
 	target_include_directories(chiaki-lib PRIVATE "${MINIUPNPC_PREFIX_INCLUDE_DIR}")
 else()

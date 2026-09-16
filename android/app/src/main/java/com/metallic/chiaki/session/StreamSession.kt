@@ -99,6 +99,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 				)
 			)
 			is RumbleEvent -> _rumbleState.postValue(event)
+			is RemoteDataSocketNeededEvent -> Unit // handled by the PSN control-plane bridge
 		}
 	}
 

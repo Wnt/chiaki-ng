@@ -1296,7 +1296,13 @@ static ChiakiErrorCode ctrl_connect(ChiakiCtrl *ctrl)
 	else
 		path = "/sie/ps4/rp/sess/ctrl";
 	const char *rp_version = chiaki_rp_version_string(session->target);
-	int port = session->holepunch_session ? chiaki_get_ps_ctrl_port(session->holepunch_session) : SESSION_CTRL_PORT;
+	int port = SESSION_CTRL_PORT;
+	if(session->remote_connection)
+		port = session->remote_connection_info.ctrl_port;
+#ifndef __ANDROID__
+	else if(session->holepunch_session)
+		port = chiaki_get_ps_ctrl_port(session->holepunch_session);
+#endif
 	char send_buf[512];
 	int request_len = snprintf(send_buf, sizeof(send_buf), request_fmt,
 			path, session->connect_info.hostname, port, auth_b64,

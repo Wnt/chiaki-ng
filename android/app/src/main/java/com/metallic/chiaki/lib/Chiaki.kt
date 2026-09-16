@@ -78,6 +78,17 @@ data class ConnectInfo(
 	val feedbackStateMinIntervalMs: Int = 0
 ): Parcelable
 
+data class NativeRemoteConnection(
+	val controlFd: Int,
+	val psnAccountId: ByteArray,
+	val selectedAddress: String,
+	val controlPort: Int,
+	val data1: ByteArray,
+	val data2: ByteArray,
+	val customData1: ByteArray,
+	val localAddress: String
+)
+
 data class VideoStats(
 	val decoderInputFramesDropped: Long,
 	val missedVsyncs: Long,
@@ -99,10 +110,14 @@ private class ChiakiNative
 		@JvmStatic external fun quitReasonIsError(value: Int): Boolean
 		@JvmStatic external fun videoProfilePreset(resolutionPreset: Int, fpsPreset: Int, codec: Codec): ConnectVideoProfile
 		@JvmStatic external fun sessionCreate(result: CreateResult, connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean, decoderInputThread: Boolean, javaSession: Session)
+		@JvmStatic external fun sessionCreateRemote(result: CreateResult, connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean, decoderInputThread: Boolean,
+			controlFd: Int, psnAccountId: ByteArray, selectedAddress: String, controlPort: Int,
+			data1: ByteArray, data2: ByteArray, customData1: ByteArray, localAddress: String, javaSession: Session)
 		@JvmStatic external fun sessionFree(ptr: Long)
 		@JvmStatic external fun sessionStart(ptr: Long): Int
 		@JvmStatic external fun sessionStop(ptr: Long): Int
 		@JvmStatic external fun sessionJoin(ptr: Long): Int
+		@JvmStatic external fun sessionSetRemoteDataSocket(ptr: Long, fd: Int): Int
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
 			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int)
 		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
@@ -333,10 +348,12 @@ object ConnectedEvent: Event()
 data class LoginPinRequestEvent(val pinIncorrect: Boolean): Event()
 data class QuitEvent(val reason: QuitReason, val reasonString: String?): Event()
 data class RumbleEvent(val left: UByte, val right: UByte): Event()
+object RemoteDataSocketNeededEvent: Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
-class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean = false, decoderInputThread: Boolean = false)
+class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, realVideoTimestamps: Boolean = false,
+	decoderInputThread: Boolean = false, remoteConnection: NativeRemoteConnection? = null)
 {
 	interface EventCallback
 	{
@@ -349,7 +366,16 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	init
 	{
 		val result = ChiakiNative.CreateResult(0, 0)
-		ChiakiNative.sessionCreate(result, connectInfo, logFile, logVerbose, realVideoTimestamps, decoderInputThread, this)
+		if(remoteConnection == null)
+			ChiakiNative.sessionCreate(result, connectInfo, logFile, logVerbose, realVideoTimestamps, decoderInputThread, this)
+		else
+			ChiakiNative.sessionCreateRemote(
+				result, connectInfo, logFile, logVerbose, realVideoTimestamps, decoderInputThread,
+				remoteConnection.controlFd, remoteConnection.psnAccountId,
+				remoteConnection.selectedAddress, remoteConnection.controlPort,
+				remoteConnection.data1, remoteConnection.data2, remoteConnection.customData1,
+				remoteConnection.localAddress, this
+			)
 		val errorCode = ErrorCode(result.errorCode)
 		if(!errorCode.isSuccess)
 			throw CreateError(errorCode)
@@ -359,11 +385,12 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	fun start() = ErrorCode(ChiakiNative.sessionStart(nativePtr))
 	fun stop() = ErrorCode(ChiakiNative.sessionStop(nativePtr))
 
-	fun dispose()
+	fun dispose(join: Boolean = true)
 	{
 		if(nativePtr == 0L)
 			return
-		ChiakiNative.sessionJoin(nativePtr)
+		if(join)
+			ChiakiNative.sessionJoin(nativePtr)
 		ChiakiNative.sessionFree(nativePtr)
 		nativePtr = 0L
 	}
@@ -392,6 +419,14 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	{
 		event(RumbleEvent(left.toUByte(), right.toUByte()))
 	}
+
+	private fun eventRemoteDataSocketNeeded()
+	{
+		event(RemoteDataSocketNeededEvent)
+	}
+
+	/** Native takes ownership of fd only when the returned error is successful. */
+	fun setRemoteDataSocket(fd: Int) = ErrorCode(ChiakiNative.sessionSetRemoteDataSocket(nativePtr, fd))
 
 	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
 		pacingMode: Int)
