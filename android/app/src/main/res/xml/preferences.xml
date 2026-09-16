@@ -209,6 +209,20 @@
             app:summary="@string/preferences_feedback_stats_log_enabled_summary"
             app:defaultValue="false"
             app:icon="@drawable/ic_gamepad" />
+
+		<EditTextPreference
+			app:key="@string/preferences_audio_buffer_bursts_key"
+			app:title="@string/preferences_audio_buffer_bursts_title"
+			app:summary="@string/preferences_audio_buffer_bursts_summary"
+			app:defaultValue="0"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_audio_fifo_ms_key"
+			app:title="@string/preferences_audio_fifo_ms_title"
+			app:summary="@string/preferences_audio_fifo_ms_summary"
+			app:defaultValue="171"
+			app:icon="@drawable/ic_fps" />
     </PreferenceCategory>
 
     <PreferenceCategory

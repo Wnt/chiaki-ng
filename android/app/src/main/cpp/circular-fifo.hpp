@@ -35,6 +35,7 @@ public:
   bool wasEmpty() const;
   bool wasFull() const;
   bool isLockFree() const;
+  void reset();
 
 private:
   size_t increment(size_t idx) const; 
@@ -96,6 +97,13 @@ template<typename Element, size_t Size>
 bool CircularFifo<Element, Size>::isLockFree() const
 {
   return (_tail.is_lock_free() && _head.is_lock_free());
+}
+
+template<typename Element, size_t Size>
+void CircularFifo<Element, Size>::reset()
+{
+  _tail.store(0, std::memory_order_relaxed);
+  _head.store(0, std::memory_order_relaxed);
 }
 
 template<typename Element, size_t Size>
