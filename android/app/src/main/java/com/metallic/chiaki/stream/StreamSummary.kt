@@ -14,7 +14,9 @@ data class StreamSummary(
 	val durationMillis: Long,
 	val averageLatencyMillis: Double?,
 	val droppedFrames: Long,
-	val quality: StreamSummaryQuality
+	val quality: StreamSummaryQuality,
+	/** PLE-262: set when the console ended the stream, so the home screen can name the cause. */
+	val endReason: StreamEndReason? = null
 ): Parcelable
 
 internal class StreamSummaryAccumulator

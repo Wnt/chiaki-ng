@@ -6,6 +6,7 @@ import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
@@ -33,6 +34,10 @@ import com.metallic.chiaki.remote.AndroidPsnRemoteClient
 import com.metallic.chiaki.remote.PsnDevice
 import com.metallic.chiaki.settings.SettingsActivity
 import com.metallic.chiaki.stream.StreamActivity
+import com.metallic.chiaki.stream.ConsoleDiscoveryProbe
+import com.metallic.chiaki.stream.StreamEndCause
+import com.metallic.chiaki.stream.StreamEndCauseClassifier
+import com.metallic.chiaki.stream.StreamEndReason
 import com.metallic.chiaki.stream.StreamSummary
 import com.metallic.chiaki.stream.StreamSummaryFormatter
 import com.metallic.chiaki.stream.StreamSummaryQuality
@@ -328,7 +333,36 @@ class MainActivity : AppCompatActivity()
 			StreamSummaryQuality.POOR -> R.string.network_quality_poor
 			StreamSummaryQuality.UNKNOWN -> R.string.network_quality_unknown
 		})
+		binding.summaryEndCause.visibility = View.GONE
 		binding.streamSummaryCard.visibility = View.VISIBLE
+		summary.endReason?.let { explainStreamEnd(it) }
+	}
+
+	/**
+	 * PLE-262: the console ended the stream. Ask it over discovery whether it is still awake
+	 * (taken over on the TV) or went to rest, log the verdict for the A/B harness, and name it.
+	 */
+	private fun explainStreamEnd(reason: StreamEndReason)
+	{
+		if(!preferences.streamEndCauseProbeEnabled || !StreamEndCauseClassifier.needsProbe(reason))
+			return
+		Thread({
+			val probes = ConsoleDiscoveryProbe.probeSeries(reason.host, reason.ps5)
+			val cause = StreamEndCauseClassifier.classify(reason, probes)
+			Log.i(StreamEndCauseClassifier.LOG_TAG, StreamEndCauseClassifier.logLine(cause, reason, probes))
+			val message = when(cause)
+			{
+				StreamEndCause.CONSOLE_TAKEOVER -> R.string.stream_summary_end_console_takeover
+				StreamEndCause.CONSOLE_REST -> R.string.stream_summary_end_console_rest
+				else -> return@Thread
+			}
+			runOnUiThread {
+				if(isDestroyed)
+					return@runOnUiThread
+				binding.summaryEndCause.setText(message)
+				binding.summaryEndCause.visibility = View.VISIBLE
+			}
+		}, "StreamEndCauseProbe").start()
 	}
 
 	private fun showAddConsoleMenu()

@@ -171,6 +171,31 @@ CHIAKI_EXPORT const char *chiaki_quit_reason_string(ChiakiQuitReason reason)
 	}
 }
 
+// Stable machine-readable token for the quit reason, logged once per session end
+// so scripts (scripts/dev/ab/summarize.py) can tell a console-side end from a
+// network or client failure without parsing the human string above.
+static const char *quit_reason_token(ChiakiQuitReason reason)
+{
+	switch(reason)
+	{
+		case CHIAKI_QUIT_REASON_STOPPED: return "stopped";
+		case CHIAKI_QUIT_REASON_SESSION_REQUEST_UNKNOWN: return "session_request_unknown";
+		case CHIAKI_QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED: return "session_request_connection_refused";
+		case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_IN_USE: return "session_request_rp_in_use";
+		case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_CRASH: return "session_request_rp_crash";
+		case CHIAKI_QUIT_REASON_SESSION_REQUEST_RP_VERSION_MISMATCH: return "session_request_rp_version_mismatch";
+		case CHIAKI_QUIT_REASON_CTRL_UNKNOWN: return "ctrl_unknown";
+		case CHIAKI_QUIT_REASON_CTRL_CONNECT_FAILED: return "ctrl_connect_failed";
+		case CHIAKI_QUIT_REASON_CTRL_CONNECTION_REFUSED: return "ctrl_connection_refused";
+		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_UNKNOWN: return "stream_connection_unknown";
+		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED: return "remote_disconnected";
+		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN: return "remote_shutdown";
+		case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED: return "psn_regist_failed";
+		case CHIAKI_QUIT_REASON_NONE:
+		default: return "none";
+	}
+}
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, ChiakiConnectInfo *connect_info,
 	ChiakiLog *log)
 {
@@ -800,6 +825,9 @@ quit:
 
 	CHIAKI_LOGI(session->log, "Session has quit");
 	chiaki_mutex_lock(&session->state_mutex);
+	CHIAKI_LOGI(session->log, "Session quit: reason=%s remote_reason=\"%s\"",
+		quit_reason_token(session->quit_reason),
+		session->quit_reason_str ? session->quit_reason_str : "");
 	quit_event.type = CHIAKI_EVENT_QUIT;
 	quit_event.quit.reason = session->quit_reason;
 	quit_event.quit.reason_str = session->quit_reason_str;
