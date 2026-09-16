@@ -112,6 +112,8 @@
 	<string name="preferences_video_recovery_strategy_title_flush">Flush queue</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_title">Bound paced-frame age</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_summary">Drop queued head frames that are too old relative to the newest decoded frame (experimental; reconnect required)</string>
+	<string name="preferences_video_presenter_nonblocking_producer_title">Non-blocking video producer</string>
+	<string name="preferences_video_presenter_nonblocking_producer_summary">Drop the oldest queued frame instead of blocking the decoder output thread when the paced queue is full (experimental; reconnect required)</string>
 	<string name="preferences_video_pacing_max_frame_age_periods_title">Maximum paced-frame age</string>
 	<string name="preferences_video_pacing_max_frame_age_periods_value">%d frame periods (1–10)</string>
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
@@ -224,6 +226,7 @@
 	<string name="preferences_video_presenter_lead_key">stream_video_presenter_lead</string>
 	<string name="preferences_video_recovery_strategy_key">stream_video_recovery_strategy</string>
 	<string name="preferences_video_pacing_bounded_age_enabled_key">stream_video_pacing_bounded_age</string>
+	<string name="preferences_video_presenter_nonblocking_producer_key">stream_video_presenter_nonblocking_producer</string>
 	<string name="preferences_video_pacing_max_frame_age_periods_key">stream_video_pacing_max_frame_age_periods</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_decoder_operating_rate_key">stream_decoder_operating_rate</string>

@@ -237,9 +237,12 @@ typedef void (*ChiakiEventCallback)(ChiakiEvent *event, void *user);
 /**
  * buf will always have an allocated padding of at least CHIAKI_VIDEO_BUFFER_PADDING_SIZE after buf_size.
  * frame_index is the 16-bit Takion AV frame serial number and wraps every 65536 frames.
+ * frame_ready_time_us is the monotonic time at which the complete frame became available.
+ * It is 0 for codec configuration samples that do not represent a completed frame.
  * @return whether the sample was successfully pushed into the decoder. On false, a corrupt frame will be reported to get a new keyframe.
  */
-typedef bool (*ChiakiVideoSampleCallback)(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
+typedef bool (*ChiakiVideoSampleCallback)(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index,
+		uint64_t frame_ready_time_us, int32_t frames_lost, bool frame_recovered, void *user);
 
 
 

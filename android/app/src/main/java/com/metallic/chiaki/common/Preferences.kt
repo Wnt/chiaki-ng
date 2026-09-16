@@ -240,6 +240,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(videoPacingBoundedAgeEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoPacingBoundedAgeEnabledKey, value).apply() }
 
+	val videoPresenterNonblockingProducerKey get() = resources.getString(R.string.preferences_video_presenter_nonblocking_producer_key)
+	var videoPresenterNonblockingProducer
+		get() = sharedPreferences.getBoolean(videoPresenterNonblockingProducerKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoPresenterNonblockingProducerKey, value).apply() }
+
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)

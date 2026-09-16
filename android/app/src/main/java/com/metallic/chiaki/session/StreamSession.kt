@@ -24,7 +24,8 @@ data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 class StreamSession(private val context: Context, val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
 		val videoPresenterLead: Int,
-		val videoPacingBoundedAgeEnabled: Boolean, val videoPacingMaxFrameAgePeriods: Int,
+		val videoPacingBoundedAgeEnabled: Boolean, val videoPresenterNonblockingProducer: Boolean,
+		val videoPacingMaxFrameAgePeriods: Int,
 		val videoRecoveryStrategy: Int,
 		val input: StreamInput, private val externallyManaged: Boolean = false)
 {
@@ -42,6 +43,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	private var surface: Surface? = null
 	private var surfaceRefreshHz = connectInfo.videoProfile.maxFPS.toDouble()
 	private var surfaceVsyncOffsetNanos = 0L
+	private var sustainedPerformanceModeLive = false
 	private val nativePacingMode get() = if(videoPacingEnabled) videoPacingMode else 0
 	private val nativeMaxQueueAgePeriods get() =
 		if(videoPacingEnabled && videoPacingBoundedAgeEnabled) videoPacingMaxFrameAgePeriods else 0
@@ -79,6 +81,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		{
 			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose,
 				realVideoTimestamps || videoPacingEnabled, decoderInputThread, context = context)
+			session.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 			_state.value = StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
@@ -86,7 +89,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			if(surface != null)
 				session.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-					nativeMaxQueueAgePeriods, nativeRecoveryStrategy)
+					nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer, nativeRecoveryStrategy)
 			this.session = session
 		}
 		catch(e: CreateError)
@@ -98,12 +101,19 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	fun attachRemoteSession(remoteSession: Session)
 	{
 		session = remoteSession
+		remoteSession.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 		_state.value = StreamStateConnecting
 		val currentSurface = surface
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-				nativeMaxQueueAgePeriods, nativeRecoveryStrategy)
+				nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer, nativeRecoveryStrategy)
+	}
+
+	fun setSustainedPerformanceModeLive(live: Boolean)
+	{
+		sustainedPerformanceModeLive = live
+		session?.setSustainedPerformanceModeLive(live)
 	}
 
 	fun detachRemoteSession()
@@ -161,7 +171,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 				this@StreamSession.surface = null
 				session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-					nativeMaxQueueAgePeriods, nativeRecoveryStrategy)
+					nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer, nativeRecoveryStrategy)
 			}
 		})
 		
@@ -228,14 +238,28 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		surfaceRefreshHz = refreshHz ?: display?.refreshRate?.toDouble() ?: connectInfo.videoProfile.maxFPS.toDouble()
 		surfaceVsyncOffsetNanos = display?.appVsyncOffsetNanos ?: 0L
 		session?.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods, nativeRecoveryStrategy)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods,
+			videoPresenterNonblockingProducer, nativeRecoveryStrategy)
+	}
+
+	fun updateDisplayTiming(refreshHz: Double, appVsyncOffsetNanos: Long)
+	{
+		if(surfaceRefreshHz == refreshHz && surfaceVsyncOffsetNanos == appVsyncOffsetNanos)
+			return
+		surfaceRefreshHz = refreshHz
+		surfaceVsyncOffsetNanos = appVsyncOffsetNanos
+		if(surface != null)
+			session?.setTiming(connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
+				nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer, nativeRecoveryStrategy)
 	}
 
 	fun detachSurface()
 	{
 		this.surface = null
 		session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods, nativeRecoveryStrategy)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods,
+			videoPresenterNonblockingProducer, nativeRecoveryStrategy)
 	}
 
 	fun attachToTextureView(textureView: TextureView)

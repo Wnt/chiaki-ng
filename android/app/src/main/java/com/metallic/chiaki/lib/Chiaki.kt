@@ -131,7 +131,10 @@ private class ChiakiNative
 		@JvmStatic external fun sessionSetRemoteDataSocket(ptr: Long, fd: Int): Int
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
 			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int,
-			maxQueueAgePeriods: Int, recoveryStrategy: Int)
+			maxQueueAgePeriods: Int, nonblockingProducer: Boolean, recoveryStrategy: Int)
+		@JvmStatic external fun sessionSetTiming(ptr: Long, streamFps: Int, refreshHz: Double,
+			appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int,
+			nonblockingProducer: Boolean, recoveryStrategy: Int)
 		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
 		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
@@ -378,6 +381,12 @@ data class StreamStatsEvent(
 	val takionPacketsLost: Long,
 	val feedbackPackets: Long,
 	val dejitterBufferNanos: Long,
+	val cadenceDepthNanos: Long,
+	val cadenceTargetNanos: Long,
+	val cadenceErrP50Nanos: Long,
+	val cadenceErrP99Nanos: Long,
+	val decodeEwmaNanos: Long,
+	val cadenceWindowDrops: Long,
 	val presenterQueueDepth: Long,
 	val audioLatencyMicros: Long,
 	val audioXruns: Long,
@@ -446,6 +455,21 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	@Suppress("unused") // Called from the native decoder and presenter threads.
 	private fun performanceHintThreadStopped(role: Int) = performanceHints.threadStopped(role)
 
+	@Suppress("unused") // Read by the native 1 Hz diagnostics logger.
+	private fun isAdpfPerformanceModeLive() = performanceHints.isActive
+
+	val adpfPerformanceModeLive get() = performanceHints.isActive
+
+	@Volatile private var sustainedPerformanceModeLive = false
+
+	@Suppress("unused") // Read by the native 1 Hz diagnostics logger.
+	private fun isSustainedPerformanceModeLive() = sustainedPerformanceModeLive
+
+	fun setSustainedPerformanceModeLive(live: Boolean)
+	{
+		sustainedPerformanceModeLive = live
+	}
+
 	private fun event(event: Event)
 	{
 		eventCallback?.let { it(event) }
@@ -498,6 +522,12 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		takionPacketsLost: Long,
 		feedbackPackets: Long,
 		dejitterBufferNanos: Long,
+		cadenceDepthNanos: Long,
+		cadenceTargetNanos: Long,
+		cadenceErrP50Nanos: Long,
+		cadenceErrP99Nanos: Long,
+		decodeEwmaNanos: Long,
+		cadenceWindowDrops: Long,
 		presenterQueueDepth: Long,
 		audioLatencyMicros: Long,
 		audioXruns: Long,
@@ -520,6 +550,12 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			takionPacketsLost = takionPacketsLost,
 			feedbackPackets = feedbackPackets,
 			dejitterBufferNanos = dejitterBufferNanos,
+			cadenceDepthNanos = cadenceDepthNanos,
+			cadenceTargetNanos = cadenceTargetNanos,
+			cadenceErrP50Nanos = cadenceErrP50Nanos,
+			cadenceErrP99Nanos = cadenceErrP99Nanos,
+			decodeEwmaNanos = decodeEwmaNanos,
+			cadenceWindowDrops = cadenceWindowDrops,
 			presenterQueueDepth = presenterQueueDepth,
 			audioLatencyMicros = audioLatencyMicros,
 			audioXruns = audioXruns,
@@ -531,10 +567,19 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	fun setRemoteDataSocket(fd: Int) = ErrorCode(ChiakiNative.sessionSetRemoteDataSocket(nativePtr, fd))
 
 	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
-		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, recoveryStrategy: Int)
+		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, nonblockingProducer: Boolean,
+		recoveryStrategy: Int)
 	{
 		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos,
-			pacingMode, presenterLead, maxQueueAgePeriods, recoveryStrategy)
+			pacingMode, presenterLead, maxQueueAgePeriods, nonblockingProducer, recoveryStrategy)
+	}
+
+	fun setTiming(streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
+		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, nonblockingProducer: Boolean,
+		recoveryStrategy: Int)
+	{
+		ChiakiNative.sessionSetTiming(nativePtr, streamFps, refreshHz, appVsyncOffsetNanos,
+			pacingMode, presenterLead, maxQueueAgePeriods, nonblockingProducer, recoveryStrategy)
 	}
 
 	fun setPacingMode(pacingMode: Int) = ChiakiNative.sessionSetPacingMode(nativePtr, pacingMode)
