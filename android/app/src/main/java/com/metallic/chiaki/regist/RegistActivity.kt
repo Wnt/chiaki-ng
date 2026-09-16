@@ -13,6 +13,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.RevealActivity
+import com.metallic.chiaki.common.ext.applySystemBarInsets
+import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.databinding.ActivityRegistBinding
 import com.metallic.chiaki.lib.RegistInfo
 import com.metallic.chiaki.lib.Target
@@ -46,8 +48,10 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		enableAppEdgeToEdge()
 		binding = ActivityRegistBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		binding.root.applySystemBarInsets()
 		handleReveal()
 
 		viewModel = ViewModelProvider(this).get(RegistViewModel::class.java)

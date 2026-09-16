@@ -9,6 +9,7 @@
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="?attr/colorPrimarySurface"
         app:layout_constraintTop_toTopOf="parent"
         android:theme="@style/AppTheme.Toolbar">
         <androidx.appcompat.widget.AppCompatTextView

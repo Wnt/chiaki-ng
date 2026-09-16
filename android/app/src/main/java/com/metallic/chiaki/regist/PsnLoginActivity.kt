@@ -19,6 +19,8 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
+import com.metallic.chiaki.common.ext.applySystemBarInsets
+import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.databinding.ActivityPsnLoginBinding
 import kotlinx.coroutines.launch
 
@@ -35,8 +37,11 @@ class PsnLoginActivity : AppCompatActivity()
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		enableAppEdgeToEdge()
 		binding = ActivityPsnLoginBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		binding.root.applySystemBarInsets(top = false)
+		binding.toolbar.applySystemBarInsets(left = false, right = false, bottom = false)
 		binding.toolbar.setNavigationOnClickListener { finish() }
 		configureWebView()
 		onBackPressedDispatcher.addCallback(this) {
