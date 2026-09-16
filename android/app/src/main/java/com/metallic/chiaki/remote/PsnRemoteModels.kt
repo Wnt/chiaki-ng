@@ -2,15 +2,19 @@
 
 package com.metallic.chiaki.remote
 
+import android.os.Parcelable
+import com.metallic.chiaki.lib.RegistHost
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+@Parcelize
 data class PsnDevice(
 	val duid: String,
 	val name: String,
 	val platform: String = "PS5"
-)
+) : Parcelable
 
 @Serializable
 data class PsnCandidate(
@@ -75,7 +79,8 @@ sealed interface PsnRemoteState
 	data object ControlProbing : PsnRemoteState
 	data class ControlPunched(val candidate: PsnCandidate) : PsnRemoteState
 	data object NativeStarting : PsnRemoteState
-	data object Registered : PsnRemoteState
+	data class Registered(val host: RegistHost) : PsnRemoteState
+	data object Woken : PsnRemoteState
 	data object AwaitingDataSocket : PsnRemoteState
 	data object DataSignaling : PsnRemoteState
 	data object DataProbing : PsnRemoteState

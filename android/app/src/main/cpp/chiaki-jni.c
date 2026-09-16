@@ -166,6 +166,7 @@ typedef struct android_chiaki_session_t
 	jmethodID java_session_event_quit_meth;
 	jmethodID java_session_event_rumble_meth;
 	jmethodID java_session_event_remote_data_socket_needed_meth;
+	jmethodID java_session_event_registration_success_meth;
 	jfieldID java_controller_state_buttons;
 	jfieldID java_controller_state_l2_state;
 	jfieldID java_controller_state_r2_state;
@@ -241,6 +242,32 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 			E->CallVoidMethod(env, session->java_session,
 					session->java_session_event_remote_data_socket_needed_meth);
 			break;
+		case CHIAKI_EVENT_REGIST:
+		{
+			ChiakiRegisteredHost *host = &event->host;
+			jclass target_class = E->FindClass(env, BASE_PACKAGE"/Target");
+			jmethodID target_from_value = E->GetStaticMethodID(env, target_class, "fromValue", "(I)L"BASE_PACKAGE"/Target;");
+			jobject target = E->CallStaticObjectMethod(env, target_class, target_from_value, (jint)host->target);
+			jclass host_class = E->FindClass(env, BASE_PACKAGE"/RegistHost");
+			jmethodID host_ctor = E->GetMethodID(env, host_class, "<init>", "("
+					"L"BASE_PACKAGE"/Target;"
+					"Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+					"[BLjava/lang/String;[BI[B)V");
+			jobject java_host = E->NewObject(env, host_class, host_ctor,
+					target,
+					jnistr_from_ascii(env, host->ap_ssid),
+					jnistr_from_ascii(env, host->ap_bssid),
+					jnistr_from_ascii(env, host->ap_key),
+					jnistr_from_ascii(env, host->ap_name),
+					jnibytearray_create(env, host->server_mac, sizeof(host->server_mac)),
+					jnistr_from_ascii(env, host->server_nickname),
+					jnibytearray_create(env, (const uint8_t *)host->rp_regist_key, sizeof(host->rp_regist_key)),
+					(jint)host->rp_key_type,
+					jnibytearray_create(env, host->rp_key, sizeof(host->rp_key)));
+			E->CallVoidMethod(env, session->java_session,
+					session->java_session_event_registration_success_meth, java_host);
+			break;
+		}
 		default:
 			break;
 	}
@@ -274,8 +301,9 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jboolean decoder_late_frame_recovery = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLateFrameRecoveryEnabled", "Z"));
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
-		E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
+			E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
 	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
+	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
 	jbyteArray morning_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "morning", "[B"));
@@ -285,6 +313,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	ChiakiConnectInfo connect_info = { 0 };
 	ChiakiRemoteConnectionInfo remote_info = { .ctrl_sock = CHIAKI_INVALID_SOCKET, .data_sock = CHIAKI_INVALID_SOCKET };
 	connect_info.ps5 = ps5;
+	connect_info.auto_regist = auto_register;
 	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
 	if(remote_ctrl_fd >= 0)
@@ -415,6 +444,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_quit_meth = E->GetMethodID(env, session->java_session_class, "eventQuit", "(ILjava/lang/String;)V");
 	session->java_session_event_rumble_meth = E->GetMethodID(env, session->java_session_class, "eventRumble", "(II)V");
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
+	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 
 	jclass controller_state_class = E->FindClass(env, BASE_PACKAGE"/ControllerState");
 	session->java_controller_state_buttons = E->GetFieldID(env, controller_state_class, "buttons", "I");

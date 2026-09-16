@@ -17,6 +17,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import com.metallic.chiaki.lib.RegistHost
 import java.io.Closeable
 import java.security.SecureRandom
 import java.util.UUID
@@ -24,7 +25,7 @@ import kotlin.io.encoding.Base64
 
 sealed interface PsnNativeStartResult
 {
-	data object Registered : PsnNativeStartResult
+	data class Registered(val host: RegistHost) : PsnNativeStartResult
 	data object DataSocketNeeded : PsnNativeStartResult
 }
 
@@ -81,34 +82,18 @@ class PsnRemoteController(
 		check(session == null) { "A PSN remote session is already active" }
 		try
 		{
-			_state.value = PsnRemoteState.ResolvingPushServer
-			val pushUrl = api.resolvePushWebSocket()
-			_state.value = PsnRemoteState.OpeningWebSocket
-			val connection = withTimeout(30_000) { pushTransport.open(pushUrl, api.accessToken()) }
-			push = connection
-			notificationQueue = NotificationQueue(connection.notifications)
-
-			_state.value = PsnRemoteState.CreatingSession
-			val created = api.createSession(uuid())
-			session = created
-			awaitClientJoin()
-			_state.value = PsnRemoteState.ClientJoined
-
-			val data1 = randomBytes.next(16)
-			val data2 = randomBytes.next(16)
-			_state.value = PsnRemoteState.StartingConsole
-			api.startConsole(created, device, Base64.Default.encode(data1), Base64.Default.encode(data2))
-			val customData1 = awaitConsoleJoin(device)
-			_state.value = PsnRemoteState.ConsoleJoined
-			val registration = PsnRegistrationMaterial(created.accountId, data1, data2, customData1)
+			val (created, registration) = prepareConsole(device)
 
 			val control = signalAndPunch(created, device, isData = false)
 			openSockets += control
 			_state.value = PsnRemoteState.ControlPunched(control.candidate)
 			_state.value = PsnRemoteState.NativeStarting
-			when(nativeBridge.start(control, registration))
+			when(val result = nativeBridge.start(control, registration))
 			{
-				PsnNativeStartResult.Registered -> _state.value = PsnRemoteState.Registered
+				is PsnNativeStartResult.Registered ->
+				{
+					cleanup(PsnRemoteState.Registered(result.host))
+				}
 				PsnNativeStartResult.DataSocketNeeded ->
 				{
 					_state.value = PsnRemoteState.AwaitingDataSocket
@@ -128,8 +113,31 @@ class PsnRemoteController(
 		}
 		catch(error: Throwable)
 		{
-			_state.value = PsnRemoteState.Failed(error.message ?: "PSN remote connection failed", error)
+			val failed = PsnRemoteState.Failed(error.message ?: "PSN remote connection failed", error)
+			_state.value = failed
+			cleanup(failed)
+			throw error
+		}
+	}
+
+	/** Sends the PSN remote-play command, which wakes the console, then closes the temporary session. */
+	suspend fun wake(device: PsnDevice)
+	{
+		check(session == null) { "A PSN remote session is already active" }
+		try
+		{
+			prepareConsole(device)
+			cleanup(PsnRemoteState.Woken)
+		}
+		catch(cancelled: CancellationException)
+		{
 			cleanup()
+			throw cancelled
+		}
+		catch(error: Throwable)
+		{
+			val failed = PsnRemoteState.Failed(error.message ?: "Unable to wake PSN console", error)
+			cleanup(failed)
 			throw error
 		}
 	}
@@ -138,6 +146,30 @@ class PsnRemoteController(
 	{
 		_state.value = PsnRemoteState.Cancelling
 		cleanup()
+	}
+
+	private suspend fun prepareConsole(device: PsnDevice): Pair<PsnSession, PsnRegistrationMaterial>
+	{
+		_state.value = PsnRemoteState.ResolvingPushServer
+		val pushUrl = api.resolvePushWebSocket()
+		_state.value = PsnRemoteState.OpeningWebSocket
+		val connection = withTimeout(30_000) { pushTransport.open(pushUrl, api.accessToken()) }
+		push = connection
+		notificationQueue = NotificationQueue(connection.notifications)
+
+		_state.value = PsnRemoteState.CreatingSession
+		val created = api.createSession(uuid())
+		session = created
+		awaitClientJoin()
+		_state.value = PsnRemoteState.ClientJoined
+
+		val data1 = randomBytes.next(16)
+		val data2 = randomBytes.next(16)
+		_state.value = PsnRemoteState.StartingConsole
+		api.startConsole(created, device, Base64.Default.encode(data1), Base64.Default.encode(data2))
+		val customData1 = awaitConsoleJoin(device)
+		_state.value = PsnRemoteState.ConsoleJoined
+		return created to PsnRegistrationMaterial(created.accountId, data1, data2, customData1)
 	}
 
 	private suspend fun awaitClientJoin() = withTimeout(30_000) {
@@ -242,7 +274,7 @@ class PsnRemoteController(
 		return second.copyOf(16)
 	}
 
-	private suspend fun cleanup() = withContext(NonCancellable) {
+	private suspend fun cleanup(finalState: PsnRemoteState = PsnRemoteState.Idle) = withContext(NonCancellable) {
 		_state.value = PsnRemoteState.DeletingSession
 		nativeBridge.stop()
 		val current = session
@@ -254,7 +286,7 @@ class PsnRemoteController(
 		session = null
 		notificationQueue = null
 		requestId = 1
-		_state.value = PsnRemoteState.Idle
+		_state.value = finalState
 	}
 
 	private fun queue(): NotificationQueue = notificationQueue ?: error("PSN push channel is not open")
@@ -268,6 +300,7 @@ class PsnRemoteController(
 		push = null
 		session = null
 		notificationQueue = null
+		requestId = 1
 		_state.value = PsnRemoteState.Idle
 	}
 

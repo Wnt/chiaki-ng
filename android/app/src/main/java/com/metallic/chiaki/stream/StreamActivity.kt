@@ -31,6 +31,7 @@ import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.databinding.ActivityStreamBinding
 import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.lib.ConnectVideoProfile
+import com.metallic.chiaki.remote.PsnDevice
 import com.metallic.chiaki.session.*
 import com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment
 import com.metallic.chiaki.touchcontrols.TouchControlsFragment
@@ -52,6 +53,7 @@ class StreamActivity : AppCompatActivity()
 	companion object
 	{
 		const val EXTRA_CONNECT_INFO = "connect_info"
+		const val EXTRA_PSN_DEVICE = "psn_device"
 		private const val HIDE_UI_TIMEOUT_MS = 2000L
 	}
 
@@ -67,6 +69,7 @@ class StreamActivity : AppCompatActivity()
 		super.onCreate(savedInstanceState)
 
 		val connectInfo = IntentCompat.getParcelableExtra(intent, EXTRA_CONNECT_INFO, ConnectInfo::class.java)
+		val psnDevice = IntentCompat.getParcelableExtra(intent, EXTRA_PSN_DEVICE, PsnDevice::class.java)
 		if(connectInfo == null)
 		{
 			finish()
@@ -74,7 +77,7 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel = ViewModelProvider(this, viewModelFactory {
-			StreamViewModel(application, connectInfo)
+			StreamViewModel(application, connectInfo, psnDevice)
 		})[StreamViewModel::class.java]
 
 		viewModel.input.observe(this)
@@ -268,7 +271,7 @@ class StreamActivity : AppCompatActivity()
 			// so the surface isn't left blank until the next decoded frame arrives.
 			binding.debandSurfaceView.requestRender()
 		}
-		viewModel.session.resume()
+		viewModel.resume()
 	}
 
 	override fun onPause()
@@ -277,7 +280,7 @@ class StreamActivity : AppCompatActivity()
 		if (Preferences(this).debandingEnabled) {
 			binding.debandSurfaceView.onPause()
 		}
-		viewModel.session.pause()
+		viewModel.pause()
 	}
 
 	override fun onConfigurationChanged(newConfig: Configuration)
@@ -301,8 +304,8 @@ class StreamActivity : AppCompatActivity()
 
 	private fun reconnect()
 	{
-		viewModel.session.shutdown()
-		viewModel.session.resume()
+		viewModel.pause()
+		viewModel.resume()
 	}
 
 	private val hideSystemUIRunnable = Runnable { hideSystemUI() }
@@ -402,6 +405,24 @@ class StreamActivity : AppCompatActivity()
 					dialog?.dismiss()
 					val dialog = MaterialAlertDialogBuilder(this)
 						.setMessage(getString(R.string.alert_message_session_create_error, state.error.errorCode.toString()))
+						.setOnDismissListener {
+							dialog = null
+							finish()
+						}
+						.setNegativeButton(R.string.action_quit_session) { _, _ -> }
+						.create()
+					dialogContents = CreateErrorDialog
+					dialog.show()
+				}
+			}
+
+			is StreamStateRemoteError ->
+			{
+				if(dialogContents != CreateErrorDialog)
+				{
+					dialog?.dismiss()
+					val dialog = MaterialAlertDialogBuilder(this)
+						.setMessage(getString(R.string.alert_message_psn_remote_error, state.message))
 						.setOnDismissListener {
 							dialog = null
 							finish()

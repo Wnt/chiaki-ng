@@ -4,8 +4,11 @@ package com.metallic.chiaki.remote
 
 import android.os.ParcelFileDescriptor
 import com.metallic.chiaki.lib.ConnectInfo
+import com.metallic.chiaki.lib.Event
 import com.metallic.chiaki.lib.NativeRemoteConnection
 import com.metallic.chiaki.lib.QuitEvent
+import com.metallic.chiaki.lib.RegistHost
+import com.metallic.chiaki.lib.RegistrationEvent
 import com.metallic.chiaki.lib.RemoteDataSocketNeededEvent
 import com.metallic.chiaki.lib.Session
 import kotlinx.coroutines.CompletableDeferred
@@ -19,7 +22,10 @@ class AndroidPsnRemoteNativeBridge(
 	private val logFile: String?,
 	private val logVerbose: Boolean,
 	private val realVideoTimestamps: Boolean,
-	private val decoderInputThread: Boolean
+	private val decoderInputThread: Boolean,
+	private val onSessionCreated: (Session) -> Unit = {},
+	private val onSessionClosed: () -> Unit = {},
+	private val onSessionEvent: (Event) -> Unit = {}
 ) : PsnRemoteNativeBridge
 {
 	var session: Session? = null
@@ -62,23 +68,39 @@ class AndroidPsnRemoteNativeBridge(
 		session = nativeSession
 
 		val dataNeeded = CompletableDeferred<Unit>()
+		val registered = CompletableDeferred<RegistHost>()
 		nativeSession.eventCallback = { event ->
 			when(event)
 			{
 				RemoteDataSocketNeededEvent -> dataNeeded.complete(Unit)
-				is QuitEvent -> if(!dataNeeded.isCompleted)
-					dataNeeded.completeExceptionally(PsnRemoteProtocolException(
-						"Native remote session quit before requesting data socket: ${event.reason}"
-					))
-				else -> Unit
+				is RegistrationEvent -> registered.complete(event.host)
+				is QuitEvent ->
+				{
+					val error = PsnRemoteProtocolException(
+						"Native remote session quit before setup completed: ${event.reason}"
+					)
+					if(!dataNeeded.isCompleted) dataNeeded.completeExceptionally(error)
+					if(!registered.isCompleted) registered.completeExceptionally(error)
+					onSessionEvent(event)
+				}
+				else -> onSessionEvent(event)
 			}
 		}
+		onSessionCreated(nativeSession)
 		val startResult = nativeSession.start()
 		if(!startResult.isSuccess)
 		{
 			nativeSession.dispose(join = false)
 			session = null
 			throw PsnRemoteProtocolException("Unable to start native remote session: $startResult")
+		}
+		if(connectInfo.autoRegister)
+		{
+			val host = registered.await()
+			nativeSession.dispose()
+			session = null
+			onSessionClosed()
+			return PsnNativeStartResult.Registered(host)
 		}
 		dataNeeded.await()
 		return PsnNativeStartResult.DataSocketNeeded
@@ -99,9 +121,11 @@ class AndroidPsnRemoteNativeBridge(
 
 	override fun stop()
 	{
-		session?.stop()
-		session?.dispose()
+		val current = session ?: return
+		current.stop()
+		current.dispose()
 		session = null
+		onSessionClosed()
 	}
 
 	private fun closeDetachedFd(fd: Int)

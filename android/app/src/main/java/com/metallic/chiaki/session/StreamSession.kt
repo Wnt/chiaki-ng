@@ -16,12 +16,13 @@ object StreamStateIdle: StreamState()
 object StreamStateConnecting: StreamState()
 object StreamStateConnected: StreamState()
 data class StreamStateCreateError(val error: CreateError): StreamState()
+data class StreamStateRemoteError(val message: String): StreamState()
 data class StreamStateQuit(val reason: QuitReason, val reasonString: String?): StreamState()
 data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
 class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
-		val input: StreamInput)
+		val input: StreamInput, private val externallyManaged: Boolean = false)
 {
 	var session: Session? = null
 		private set
@@ -61,6 +62,8 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 
 	fun resume()
 	{
+		if(externallyManaged)
+			return
 		if(session != null)
 			return
 		try
@@ -82,6 +85,30 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 		}
 	}
 
+	fun attachRemoteSession(remoteSession: Session)
+	{
+		session = remoteSession
+		_state.value = StreamStateConnecting
+		val currentSurface = surface
+		if(currentSurface != null)
+			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+				surfaceVsyncOffsetNanos, nativePacingMode)
+	}
+
+	fun detachRemoteSession()
+	{
+		session = null
+		_state.value = StreamStateIdle
+	}
+
+	fun remoteEvent(event: Event) = eventCallback(event)
+
+	fun remoteConnectionFailed(error: Throwable)
+	{
+		session = null
+		_state.value = StreamStateRemoteError(error.message ?: "PSN remote connection failed")
+	}
+
 	private fun eventCallback(event: Event)
 	{
 		when(event)
@@ -100,6 +127,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 			)
 			is RumbleEvent -> _rumbleState.postValue(event)
 			is RemoteDataSocketNeededEvent -> Unit // handled by the PSN control-plane bridge
+			is RegistrationEvent -> Unit // handled by the PSN control-plane bridge
 		}
 	}
 

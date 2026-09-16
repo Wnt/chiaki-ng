@@ -81,6 +81,41 @@ class PsnRemoteControllerTest
 		assertTrue(requests.any { it.method == "DELETE" && it.path?.endsWith("/members/me") == true })
 	}
 
+	@Test fun wakeSendsConsoleCommandWithoutPunchingOrStartingNative() = runBlocking {
+		val api = PsnRemoteApi(
+			OkHttpClient(),
+			PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
+			object : PsnRefreshTokenStore {
+				override fun read() = "refresh-token-placeholder"
+				override fun write(value: String) = Unit
+			},
+			json
+		)
+		val controller = PsnRemoteController(
+			api,
+			OkHttpPsnPushTransport(OkHttpClient(), json),
+			object : PsnHolePuncher {
+				override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation =
+					error("Wake must not begin candidate exchange")
+			},
+			object : PsnRemoteNativeBridge {
+				override suspend fun start(control: PsnPunchedSocket, registration: PsnRegistrationMaterial) =
+					error("Wake must not start native")
+				override suspend fun setDataSocket(data: PsnPunchedSocket) = Unit
+			},
+			randomBytes = PsnRandomBytes { size -> ByteArray(size) },
+			uuid = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+			json = json
+		)
+
+		controller.wake(PsnDevice(duid, "Fixture PS5"))
+
+		assertTrue(controller.state.value is PsnRemoteState.Woken)
+		assertTrue(requests.any { it.path?.endsWith("/commands") == true })
+		assertTrue(requests.none { it.path?.endsWith("/sessionMessage") == true })
+		assertTrue(requests.any { it.method == "DELETE" })
+	}
+
 	private fun fixtureDispatcher(): Dispatcher = object : Dispatcher()
 	{
 		override fun dispatch(request: RecordedRequest): MockResponse
