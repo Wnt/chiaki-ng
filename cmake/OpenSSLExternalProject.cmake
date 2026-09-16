@@ -32,13 +32,25 @@ if(NOT OPENSSL_OS_COMPILER)
 endif()
 
 find_program(MAKE_EXE NAMES gmake make)
+
+# OpenSSL builds with its own Makefile, so CMAKE_<LANG>_COMPILER_LAUNCHER never
+# reaches it. Its Makefile spells every tool $(CROSS_COMPILE)<tool>, so the
+# trailing space makes ccache a command prefix without replacing the NDK's
+# target-specific compiler wrapper. Limit this to the build step because the
+# Android install step uses ":" as RANLIB, which ccache cannot launch.
+unset(OPENSSL_BUILD_LAUNCHER)
+find_program(CCACHE_EXE ccache)
+if(CCACHE_EXE)
+	set(OPENSSL_BUILD_LAUNCHER "CROSS_COMPILE=${CCACHE_EXE} ")
+endif()
+
 ExternalProject_Add(OpenSSL-ExternalProject
 		URL https://www.openssl.org/source/openssl-1.1.1w.tar.gz
 		URL_HASH SHA256=cf3098950cb4d853ad95c0841f1f9c6d3dc102dccfcacd521d93925208b76ac8
 		INSTALL_DIR "${OPENSSL_INSTALL_DIR}"
 		CONFIGURE_COMMAND ${CMAKE_COMMAND} -E env ${OPENSSL_BUILD_ENV}
 			"<SOURCE_DIR>/Configure" "--prefix=<INSTALL_DIR>" no-shared ${OPENSSL_CONFIG_EXTRA_ARGS} "${OPENSSL_OS_COMPILER}"
-		BUILD_COMMAND ${CMAKE_COMMAND} -E env ${OPENSSL_BUILD_ENV} "${MAKE_EXE}" -j4 build_libs
+		BUILD_COMMAND ${CMAKE_COMMAND} -E env ${OPENSSL_BUILD_ENV} "${MAKE_EXE}" -j4 ${OPENSSL_BUILD_LAUNCHER} build_libs
 		INSTALL_COMMAND ${CMAKE_COMMAND} -E env ${OPENSSL_BUILD_ENV} "${MAKE_EXE}" install_dev)
 
 add_library(OpenSSL_Crypto INTERFACE)
