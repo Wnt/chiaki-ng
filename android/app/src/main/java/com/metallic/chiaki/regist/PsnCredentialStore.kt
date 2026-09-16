@@ -6,13 +6,14 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.metallic.chiaki.remote.PsnRefreshTokenStore
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-internal class PsnCredentialStore(context: Context)
+internal class PsnCredentialStore(context: Context) : PsnRefreshTokenStore
 {
 	companion object
 	{
@@ -49,6 +50,10 @@ internal class PsnCredentialStore(context: Context)
 			String(cipher.doFinal(Base64.decode(ciphertext, Base64.NO_WRAP)), Charsets.UTF_8)
 		}.getOrNull()
 	}
+
+	override fun read(): String? = getRefreshToken()
+
+	override fun write(value: String) = putRefreshToken(value)
 
 	private fun getOrCreateKey(): SecretKey
 	{

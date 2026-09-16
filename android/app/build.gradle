@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.serialization'
     id 'kotlin-parcelize'
     id 'com.google.devtools.ksp'
 }
@@ -125,6 +126,8 @@ dependencies {
     implementation libs.lifecycle.livedata.ktx
 
     implementation libs.coroutines.android
+    implementation libs.serialization.json
+    implementation libs.okhttp
 
     implementation libs.room.runtime
     ksp libs.room.compiler
@@ -136,4 +139,6 @@ dependencies {
     implementation libs.oboe
 
     testImplementation 'junit:junit:4.13.2'
+    testImplementation libs.mockwebserver
+    testImplementation libs.coroutines.test
 }
