@@ -19,6 +19,7 @@
 
 #define DECODER_CONFIGURE_BASELINE_TIER 3
 #define DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER 4
+#define DECODER_LOW_LATENCY_OPERATING_RATE 480
 
 extern media_status_t AMediaCodec_getName_weak(AMediaCodec *codec, char **out_name)
 		__asm__("AMediaCodec_getName") __attribute__((weak));
@@ -187,14 +188,10 @@ static AMediaFormat *create_decoder_format(const AndroidChiakiVideoDecoder *deco
 	{
 		AMediaFormat_setInt32(format, "frame-rate", decoder->target_fps);
 	}
-	if(tier <= 1 || (decoder->performance_mode_enabled && tier <= DECODER_CONFIGURE_BASELINE_TIER))
-	{
-		AMediaFormat_setInt32(format, "operating-rate", decoder->target_fps * 4);
-	}
 	if(tier <= 1)
-	{
-		AMediaFormat_setInt32(format, "priority", 1);
-	}
+		AMediaFormat_setInt32(format, "operating-rate", DECODER_LOW_LATENCY_OPERATING_RATE);
+	else if(decoder->performance_mode_enabled && tier <= DECODER_CONFIGURE_BASELINE_TIER)
+		AMediaFormat_setInt32(format, "operating-rate", decoder->target_fps * 4);
 	if(tier == 0)
 		AMediaFormat_setInt32(format, "low-latency", 1);
 
