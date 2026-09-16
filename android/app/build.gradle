@@ -20,6 +20,8 @@ def chiakiVersion = "$chiakiVersionMajor.$chiakiVersionMinor.$chiakiVersionPatch
 println("Determined Chiaki Version: $chiakiVersion")
 
 def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching") ?: "false").toBoolean()
+// PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
+def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
 
 android {
     namespace "com.metallic.chiaki"
@@ -48,6 +50,7 @@ android {
                         "-DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF",
                         "-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF",
                         "-DCHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING=${takionReceiveBatching ? 'ON' : 'OFF'}",
+                        "-DCHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING=${takionSocketTuning ? 'ON' : 'OFF'}",
                         "-DANDROID_STL=c++_shared",
                         "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
                         "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
