@@ -46,6 +46,7 @@ typedef struct chiaki_feedback_sender_t
 	uint64_t stats_window_start_ms;
 	uint64_t stats_state_packets;
 	uint64_t stats_history_packets;
+	uint64_t stats_packets_total;
 } ChiakiFeedbackSender;
 
 /**
@@ -57,6 +58,7 @@ typedef struct chiaki_feedback_sender_t
 CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion, uint32_t state_min_interval_ms, uint32_t stats_log_interval_ms);
 CHIAKI_EXPORT void chiaki_feedback_sender_fini(ChiakiFeedbackSender *feedback_sender);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_set_controller_state(ChiakiFeedbackSender *feedback_sender, ChiakiControllerState *state);
+CHIAKI_EXPORT uint64_t chiaki_feedback_sender_get_packets_total(ChiakiFeedbackSender *feedback_sender);
 
 #ifdef __cplusplus
 }

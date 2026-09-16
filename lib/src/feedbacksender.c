@@ -27,6 +27,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *
 	feedback_sender->stats_window_start_ms = 0;
 	feedback_sender->stats_state_packets = 0;
 	feedback_sender->stats_history_packets = 0;
+	feedback_sender->stats_packets_total = 0;
 
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_prev);
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_history_prev);
@@ -102,6 +103,14 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_set_controller_state(Chiaki
 	chiaki_cond_signal(&feedback_sender->state_cond);
 
 	return CHIAKI_ERR_SUCCESS;
+}
+
+CHIAKI_EXPORT uint64_t chiaki_feedback_sender_get_packets_total(ChiakiFeedbackSender *feedback_sender)
+{
+	chiaki_mutex_lock(&feedback_sender->state_mutex);
+	uint64_t total = feedback_sender->stats_packets_total;
+	chiaki_mutex_unlock(&feedback_sender->state_mutex);
+	return total;
 }
 
 static bool controller_state_equals_for_feedback_state(ChiakiControllerState *a, ChiakiControllerState *b)
@@ -392,23 +401,22 @@ static void *feedback_sender_thread_func(void *user)
 		chiaki_mutex_unlock(&feedback_sender->state_mutex);
 
 		if(send_feedback_state)
-		{
 			feedback_sender_send_state(feedback_sender, &state_now);
-			feedback_sender->stats_state_packets++;
-		}
 
 		if(send_feedback_history)
-		{
 			feedback_sender_send_history_packet(feedback_sender, history_buf, history_buf_size);
-			feedback_sender->stats_history_packets++;
-		}
 
-		// counters are only touched by this thread, so this is safe outside the state mutex
+		// These window counters remain single-threaded; keep logging outside the state lock.
+		if(send_feedback_state)
+			feedback_sender->stats_state_packets++;
+		if(send_feedback_history)
+			feedback_sender->stats_history_packets++;
 		feedback_sender_stats_tick(feedback_sender, chiaki_time_now_monotonic_ms());
 
 		err = chiaki_mutex_lock(&feedback_sender->state_mutex);
 		if(err != CHIAKI_ERR_SUCCESS)
 			return NULL;
+		feedback_sender->stats_packets_total += (uint64_t)send_feedback_state + (uint64_t)send_feedback_history;
 		if(send_feedback_state)
 		{
 			feedback_sender->controller_state_prev = state_now;

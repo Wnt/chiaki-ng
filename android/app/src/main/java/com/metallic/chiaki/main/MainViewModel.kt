@@ -126,7 +126,8 @@ class MainViewModel(
 		feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 		feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
 		autoRegister = autoRegister,
-		performanceModeEnabled = preferences.performanceModeEnabled
+		performanceModeEnabled = preferences.performanceModeEnabled,
+		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 	)
 
 	fun registerPsnConsole(console: PsnConsole)

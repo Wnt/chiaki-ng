@@ -25,6 +25,36 @@ static void frame_callback_64(int64_t frame_time_ns, void *user);
 static void frame_callback_legacy(long frame_time_ns, void *user);
 static void drain_immediate_locked(AndroidChiakiVideoPresenter *presenter);
 
+static void record_output_available(AndroidChiakiVideoPresenter *presenter,
+		int64_t presentation_time_us, int64_t available_ns)
+{
+	if(!presenter->diagnostics_enabled)
+		return;
+	chiaki_mutex_lock(&presenter->mutex);
+	presenter->diagnostics_output_frames++;
+	for(uint32_t offset = 0; offset < ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY; offset++)
+	{
+		uint32_t index = (presenter->diagnostics_input_next
+				+ ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY - 1 - offset)
+				% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
+		AndroidChiakiVideoInputTimestamp *input = &presenter->diagnostics_inputs[index];
+		if(!input->valid || input->presentation_time_us != presentation_time_us)
+			continue;
+		input->valid = false;
+		if(available_ns >= input->queued_ns && available_ns - input->queued_ns <= 5000000000LL)
+		{
+			presenter->diagnostics_decode_ns[presenter->diagnostics_decode_next] =
+					(uint64_t)(available_ns - input->queued_ns);
+			presenter->diagnostics_decode_next = (presenter->diagnostics_decode_next + 1)
+					% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
+			if(presenter->diagnostics_decode_count < ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY)
+				presenter->diagnostics_decode_count++;
+		}
+		break;
+	}
+	chiaki_mutex_unlock(&presenter->mutex);
+}
+
 static bool start_vsync_thread_if_needed(AndroidChiakiVideoPresenter *presenter)
 {
 	chiaki_mutex_lock(&presenter->mutex);
@@ -131,6 +161,13 @@ static int compare_i64(const void *left, const void *right)
 {
 	int64_t a = *(const int64_t *)left;
 	int64_t b = *(const int64_t *)right;
+	return a < b ? -1 : a > b ? 1 : 0;
+}
+
+static int compare_u64(const void *left, const void *right)
+{
+	uint64_t a = *(const uint64_t *)left;
+	uint64_t b = *(const uint64_t *)right;
 	return a < b ? -1 : a > b ? 1 : 0;
 }
 
@@ -428,6 +465,8 @@ static bool handle_direct_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 			.info = newer_info,
 			.arrival_ns = monotonic_time_ns(),
 		};
+		if(newer_info.size != 0)
+			record_output_available(presenter, newer_info.presentationTimeUs, newer.arrival_ns);
 		if((newer_info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0)
 			eos = true;
 		bool newer_is_frame = newer_info.size != 0;
@@ -508,6 +547,8 @@ static void *output_thread_func(void *user)
 		if(status >= 0)
 		{
 			bool eos = (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0;
+			if(info.size != 0)
+				record_output_available(presenter, info.presentationTimeUs, monotonic_time_ns());
 			if(presenter->real_pts_enabled && info.size != 0)
 				CHIAKI_LOGV(presenter->log, "Video Decoder output PTS: %" PRId64 " us", info.presentationTimeUs);
 			if(info.size == 0)
@@ -555,13 +596,14 @@ static void *output_thread_func(void *user)
 }
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
-		bool late_frame_recovery_enabled, bool real_pts_enabled,
+		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user)
 {
 	memset(presenter, 0, sizeof(*presenter));
 	presenter->log = log;
 	presenter->late_frame_recovery_enabled = late_frame_recovery_enabled;
 	presenter->real_pts_enabled = real_pts_enabled;
+	presenter->diagnostics_enabled = diagnostics_enabled;
 	presenter->release_cb = release_cb;
 	presenter->release_cb_user = release_cb_user;
 	presenter->dejitter_buffer_ns = VIDEO_PRESENTER_DJB_START_NS;
@@ -620,6 +662,11 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->decrease_hysteresis = 0;
 	presenter->missed_vsyncs = 0;
 	presenter->dropped_frames = 0;
+	presenter->diagnostics_input_next = 0;
+	presenter->diagnostics_decode_count = 0;
+	presenter->diagnostics_decode_next = 0;
+	presenter->diagnostics_output_frames = 0;
+	memset(presenter->diagnostics_inputs, 0, sizeof(presenter->diagnostics_inputs));
 	chiaki_mutex_unlock(&presenter->mutex);
 
 	if(mode != ANDROID_CHIAKI_VIDEO_PACING_DISABLED && presenter->refresh_hz >= 119.0)
@@ -740,5 +787,54 @@ void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *prese
 	stats->dropped_frames = presenter->dropped_frames;
 	stats->dejitter_buffer_ns = presenter->dejitter_buffer_ns;
 	stats->queue_depth = presenter->queue_size;
+	chiaki_mutex_unlock(&presenter->mutex);
+}
+
+void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
+		int64_t presentation_time_us, int64_t queued_ns)
+{
+	if(!presenter->diagnostics_enabled)
+		return;
+	chiaki_mutex_lock(&presenter->mutex);
+	AndroidChiakiVideoInputTimestamp *input =
+			&presenter->diagnostics_inputs[presenter->diagnostics_input_next];
+	input->presentation_time_us = presentation_time_us;
+	input->queued_ns = queued_ns;
+	input->valid = true;
+	presenter->diagnostics_input_next = (presenter->diagnostics_input_next + 1)
+			% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
+	chiaki_mutex_unlock(&presenter->mutex);
+}
+
+void android_chiaki_video_presenter_get_diagnostics(AndroidChiakiVideoPresenter *presenter,
+		AndroidChiakiVideoPresenterDiagnostics *diagnostics)
+{
+	memset(diagnostics, 0, sizeof(*diagnostics));
+	chiaki_mutex_lock(&presenter->mutex);
+	diagnostics->output_frames = presenter->diagnostics_output_frames;
+	diagnostics->missed_vsyncs = presenter->missed_vsyncs;
+	diagnostics->dropped_frames = presenter->dropped_frames;
+	diagnostics->dejitter_buffer_ns = presenter->dejitter_buffer_ns;
+	diagnostics->queue_depth = presenter->queue_size;
+	uint32_t count = presenter->diagnostics_decode_count;
+	uint64_t samples[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
+	uint64_t sum = 0;
+	for(uint32_t i = 0; i < count; i++)
+	{
+		samples[i] = presenter->diagnostics_decode_ns[i];
+		sum += samples[i];
+	}
+	if(count > 0)
+	{
+		qsort(samples, count, sizeof(samples[0]), compare_u64);
+		uint32_t p95_index = (95 * count + 99) / 100;
+		if(p95_index > 0)
+			p95_index--;
+		diagnostics->decode_mean_us = sum / count / 1000;
+		diagnostics->decode_p95_us = samples[p95_index] / 1000;
+	}
+	presenter->diagnostics_output_frames = 0;
+	presenter->diagnostics_decode_count = 0;
+	presenter->diagnostics_decode_next = 0;
 	chiaki_mutex_unlock(&presenter->mutex);
 }

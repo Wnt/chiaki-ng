@@ -164,6 +164,11 @@ class Preferences(context: Context)
 	/** PLE-57: window of the feedback packet-rate line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
 
+	val streamDiagnosticsOverlayEnabledKey get() = resources.getString(R.string.preferences_stream_diagnostics_overlay_enabled_key)
+	var streamDiagnosticsOverlayEnabled
+		get() = sharedPreferences.getBoolean(streamDiagnosticsOverlayEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(streamDiagnosticsOverlayEnabledKey, value).apply() }
+
 	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
 	var decoderInputThreadEnabled
 		get() = sharedPreferences.getBoolean(decoderInputThreadEnabledKey, true)

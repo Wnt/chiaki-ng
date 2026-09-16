@@ -117,6 +117,7 @@ typedef struct chiaki_takion_connect_info_t
 	bool enable_dualsense;
 	uint8_t protocol_version;
 	bool disable_video_packet_reordering;
+	bool diagnostics_enabled;
 	bool close_socket; // close socket when finishing takion
 } ChiakiTakionConnectInfo;
 
@@ -159,6 +160,9 @@ typedef struct chiaki_takion_t
 	int64_t video_queue_head_wait_start_us;
 	uint64_t video_queue_head_wait_seq_num;
 	bool disable_video_packet_reordering;
+	bool diagnostics_enabled;
+	ChiakiMutex diagnostics_mutex;
+	uint64_t video_reorder_timeouts;
 	ChiakiTakionSendBuffer send_buffer;
 
 	ChiakiTakionCallback cb;
@@ -188,6 +192,7 @@ typedef struct chiaki_takion_t
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, ChiakiTakionConnectInfo *info, chiaki_socket_t *sock);
 CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion);
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *takion);
 
 /**
  * Must be called from within the Takion thread, i.e. inside the callback!

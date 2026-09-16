@@ -22,7 +22,8 @@ import kotlinx.coroutines.launch
 class StreamViewModel(
 	val application: Application,
 	val connectInfo: ConnectInfo,
-	private val psnDevice: PsnDevice? = null
+	private val psnDevice: PsnDevice? = null,
+	diagnosticsPreview: Boolean = false
 ): ViewModel()
 {
 	val preferences = Preferences(application)
@@ -31,7 +32,7 @@ class StreamViewModel(
 	val input = StreamInput(application, preferences)
 	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
-		preferences.videoPacingMode.nativeValue, input, externallyManaged = psnDevice != null)
+		preferences.videoPacingMode.nativeValue, input, externallyManaged = psnDevice != null || diagnosticsPreview)
 
 	private val remoteController: PsnRemoteController? = psnDevice?.let {
 		val bridge = AndroidPsnRemoteNativeBridge(

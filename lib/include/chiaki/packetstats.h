@@ -17,6 +17,8 @@ typedef struct chiaki_packet_stats_t
 	// For generations of packets, i.e. where we know the number of expected packets per generation
 	uint64_t gen_received;
 	uint64_t gen_lost;
+	uint64_t gen_received_total;
+	uint64_t gen_lost_total;
 
 	// For sequential packets, i.e. where packets are identified by a sequence number
 	ChiakiSeqNum16 seq_min; // sequence number that was max at the last reset
@@ -30,6 +32,7 @@ CHIAKI_EXPORT void chiaki_packet_stats_reset(ChiakiPacketStats *stats);
 CHIAKI_EXPORT void chiaki_packet_stats_push_generation(ChiakiPacketStats *stats, uint64_t received, uint64_t lost);
 CHIAKI_EXPORT void chiaki_packet_stats_push_seq(ChiakiPacketStats *stats, ChiakiSeqNum16 seq_num);
 CHIAKI_EXPORT void chiaki_packet_stats_get(ChiakiPacketStats *stats, bool reset, uint64_t *received, uint64_t *lost);
+CHIAKI_EXPORT void chiaki_packet_stats_get_generation_totals(ChiakiPacketStats *stats, uint64_t *received, uint64_t *lost);
 
 #ifdef __cplusplus
 }

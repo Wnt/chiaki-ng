@@ -106,6 +106,7 @@ typedef struct chiaki_connect_info_t
 	bool disable_video_packet_reordering;
 	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
 	uint32_t feedback_stats_log_interval_ms; // 0 = off (default), else log a feedback packet-rate line this often
+	bool stream_diagnostics_enabled; // false by default; emit one CHIAKI_EVENT_STREAM_STATS per second when true
 } ChiakiConnectInfo;
 
 
@@ -170,6 +171,17 @@ typedef struct chiaki_video_fec_failure_event_t
 	bool idr_request_sent;
 } ChiakiVideoFecFailureEvent;
 
+typedef struct chiaki_stream_stats_event_t
+{
+	uint64_t interval_ms;
+	uint64_t stream_frames;
+	uint64_t video_frames_lost;
+	uint64_t video_reorder_timeouts;
+	uint64_t takion_packets_received;
+	uint64_t takion_packets_lost;
+	uint64_t feedback_packets;
+} ChiakiStreamStatsEvent;
+
 typedef enum {
 	CHIAKI_EVENT_CONNECTED,
 	CHIAKI_EVENT_LOGIN_PIN_REQUEST,
@@ -189,6 +201,7 @@ typedef enum {
 	CHIAKI_EVENT_TRIGGER_INTENSITY,
 	CHIAKI_EVENT_VIDEO_FEC_FAILURE,
 	CHIAKI_EVENT_REMOTE_DATA_SOCKET_NEEDED,
+	CHIAKI_EVENT_STREAM_STATS,
 } ChiakiEventType;
 
 typedef struct chiaki_event_t
@@ -214,6 +227,7 @@ typedef struct chiaki_event_t
 		ChiakiDualSenseEffectIntensity intensity;
 		char server_nickname[0x20];
 		ChiakiVideoFecFailureEvent video_fec_failure;
+		ChiakiStreamStatsEvent stream_stats;
 	};
 } ChiakiEvent;
 
@@ -249,6 +263,7 @@ typedef struct chiaki_session_t
 		bool disable_video_packet_reordering;
 		uint32_t feedback_state_min_interval_ms;
 		uint32_t feedback_stats_log_interval_ms;
+		bool stream_diagnostics_enabled;
 	} connect_info;
 
 	ChiakiTarget target;

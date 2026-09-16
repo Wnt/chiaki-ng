@@ -22,6 +22,18 @@ typedef struct android_chiaki_video_stats_t
 	uint64_t dejitter_buffer_ns;
 } AndroidChiakiVideoStats;
 
+typedef struct android_chiaki_video_diagnostics_t
+{
+	uint64_t output_frames;
+	uint64_t decode_mean_us;
+	uint64_t decode_p95_us;
+	uint64_t input_frames_dropped;
+	uint64_t missed_vsyncs;
+	uint64_t presenter_frames_dropped;
+	uint64_t dejitter_buffer_ns;
+	uint32_t presenter_queue_depth;
+} AndroidChiakiVideoDiagnostics;
+
 typedef ChiakiErrorCode (*AndroidChiakiVideoDecoderRequestIDRCallback)(void *user);
 
 typedef struct android_chiaki_video_decoder_t
@@ -53,6 +65,7 @@ typedef struct android_chiaki_video_decoder_t
 	ChiakiCodec target_codec;
 	bool low_latency_enabled;
 	bool performance_mode_enabled;
+	bool diagnostics_enabled;
 	bool late_frame_recovery_enabled;
 	bool last_queued_frame_index_valid;
 	ChiakiSeqNum16 last_queued_frame_index;
@@ -66,7 +79,8 @@ typedef struct android_chiaki_video_decoder_t
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
-		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled);
+		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
+		bool diagnostics_enabled);
 void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
@@ -77,5 +91,7 @@ void android_chiaki_video_decoder_set_pacing_mode(AndroidChiakiVideoDecoder *dec
 		AndroidChiakiVideoPacingMode pacing_mode);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 void android_chiaki_video_decoder_get_stats(AndroidChiakiVideoDecoder *decoder, AndroidChiakiVideoStats *stats);
+void android_chiaki_video_decoder_get_diagnostics(AndroidChiakiVideoDecoder *decoder,
+		AndroidChiakiVideoDiagnostics *diagnostics);
 
 #endif
