@@ -93,6 +93,8 @@
     <string name="preferences_thread_priority_boost_enabled_summary">Raise the priority and pin the network receive, decoder output, and video presenter threads to CPUs 4–7 (re-connect required)</string>
     <string name="preferences_performance_mode_enabled_title">Stream performance mode</string>
     <string name="preferences_performance_mode_enabled_summary">Request sustained performance, decoder operating rate, and ADPF frame-budget hints on Android 12+ (experimental; reconnect required)</string>
+    <string name="preferences_wifi_low_latency_lock_enabled_title">Wi-Fi low-latency lock</string>
+    <string name="preferences_wifi_low_latency_lock_enabled_summary">Keep Wi-Fi in low-latency mode while streaming (high-performance mode before Android 10; experimental)</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_title">Decoder late-frame recovery</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_summary">Drop stale ready frames and request an IDR when five frames are backlogged (reconnect required)</string>
 	<string name="preferences_video_pacing_enabled_title">Vsync-paced video presenter</string>
@@ -190,6 +192,7 @@
 	<string name="preferences_decoder_input_thread_enabled_key">stream_decoder_input_thread</string>
     <string name="preferences_thread_priority_boost_enabled_key">stream_thread_priority_boost</string>
     <string name="preferences_performance_mode_enabled_key">stream_performance_mode</string>
+    <string name="preferences_wifi_low_latency_lock_enabled_key">stream_wifi_low_latency_lock</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_key">stream_decoder_late_frame_recovery</string>
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>

@@ -8,6 +8,7 @@ import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.PixelFormat
+import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
 import android.util.Log
@@ -49,6 +50,13 @@ private object StreamQuitDialog: DialogContents()
 private object CreateErrorDialog: DialogContents()
 private object PinRequestDialog: DialogContents()
 
+@Suppress("DEPRECATION")
+internal fun wifiLockModeForSdk(sdkInt: Int) =
+	if(sdkInt >= Build.VERSION_CODES.Q)
+		WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+	else
+		WifiManager.WIFI_MODE_FULL_HIGH_PERF
+
 class StreamActivity : AppCompatActivity()
 {
 	companion object
@@ -71,6 +79,7 @@ class StreamActivity : AppCompatActivity()
 	private var originalPreferredDisplayModeId: Int? = null
 	private var performanceModeRequested = false
 	private var sustainedPerformanceModeEnabled = false
+	private var wifiLock: WifiManager.WifiLock? = null
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -289,6 +298,37 @@ class StreamActivity : AppCompatActivity()
 		}
 	}
 
+	@Suppress("DEPRECATION")
+	private fun configureWifiLock(enabled: Boolean)
+	{
+		if(!enabled)
+		{
+			wifiLock?.let { lock ->
+				if(lock.isHeld)
+					lock.release()
+			}
+			wifiLock = null
+			return
+		}
+		if(wifiLock?.isHeld == true)
+			return
+
+		try
+		{
+			val mode = wifiLockModeForSdk(Build.VERSION.SDK_INT)
+			val lock = getSystemService(WifiManager::class.java)
+				.createWifiLock(mode, "$packageName:StreamWifiLowLatency")
+			lock.setReferenceCounted(false)
+			lock.acquire()
+			wifiLock = lock
+			Log.i("StreamActivity", "Wi-Fi lock acquired in mode $mode")
+		}
+		catch(e: RuntimeException)
+		{
+			Log.e("StreamActivity", "Failed to acquire Wi-Fi lock", e)
+		}
+	}
+
 	private fun configureDisplayRefreshRate(mode: Preferences.DisplayRefreshRateMode, streamFrameRate: Float)
 	{
 		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT)
@@ -346,6 +386,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onResume()
 		configurePerformanceMode(performanceModeRequested)
+		configureWifiLock(Preferences(this).wifiLowLatencyLockEnabled)
 		hideSystemUI()
 		if(debandRenderer != null) {
 			binding.debandSurfaceView.onResume()
@@ -358,6 +399,7 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onPause()
 	{
+		configureWifiLock(false)
 		super.onPause()
 		configurePerformanceMode(false)
 		if(debandRenderer != null) {
@@ -374,6 +416,7 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		configureWifiLock(false)
 		configurePerformanceMode(false)
 		restoreDisplayRefreshRate()
 		super.onDestroy()
