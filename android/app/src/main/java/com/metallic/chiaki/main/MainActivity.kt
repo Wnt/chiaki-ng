@@ -199,6 +199,7 @@ class MainActivity : AppCompatActivity()
 			linkPendingHost()
 		}
 		viewModel.psnAction.observe(this) { consoleAdapter.action = it }
+		viewModel.psnProgress.observe(this) { consoleAdapter.progress = it }
 		viewModel.psnError.observe(this, this::showPsnActionError)
 		viewModel.psnPlayRequest.observe(this) { request ->
 			request ?: return@observe

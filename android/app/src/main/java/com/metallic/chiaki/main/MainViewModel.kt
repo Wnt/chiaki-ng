@@ -2,6 +2,7 @@
 
 package com.metallic.chiaki.main
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.LiveData
@@ -14,7 +15,11 @@ import com.metallic.chiaki.discovery.serverMac
 import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.remote.AndroidPsnRemoteClient
 import com.metallic.chiaki.remote.AndroidPsnRemoteNativeBridge
+import com.metallic.chiaki.remote.ConnectPhase
+import com.metallic.chiaki.remote.ConnectProgress
 import com.metallic.chiaki.remote.PsnDevice
+import com.metallic.chiaki.remote.connectPhaseOf
+import com.metallic.chiaki.remote.connectProgress
 import com.metallic.chiaki.remote.PsnRemoteAuthenticationException
 import com.metallic.chiaki.remote.PsnRemoteController
 import com.metallic.chiaki.remote.PsnRemoteHttpException
@@ -22,6 +27,7 @@ import com.metallic.chiaki.remote.PsnRemoteState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -81,6 +87,9 @@ class MainViewModel(
 	val psnError: LiveData<PsnActionError?> get() = _psnError
 	private val _psnPlayRequest = MutableLiveData<PsnPlayRequest?>(null)
 	val psnPlayRequest: LiveData<PsnPlayRequest?> get() = _psnPlayRequest
+	/** Plain progress for the console card while a PSN connect runs (PLE-337). */
+	private val _psnProgress = MutableLiveData<ConnectProgress?>(null)
+	val psnProgress: LiveData<ConnectProgress?> get() = _psnProgress
 	private var psnLoadJob: Job? = null
 	private var psnActionJob: Job? = null
 	private var actionController: PsnRemoteController? = null
@@ -190,15 +199,55 @@ class MainViewModel(
 				preferences.decoderInputThreadEnabled
 			)
 			val controller = psnClient.controller(bridge).also { actionController = it }
-			controller.connect(console.device)
-			val registHost = (controller.state.value as? PsnRemoteState.Registered)?.host
-				?: error("PSN registration did not return console credentials")
-			val savedHost = withContext(Dispatchers.IO) {
-				val host = RegisteredHost(registHost)
-				database.registeredHostDao().deleteByMac(host.serverMac)
-				host.copy(id = database.registeredHostDao().insert(host))
+			val progressJob = viewModelScope.launch { trackPsnProgress(controller) }
+			try
+			{
+				controller.connect(console.device)
+				val registHost = (controller.state.value as? PsnRemoteState.Registered)?.host
+					?: error("PSN registration did not return console credentials")
+				val savedHost = withContext(Dispatchers.IO) {
+					val host = RegisteredHost(registHost)
+					database.registeredHostDao().deleteByMac(host.serverMac)
+					host.copy(id = database.registeredHostDao().insert(host))
+				}
+				PsnPlayRequest(console.copy(registeredHost = savedHost), justLinked = true)
 			}
-			PsnPlayRequest(console.copy(registeredHost = savedHost), justLinked = true)
+			finally
+			{
+				progressJob.cancel()
+				_psnProgress.value = null
+			}
+		}
+	}
+
+	/**
+	 * PLE-337: turn the control-plane states into something a waiting user can read. The measured
+	 * first run spends 3.5 s reaching the console and 6 s waiting for its OFFER, so the card must
+	 * keep moving on its own — the second count does that even while one phase sits still.
+	 *
+	 * Polls rather than collects because the elapsed time has to advance between state changes.
+	 */
+	private suspend fun trackPsnProgress(controller: PsnRemoteController)
+	{
+		var phase = ConnectPhase.REACHING_NETWORK
+		var phaseStartedAt = SystemClock.elapsedRealtime()
+		var shown: ConnectProgress? = null
+		while(true)
+		{
+			val now = SystemClock.elapsedRealtime()
+			val current = connectPhaseOf(controller.state.value)
+			if(current != null && current != phase)
+			{
+				phase = current
+				phaseStartedAt = now
+			}
+			val progress = connectProgress(phase, now - phaseStartedAt)
+			if(progress != shown)
+			{
+				shown = progress
+				_psnProgress.value = progress
+			}
+			delay(PSN_PROGRESS_TICK_MS)
 		}
 	}
 
@@ -286,6 +335,9 @@ class MainViewModel(
 }
 
 private const val PSN_LIST_TAG = "PsnConsoles"
+
+/** How often the console card's elapsed count is refreshed; a quarter second reads as smooth. */
+private const val PSN_PROGRESS_TICK_MS = 250L
 
 /** One support-readable line: exception type, message, HTTP status and PSN's error excerpt. Never tokens. */
 internal fun describePsnFailure(error: Throwable): String = buildString {

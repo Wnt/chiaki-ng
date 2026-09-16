@@ -320,5 +320,14 @@
     <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
     <string name="preferences_stream_quality_preset_key">stream_quality_preset</string>
-    <string name="stream_linked_starting">Console linked. Waiting for it to accept the stream…</string>
+    <!-- PLE-337: the first run takes tens of seconds, so every wait gets a name and a clock. -->
+    <string name="connect_phase_reaching_network">Reaching PlayStation Network</string>
+    <string name="connect_phase_waking_console">Waking your console</string>
+    <string name="connect_phase_opening_route">Opening a route to your console</string>
+    <string name="connect_phase_linking">Linking this phone</string>
+    <string name="connect_phase_starting_stream">Starting the stream</string>
+    <string name="connect_phase_console_not_ready">Waiting for your console to be ready</string>
+    <string name="connect_detail_step">Step %1$d of %2$d · %3$d s</string>
+    <string name="connect_detail_elapsed">%1$d s</string>
+    <string name="connect_detail_slow">Taking longer than usual · %1$d s</string>
 </resources>

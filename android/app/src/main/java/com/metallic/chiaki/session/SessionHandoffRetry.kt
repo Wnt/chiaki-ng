@@ -76,14 +76,42 @@ class SessionHandoffRetryPolicy(
 		const val QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED = 3
 		const val QUIT_REASON_SESSION_REQUEST_RP_IN_USE = 4
 
-		/**
-		 * Eight retries, 43 s of waiting in all: short at first because the console is usually
-		 * ready within a second or two, then patient, because the capture that finally succeeded
-		 * did so 49 s after the link.
-		 */
-		val DEFAULT_DELAYS_MS = listOf(1_000L, 2_000L, 3_000L, 5_000L, 8_000L, 8_000L, 8_000L, 8_000L)
 		const val REFUSED_BUDGET_MS = 45_000L
 		const val IN_USE_BUDGET_MS = 15_000L
+
+		/** The first probe, fired soon after the refusal: the console is often ready within a second. */
+		const val FIRST_DELAY_MS = 500L
+
+		/** Every probe after the first. Short, and it stays short — see [DEFAULT_DELAYS_MS]. */
+		const val STEADY_DELAY_MS = 1_200L
+
+		/**
+		 * A steady ladder: [firstMs], then [steadyMs] over and over, for as long as [budgetMs] allows.
+		 *
+		 * PLE-337 replaced PLE-335's 1/2/3/5/8/8/8/8 backoff. A refused TCP connect to the console's
+		 * port 9295 costs 4-5 ms — every failed attempt in
+		 * `build/captures/ple335-firstrun-20260916T224733Z-logcat.txt` took that long — so backing off
+		 * buys nothing and costs the user real seconds: in that capture the console became ready
+		 * somewhere inside the final 8 s gap, and up to 8 s of a 35.2 s wait was our own backoff.
+		 * Polling at a roughly constant interval bounds that overshoot to one interval instead.
+		 */
+		fun steadyDelays(firstMs: Long, steadyMs: Long, budgetMs: Long): List<Long>
+		{
+			require(firstMs > 0 && steadyMs > 0) { "retry delays must be positive" }
+			val delays = mutableListOf<Long>()
+			var elapsedMs = 0L
+			var nextMs = firstMs
+			while(elapsedMs + nextMs <= budgetMs)
+			{
+				delays += nextMs
+				elapsedMs += nextMs
+				nextMs = steadyMs
+			}
+			return delays
+		}
+
+		/** 500 ms, then 1.2 s every time, filling the 45 s refusal budget. */
+		val DEFAULT_DELAYS_MS: List<Long> = steadyDelays(FIRST_DELAY_MS, STEADY_DELAY_MS, REFUSED_BUDGET_MS)
 	}
 }
 

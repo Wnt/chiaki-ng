@@ -25,7 +25,7 @@ class StreamViewModel(
 	private val psnDevice: PsnDevice? = null,
 	diagnosticsPreview: Boolean = false,
 	/** This stream follows a successful registration: the console may still be settling (PLE-335). */
-	justLinked: Boolean = false
+	val justLinked: Boolean = false
 ): ViewModel()
 {
 	val preferences = Preferences(application)

@@ -38,6 +38,9 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.BuildConfig
+import com.metallic.chiaki.remote.ConnectPhase
+import com.metallic.chiaki.remote.connectProgress
+import com.metallic.chiaki.remote.detailText
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.viewModelFactory
@@ -86,6 +89,8 @@ class StreamActivity : AppCompatActivity()
 		// candidate; a missing key preserves the current layout.
 		const val WINDOW_TOUCH_LAYOUT_SETTING = "ple_244_window_touch_layout"
 		private const val HIDE_UI_TIMEOUT_MS = 3500L
+		/** How often the connect overlay's second count is redrawn (PLE-337). */
+		private const val CONNECT_PROGRESS_TICK_MS = 500L
 
 		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
 		{
@@ -127,6 +132,18 @@ class StreamActivity : AppCompatActivity()
 	}
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
+
+	// PLE-337: which wait the connect is in, and when it started, so the overlay can count.
+	private var connectPhase: ConnectPhase? = null
+	private var connectPhaseStartedAt = 0L
+	private val connectProgressTick = object: Runnable
+	{
+		override fun run()
+		{
+			renderConnectProgress()
+			uiVisibilityHandler.postDelayed(this, CONNECT_PROGRESS_TICK_MS)
+		}
+	}
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -557,6 +574,7 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		uiVisibilityHandler.removeCallbacks(connectProgressTick)
 		diagnosticsOverlay?.destroy()
 		diagnosticsOverlay = null
 		configureWifiLock(false)
@@ -879,6 +897,41 @@ class StreamActivity : AppCompatActivity()
 		confirmation.show()
 	}
 
+	/**
+	 * PLE-337: the connect overlay. [phase] changing restarts the clock; the same phase repeating -
+	 * which is exactly what a handoff retry does - leaves it running, so the count keeps rising
+	 * across every poll of the console instead of resetting to zero each time.
+	 */
+	private fun setConnectPhase(phase: ConnectPhase?)
+	{
+		if(phase != connectPhase)
+		{
+			connectPhase = phase
+			connectPhaseStartedAt = SystemClock.elapsedRealtime()
+		}
+		uiVisibilityHandler.removeCallbacks(connectProgressTick)
+		renderConnectProgress()
+		if(phase != null)
+			uiVisibilityHandler.postDelayed(connectProgressTick, CONNECT_PROGRESS_TICK_MS)
+	}
+
+	private fun renderConnectProgress()
+	{
+		val phase = connectPhase
+		if(phase == null)
+		{
+			binding.connectingStatusText.visibility = View.GONE
+			binding.connectingDetailText.visibility = View.GONE
+			return
+		}
+		val progress = connectProgress(phase, SystemClock.elapsedRealtime() - connectPhaseStartedAt,
+			showStep = viewModel.justLinked)
+		binding.connectingStatusText.visibility = View.VISIBLE
+		binding.connectingStatusText.setText(phase.labelRes)
+		binding.connectingDetailText.visibility = View.VISIBLE
+		binding.connectingDetailText.text = progress.detailText(this)
+	}
+
 	override fun onWindowFocusChanged(hasFocus: Boolean)
 	{
 		super.onWindowFocusChanged(hasFocus)
@@ -904,12 +957,15 @@ class StreamActivity : AppCompatActivity()
 	{
 		val connecting = state == StreamStateConnecting || state == StreamStateLinkedStarting
 		binding.progressBar.visibility = if(connecting) View.VISIBLE else View.GONE
-		// PLE-335: a console that has just been linked needs a moment before it accepts the stream.
-		// Say so, rather than leaving a bare spinner or - as before - raising "Session has quit".
-		binding.connectingStatusText.visibility =
-			if(state == StreamStateLinkedStarting) View.VISIBLE else View.GONE
-		if(state == StreamStateLinkedStarting)
-			binding.connectingStatusText.setText(R.string.stream_linked_starting)
+		// PLE-335/PLE-337: a console that has just been linked needs a moment before it accepts the
+		// stream. Name that wait and keep a clock on it, rather than leaving a bare spinner or - as
+		// before - raising "Session has quit".
+		setConnectPhase(when(state)
+		{
+			StreamStateLinkedStarting -> ConnectPhase.CONSOLE_NOT_READY
+			StreamStateConnecting -> ConnectPhase.STARTING_STREAM
+			else -> null
+		})
 		if(state == StreamStateConnected)
 			summaryAccumulator.connected(SystemClock.elapsedRealtime())
 
