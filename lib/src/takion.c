@@ -292,6 +292,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->disable_video_packet_reordering = info->disable_video_packet_reordering;
 	takion->diagnostics_enabled = info->diagnostics_enabled;
 	takion->video_reorder_timeouts = 0;
+	takion->video_fps = info->video_fps;
+	memset(&takion->video_packet_jitter, 0, sizeof(takion->video_packet_jitter));
 
 	switch(takion->version)
 	{
@@ -588,6 +590,49 @@ CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *ta
 	uint64_t total = takion->video_reorder_timeouts;
 	chiaki_mutex_unlock(&takion->diagnostics_mutex);
 	return total;
+}
+
+CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
+		uint64_t arrival_us, ChiakiSeqNum16 frame_index, uint32_t video_fps)
+{
+	if(!jitter || video_fps == 0)
+		return;
+	if(!jitter->initialized)
+	{
+		jitter->initialized = true;
+		jitter->previous_arrival_us = arrival_us;
+		jitter->previous_frame_index = frame_index;
+		return;
+	}
+
+	int64_t arrival_delta_us = (int64_t)(arrival_us - jitter->previous_arrival_us);
+	int16_t frame_delta = (int16_t)(frame_index - jitter->previous_frame_index);
+	int64_t sender_delta_us = (int64_t)frame_delta * 1000000LL / (int64_t)video_fps;
+	int64_t variation_us = arrival_delta_us - sender_delta_us;
+	if(variation_us < 0)
+		variation_us = -variation_us;
+
+	// RFC 3550 A.8 integer form: keep four fractional bits and use gain 1/16.
+	jitter->jitter_us_q4 += variation_us - ((jitter->jitter_us_q4 + 8) >> 4);
+	jitter->previous_arrival_us = arrival_us;
+	jitter->previous_frame_index = frame_index;
+}
+
+CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter)
+{
+	if(!jitter || !jitter->initialized)
+		return 0;
+	return (uint64_t)((jitter->jitter_us_q4 + 8) >> 4);
+}
+
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *takion)
+{
+	if(!takion->diagnostics_enabled)
+		return 0;
+	chiaki_mutex_lock(&takion->diagnostics_mutex);
+	uint64_t jitter_us = chiaki_takion_video_packet_jitter_get(&takion->video_packet_jitter);
+	chiaki_mutex_unlock(&takion->diagnostics_mutex);
+	return jitter_us;
 }
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_crypt_advance_key_pos(ChiakiTakion *takion, size_t data_size, uint64_t *key_pos)
@@ -1979,6 +2024,14 @@ static void takion_handle_packet_av(ChiakiTakion *takion, uint8_t base_type, uin
 	}
 
 	bool is_video = (base_type == TAKION_PACKET_TYPE_VIDEO);
+	if(is_video && takion->diagnostics_enabled)
+	{
+		uint64_t arrival_us = chiaki_time_now_monotonic_us();
+		chiaki_mutex_lock(&takion->diagnostics_mutex);
+		chiaki_takion_video_packet_jitter_push(&takion->video_packet_jitter,
+			arrival_us, packet.frame_index, takion->video_fps);
+		chiaki_mutex_unlock(&takion->diagnostics_mutex);
+	}
 	if(!is_video || takion->disable_video_packet_reordering)
 	{
 		takion_dispatch_av_packet(takion, &packet);

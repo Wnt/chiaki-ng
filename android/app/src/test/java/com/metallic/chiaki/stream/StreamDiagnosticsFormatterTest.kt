@@ -22,7 +22,7 @@ class StreamDiagnosticsFormatterTest
 		val text = StreamDiagnosticsFormatter.format(null, ui)
 		assertTrue(text.contains("stream 0.0 fps | decoder 0.0 fps"))
 		assertTrue(text.contains("decode 0.00 ms mean | 0.00 ms p95"))
-		assertTrue(text.contains("Takion 0.0 pkt/s | loss 0.00% | feedback 0.0 pkt/s"))
+		assertTrue(text.contains("Takion 0.0 pkt/s | loss 0.00% | jitter 0.00 ms | feedback 0.0 pkt/s"))
 		assertTrue(text.contains("audio 0.00 ms | xruns 0 | underruns 0"))
 		assertTrue(text.contains("vsync 0.000 ms | miss 0"))
 		assertTrue(text.contains("display 1920x1080@59.94 Hz mode 7 | view=fit"))
@@ -44,6 +44,7 @@ class StreamDiagnosticsFormatterTest
 			missedVsyncs = 4,
 			videoFramesLost = 5,
 			reorderQueueTimeouts = 6,
+			videoPacketJitterMicros = 2_750,
 			takionPacketsReceived = 1800,
 			takionPacketsLost = 200,
 			feedbackPackets = 240,
@@ -64,7 +65,7 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("stream 60.0 fps | decoder 59.0 fps"))
 		assertTrue(text.contains("decode 8.13 ms mean | 10.75 ms p95 | q 1"))
 		assertTrue(text.contains("drop-in 2 | late 3 | lost 5 | reorder 6"))
-		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
+		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | jitter 2.75 ms | feedback 120.0 pkt/s"))
 		assertTrue(text.contains("RTT 4.25 ms"))
 		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
 		assertTrue(text.contains("vsync 8.333 ms | miss 4 | DJB 8.0 ms"))

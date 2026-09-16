@@ -162,8 +162,13 @@ static MunitResult test_takion_send_buffer(const MunitParameter params[], void *
 #undef nums_count
 }
 
+static MunitResult test_takion_video_packet_jitter(const MunitParameter params[], void *user);
+
 static MunitResult test_takion_format_congestion(const MunitParameter params[], void *user)
 {
+	MunitResult jitter_result = test_takion_video_packet_jitter(params, user);
+	if(jitter_result != MUNIT_OK)
+		return jitter_result;
 	static const uint8_t handshake_key[] = { 0x54, 0x65, 0x4c, 0x34, 0x5c, 0xac, 0x56, 0xb8, 0xea, 0xe6, 0x15, 0x2a, 0xde, 0x1c, 0xe2, 0xe8 };
 	static const uint8_t ecdh_secret[] = { 0x00, 0x34, 0xf8, 0x21, 0xc7, 0xd9, 0xde, 0xa9, 0xe9, 0x11, 0xca, 0x5a, 0xd6, 0x7d, 0x11, 0xce, 0x4f, 0x02, 0xb1, 0xce, 0x1e, 0xe7, 0xc3, 0x8d, 0x54, 0x39, 0xfa, 0x64, 0xe3, 0xdb, 0xd8, 0x0d };
 
@@ -195,6 +200,30 @@ static MunitResult test_takion_format_congestion(const MunitParameter params[], 
 	chiaki_gkcrypt_fini(&gkcrypt);
 	munit_assert_int(test_network_stats_all(), ==, MUNIT_OK);
 
+	return MUNIT_OK;
+}
+
+static MunitResult test_takion_video_packet_jitter(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	ChiakiTakionVideoPacketJitter jitter = { 0 };
+
+	// Stable 60 fps, one packet per frame, including frame-index wrap.
+	chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 65534, 60);
+	chiaki_takion_video_packet_jitter_push(&jitter, 1016666, 65535, 60);
+	chiaki_takion_video_packet_jitter_push(&jitter, 1033332, 0, 60);
+	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
+
+	// A 16 ms delay spike and its recovery each contribute |D| = 16000 us.
+	chiaki_takion_video_packet_jitter_push(&jitter, 1065998, 1, 60);
+	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1000);
+	chiaki_takion_video_packet_jitter_push(&jitter, 1066664, 2, 60);
+	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1938);
+
+	// Multiple packets from one video frame are packet samples, not a frame proxy.
+	chiaki_takion_video_packet_jitter_push(&jitter, 1067664, 2, 60);
+	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1879);
 	return MUNIT_OK;
 }
 

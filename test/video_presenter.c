@@ -149,7 +149,7 @@ static MunitResult test_period_observation(const MunitParameter params[], void *
 	return MUNIT_OK;
 }
 
-static MunitResult test_recovery_action(const MunitParameter params[], void *user)
+static MunitResult test_recovery_release_decision(const MunitParameter params[], void *user)
 {
 	(void)params;
 	(void)user;
@@ -164,15 +164,14 @@ static MunitResult test_recovery_action(const MunitParameter params[], void *use
 	munit_assert_int(android_chiaki_video_recovery_sanitize_strategy(1), ==,
 			ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH);
 
-	// timeline_shift keeps the split the presenter has today: balanced drops the
-	// head frame, every other pacing mode shifts the timeline.
+	// The strategy name controls the late-frame release decision in every mode.
+	// In particular, balanced is the high-refresh paced mode used by PLE-128: a
+	// timeline shift must not turn into a releaseOutputBuffer(render=false) drop.
 	for(int mode = 0; mode <= 3; mode++)
 	{
-		AndroidChiakiVideoRecoveryAction expected = mode == 2
-				? ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_DROP_HEAD
-				: ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE;
 		munit_assert_int(android_chiaki_video_recovery_action(
-				ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, mode), ==, expected);
+				ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, mode), ==,
+				ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE);
 		munit_assert_int(android_chiaki_video_recovery_action(
 				ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH, mode), ==,
 				ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_FLUSH_QUEUE);
@@ -239,6 +238,17 @@ static MunitResult test_period_seed_and_update(const MunitParameter params[], vo
 			period_60_hz, 17000000), ==, 16708333);
 	munit_assert_int64(android_chiaki_video_presenter_update_period(
 			period_120_hz, 25000000), ==, period_120_hz);
+
+	// A match-stream panel transition after presenter startup reseeds at 60 Hz;
+	// the next Choreographer observation remains locked to that 16.67 ms grid.
+	int64_t running_period_ns = android_chiaki_video_presenter_seed_period(
+			120.0, 0, 60);
+	munit_assert_int64(running_period_ns, ==, period_120_hz);
+	running_period_ns = android_chiaki_video_presenter_seed_period(60.0, 0, 60);
+	munit_assert_int64(running_period_ns, ==, period_60_hz);
+	running_period_ns = android_chiaki_video_presenter_update_period(
+			running_period_ns, period_60_hz);
+	munit_assert_int64(running_period_ns, ==, period_60_hz);
 	return MUNIT_OK;
 }
 
@@ -285,7 +295,7 @@ MunitTest tests_video_presenter[] = {
 	},
 	{
 		"/recovery_action",
-		test_recovery_action,
+		test_recovery_release_decision,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,
