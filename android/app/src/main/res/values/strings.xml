@@ -112,6 +112,8 @@
     <string name="preferences_controller_input_coalescing_enabled_summary">Merge controller updates into one native call per display frame (applies to the next stream)</string>
     <string name="preferences_gamepad_unbuffered_dispatch_enabled_title">Unbuffered gamepad dispatch</string>
     <string name="preferences_gamepad_unbuffered_dispatch_enabled_summary">Ask Android not to batch physical-controller joystick events on Android 11+, so an axis change reaches the coalescer as soon as it arrives instead of waiting for the next input batch</string>
+    <string name="preferences_gamepad_trigger_fallback_enabled_title">Alternate gamepad trigger axes</string>
+    <string name="preferences_gamepad_trigger_fallback_enabled_summary">Use brake/gas for L2/R2 when a controller does not report working trigger axes (applies to the next stream)</string>
     <string name="preferences_feedback_reduced_interval_enabled_title">Reduced feedback interval (experimental)</string>
     <string name="preferences_feedback_reduced_interval_enabled_summary">Send controller feedback state at most every 4ms instead of 8ms; untested on PS5, revert if it causes disconnects or dropped input (applies to the next stream)</string>
     <string name="preferences_feedback_stats_log_enabled_title">Log stream latency statistics (diagnostic)</string>
@@ -202,6 +204,7 @@
     <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>
     <string name="preferences_gamepad_unbuffered_dispatch_enabled_key">stream_gamepad_unbuffered</string>
+    <string name="preferences_gamepad_trigger_fallback_enabled_key">stream_gamepad_trigger_fallback</string>
     <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>
     <string name="preferences_feedback_stats_log_enabled_key">stream_feedback_stats_log</string>
     <string name="preferences_stream_diagnostics_overlay_enabled_key">stream_diagnostics_overlay</string>
