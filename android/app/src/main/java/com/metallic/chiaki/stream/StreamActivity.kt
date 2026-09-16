@@ -9,6 +9,8 @@ import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.graphics.Matrix
 import android.graphics.PixelFormat
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
@@ -587,8 +589,28 @@ class StreamActivity : AppCompatActivity()
 			viewMode = TransformMode.fromButton(binding.displayModeToggle.checkedButtonId)
 				.name.lowercase(Locale.US),
 			flags = flags,
-			presenterMode = if(preferences.videoPacingEnabled) preferences.videoPacingMode.value else null
+			presenterMode = if(preferences.videoPacingEnabled) preferences.videoPacingMode.value else null,
+			networkLink = diagnosticsNetworkLink()
 		)
+	}
+
+	@Suppress("DEPRECATION")
+	private fun diagnosticsNetworkLink(): NetworkLinkSample
+	{
+		val connectivity = getSystemService(ConnectivityManager::class.java)
+		val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+		if(capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true)
+			return NetworkLinkSample(
+				if(capabilities == null) NetworkLinkType.UNKNOWN else NetworkLinkType.OTHER
+			)
+		return runCatching {
+			val info = getSystemService(WifiManager::class.java).connectionInfo
+			NetworkLinkSample(
+				type = NetworkLinkType.WIFI,
+				rssiDbm = info.rssi.takeIf { it in -126..-1 },
+				linkSpeedMbps = info.linkSpeed.takeIf { it > 0 }
+			)
+		}.getOrDefault(NetworkLinkSample(NetworkLinkType.WIFI))
 	}
 
 	private fun reconnect()
