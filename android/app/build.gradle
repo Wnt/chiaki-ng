@@ -21,6 +21,7 @@ def chiakiVersion = "$chiakiVersionMajor.$chiakiVersionMinor.$chiakiVersionPatch
 println("Determined Chiaki Version: $chiakiVersion")
 
 def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching") ?: "false").toBoolean()
+def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "false").toBoolean()
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
 def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
 
@@ -35,6 +36,7 @@ android {
         targetSdk 35
         versionCode 12
         versionName chiakiVersion
+        buildConfigField "boolean", "CHIAKI_ANDROID_EGL_RENDERER", androidEglRenderer.toString()
         externalNativeBuild {
             cmake {
                 arguments "-DCHIAKI_ENABLE_TESTS=OFF",
@@ -51,6 +53,7 @@ android {
                         "-DCHIAKI_ENABLE_STEAM_SHORTCUT=OFF",
                         "-DCHIAKI_ENABLE_STEAMDECK_NATIVE=OFF",
                         "-DCHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING=${takionReceiveBatching ? 'ON' : 'OFF'}",
+                        "-DCHIAKI_ANDROID_EGL_RENDERER=${androidEglRenderer ? 'ON' : 'OFF'}",
                         "-DCHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING=${takionSocketTuning ? 'ON' : 'OFF'}",
                         "-DANDROID_STL=c++_shared",
                         "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
@@ -62,6 +65,7 @@ android {
     buildFeatures {
         viewBinding true
         prefab true
+        buildConfig true
     }
 
     compileOptions {
