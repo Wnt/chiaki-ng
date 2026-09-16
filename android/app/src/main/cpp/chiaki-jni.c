@@ -411,6 +411,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)diagnostics.cadence_err_p99_ns,
 					(jlong)diagnostics.decode_ewma_ns,
 					(jlong)diagnostics.cadence_window_dropped_frames,
+					(jlong)diagnostics.vsync_period_ns,
 					(jlong)diagnostics.presenter_queue_depth,
 					(jlong)audio.latency_us,
 					(jlong)audio.xruns,
@@ -620,7 +621,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

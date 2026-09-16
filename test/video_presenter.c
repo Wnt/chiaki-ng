@@ -148,6 +148,35 @@ static MunitResult test_period_observation(const MunitParameter params[], void *
 	return MUNIT_OK;
 }
 
+static MunitResult test_period_seed_and_update(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+
+	const int64_t period_120_hz = 8333333;
+	const int64_t period_60_hz = 16666667;
+
+	// The active panel mode wins over both an observed callback and the stream rate.
+	munit_assert_int64(android_chiaki_video_presenter_seed_period(
+			120.0, period_60_hz, 60), ==, period_120_hz);
+	// Without panel timing, Choreographer wins; without either, use the stream.
+	munit_assert_int64(android_chiaki_video_presenter_seed_period(
+			0.0, period_120_hz, 60), ==, period_120_hz);
+	munit_assert_int64(android_chiaki_video_presenter_seed_period(
+			0.0, 0, 60), ==, period_60_hz);
+
+	// Exact 2x and 1/2x observations re-lock immediately in both directions.
+	munit_assert_int64(android_chiaki_video_presenter_update_period(
+			period_60_hz, period_120_hz), ==, period_120_hz);
+	munit_assert_int64(android_chiaki_video_presenter_update_period(
+			period_120_hz, period_60_hz), ==, period_60_hz);
+	munit_assert_int64(android_chiaki_video_presenter_update_period(
+			period_60_hz, 17000000), ==, 16708333);
+	munit_assert_int64(android_chiaki_video_presenter_update_period(
+			period_120_hz, 25000000), ==, period_120_hz);
+	return MUNIT_OK;
+}
+
 MunitTest tests_video_presenter[] = {
 	{
 		"/histogram_matches_sorted_percentile",
@@ -184,6 +213,14 @@ MunitTest tests_video_presenter[] = {
 	{
 		"/period_observation",
 		test_period_observation,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL,
+	},
+	{
+		"/period_seed_and_update",
+		test_period_seed_and_update,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,
