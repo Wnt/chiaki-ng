@@ -49,7 +49,7 @@ internal object StreamDiagnosticsFormatter
 				"drop-in %d | late %d | lost %d | reorder %d\n" +
 				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | RTT %.2f ms\n" +
 				"audio %.2f ms | xruns %d | underruns %d\n" +
-				"vsync-miss %d | DJB %.1f ms\n" +
+				"vsync %.3f ms | miss %d | DJB %.1f ms\n" +
 				"stage0 D %.1f target %.1f | err p50 %.1f p99 %.1f ms | decode-ewma %.1f | drops %d\n" +
 				"display %dx%d@%.2f Hz mode %d | view=%s\n" +
 				"flags $flags$presenter",
@@ -69,6 +69,7 @@ internal object StreamDiagnosticsFormatter
 			(stats?.audioLatencyMicros ?: 0L) / 1000.0,
 			stats?.audioXruns ?: 0L,
 			stats?.audioUnderruns ?: 0L,
+			(stats?.vsyncPeriodNanos ?: 0L) / 1_000_000.0,
 			stats?.missedVsyncs ?: 0L,
 			(stats?.dejitterBufferNanos ?: 0L) / 1_000_000.0,
 			(stats?.cadenceDepthNanos ?: 0L) / 1_000_000.0,

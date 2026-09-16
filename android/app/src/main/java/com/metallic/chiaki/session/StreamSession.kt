@@ -40,7 +40,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 
 	private var surfaceTexture: SurfaceTexture? = null
 	private var surface: Surface? = null
-	private var surfaceRefreshHz = connectInfo.videoProfile.maxFPS.toDouble()
+	private var surfaceRefreshHz = 0.0
 	private var surfaceVsyncOffsetNanos = 0L
 	private var sustainedPerformanceModeLive = false
 	private val nativePacingMode get() = if(videoPacingEnabled) videoPacingMode else 0
@@ -158,7 +158,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			{
 				val surface = holder.surface
 				applyFrameRate(surface, frameRate)
-				setSurface(surface, surfaceView.display, frameRate?.toDouble())
+				setSurface(surface, surfaceView.display)
 			}
 
 			override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { }
@@ -176,7 +176,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		val surface = surfaceView.holder.surface
 		if (surface?.isValid == true) {
 			applyFrameRate(surface, frameRate)
-			setSurface(surface, surfaceView.display, frameRate?.toDouble())
+			setSurface(surface, surfaceView.display)
 		}
 	}
 
@@ -225,15 +225,15 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	/**
 	 * Attach to a custom Surface (e.g., from GLSurfaceView with debanding)
 	 */
-	fun attachToSurface(surface: Surface, display: Display? = null, refreshHz: Double? = null)
+	fun attachToSurface(surface: Surface, display: Display? = null)
 	{
-		setSurface(surface, display, refreshHz)
+		setSurface(surface, display)
 	}
 
-	private fun setSurface(surface: Surface, display: Display?, refreshHz: Double? = null)
+	private fun setSurface(surface: Surface, display: Display?)
 	{
 		this.surface = surface
-		surfaceRefreshHz = refreshHz ?: display?.refreshRate?.toDouble() ?: connectInfo.videoProfile.maxFPS.toDouble()
+		surfaceRefreshHz = display?.mode?.refreshRate?.toDouble() ?: 0.0
 		surfaceVsyncOffsetNanos = display?.appVsyncOffsetNanos ?: 0L
 		session?.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods,
