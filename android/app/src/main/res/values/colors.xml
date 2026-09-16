@@ -12,6 +12,11 @@
     <!-- Readable on an always-dark surface (StreamTheme is not DayNight). -->
     <color name="text_link_dark">#82B1FF</color>
 
+    <!-- "Linked" tag on the main console list (PLE-338); readable on the light
+         AppTheme surface, overridden for dark in values-night/colors.xml. See
+         attr colorLinkedIndicator. -->
+    <color name="linked_indicator">#146C2E</color>
+
     <color name="stream_text">@android:color/white</color>
     <color name="stream_background">@android:color/black</color>
     <color name="stream_overlay_background">#77000000</color>
