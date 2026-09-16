@@ -2,6 +2,7 @@
 
 #include <munit.h>
 
+#include <chiaki/congestioncontrol.h>
 #include <chiaki/networkstats.h>
 #include <chiaki/thread.h>
 
@@ -56,12 +57,84 @@ static MunitResult test_congestion_measured_versus_reported(const MunitParameter
 	chiaki_network_stats_get_snapshot(&stats, &snapshot);
 	munit_assert_double_equal(snapshot.congestion_measured_loss, 0.20, 6);
 	munit_assert_double_equal(snapshot.congestion_reported_loss, 0.05, 6);
+	chiaki_network_stats_record_congestion(&stats, 80, 20, 1.0, &received, &lost);
+	munit_assert_uint64(received, ==, 80);
+	munit_assert_uint64(lost, ==, 20);
 
 	chiaki_network_stats_record_congestion(&stats, 0, 0, 0.05, &received, &lost);
 	chiaki_network_stats_get_snapshot(&stats, &snapshot);
 	munit_assert_double_equal(snapshot.congestion_measured_loss, 0.0, 6);
 	munit_assert_double_equal(snapshot.congestion_reported_loss, 0.0, 6);
 	chiaki_network_stats_fini(&stats);
+	return MUNIT_OK;
+}
+
+static MunitResult test_adaptive_loss_report_hysteresis(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	ChiakiAdaptiveLossReportState state = { 0 };
+	ChiakiAdaptiveLossReportResult result;
+
+	// A short spike is insufficient; the third consecutive 1 Hz loss sample enters.
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES - 1; i++)
+	{
+		result = chiaki_adaptive_loss_report_update(&state, true,
+			CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_LOSS, 0);
+		munit_assert_false(result.uncapped);
+		munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_NONE);
+	}
+	result = chiaki_adaptive_loss_report_update(&state, true,
+		CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_LOSS, 0);
+	munit_assert_true(result.uncapped);
+	munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_UNCAPPED);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_LOSS);
+	munit_assert_uint(result.poor_samples, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES);
+
+	// Thirty good samples satisfy recovery hysteresis but the 60 s dwell still wins.
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_COOLDOWN_SAMPLES - 1; i++)
+	{
+		result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 0);
+		munit_assert_true(result.uncapped);
+	}
+	result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 0);
+	munit_assert_false(result.uncapped);
+	munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_CAPPED);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_GOOD);
+	munit_assert_uint(result.good_samples, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_RECOVER_SAMPLES);
+	munit_assert_uint(result.cooldown_samples, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_COOLDOWN_SAMPLES);
+	return MUNIT_OK;
+}
+
+static MunitResult test_adaptive_loss_report_jitter_and_cooldown(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	ChiakiAdaptiveLossReportState state = { 0 };
+	ChiakiAdaptiveLossReportResult result;
+
+	// A no-packet sample is neutral even if the last jitter estimate was high,
+	// and breaks the consecutive poor run.
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES - 1; i++)
+		chiaki_adaptive_loss_report_update(&state, true, 0.0,
+			CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_JITTER_US);
+	result = chiaki_adaptive_loss_report_update(&state, false, 1.0,
+		CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_JITTER_US);
+	munit_assert_false(result.uncapped);
+	munit_assert_uint(result.poor_samples, ==, 0);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_NEUTRAL);
+
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES; i++)
+		result = chiaki_adaptive_loss_report_update(&state, true, 0.0,
+			CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_JITTER_US);
+	munit_assert_true(result.uncapped);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_JITTER);
+
+	// Even sustained good input cannot restore the baseline before the dwell expires.
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_RECOVER_SAMPLES; i++)
+		result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 0);
+	munit_assert_true(result.uncapped);
+	munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_NONE);
 	return MUNIT_OK;
 }
 
@@ -111,6 +184,12 @@ MunitResult test_network_stats_all(void)
 	if(result != MUNIT_OK)
 		return result;
 	result = test_congestion_measured_versus_reported(NULL, NULL);
+	if(result != MUNIT_OK)
+		return result;
+	result = test_adaptive_loss_report_hysteresis(NULL, NULL);
+	if(result != MUNIT_OK)
+		return result;
+	result = test_adaptive_loss_report_jitter_and_cooldown(NULL, NULL);
 	if(result != MUNIT_OK)
 		return result;
 	return test_snapshot_is_coherent_during_update(NULL, NULL);

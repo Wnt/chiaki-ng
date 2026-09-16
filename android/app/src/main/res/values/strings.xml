@@ -121,6 +121,8 @@
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
     <string name="preferences_packet_loss_max_percent_summary">Cap the packet loss reported to the console every 200ms (0-100). Lower values trade occasional artifacts for a steadier bitrate on lossy Wi-Fi.</string>
     <string name="preferences_packet_loss_max_percent_value">%d%%</string>
+    <string name="preferences_adaptive_loss_report_title">Adaptive loss-report experiment</string>
+    <string name="preferences_adaptive_loss_report_summary">Report real uncapped loss after sustained packet loss or jitter so the console can lower its target bitrate (experimental; reconnect required)</string>
     <string name="preferences_decoder_operating_rate_title">Decoder operating rate</string>
     <string name="preferences_decoder_operating_rate_summary">Explicit MediaCodec operating-rate from 0–4000 frames/s plus frame-rate = stream fps; 0 leaves the codec defaults (experiment; reconnect required)</string>
     <string name="preferences_decoder_operating_rate_value">%d (0 = codec default)</string>
@@ -234,6 +236,7 @@
 	<string name="preferences_video_presenter_nonblocking_producer_key">stream_video_presenter_nonblocking_producer</string>
 	<string name="preferences_video_pacing_max_frame_age_periods_key">stream_video_pacing_max_frame_age_periods</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
+    <string name="preferences_adaptive_loss_report_key">stream_adaptive_loss_report</string>
     <string name="preferences_decoder_operating_rate_key">stream_decoder_operating_rate</string>
     <string name="preferences_decoder_operating_rate_default_key">stream_decoder_operating_rate_default</string>
     <string name="preferences_decoder_operating_rate_auto_key">stream_decoder_operating_rate_auto</string>
