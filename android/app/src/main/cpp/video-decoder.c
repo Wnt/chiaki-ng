@@ -13,6 +13,7 @@
 #include <string.h>
 
 #define INPUT_BUFFER_TIMEOUT_MS 10
+#define OUTPUT_BACKLOG_IDR_THRESHOLD 5
 
 #define DECODER_CONFIGURE_TIER_COUNT 4
 
@@ -26,7 +27,8 @@ static void *android_chiaki_video_decoder_input_thread_func(void *user);
 static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder, uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index);
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
-		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled, bool input_thread_enabled)
+		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
+		bool input_thread_enabled, bool late_frame_recovery_enabled)
 {
 	decoder->log = log;
 	decoder->codec = NULL;
@@ -41,6 +43,14 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->target_fps = target_fps;
 	decoder->target_codec = codec;
 	decoder->low_latency_enabled = low_latency_enabled;
+	decoder->late_frame_recovery_enabled = late_frame_recovery_enabled;
+	decoder->last_queued_frame_index_valid = false;
+	decoder->output_backlog = 0;
+	decoder->output_frames_released = 0;
+	decoder->output_frames_dropped = 0;
+	decoder->backlog_idr_requested = false;
+	decoder->request_idr_cb = NULL;
+	decoder->request_idr_cb_user = NULL;
 	decoder->shutdown_output = false;
 	decoder->input_thread_enabled = input_thread_enabled;
 	decoder->shutdown_input = false;
@@ -53,9 +63,16 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	ChiakiErrorCode err = chiaki_mutex_init(&decoder->codec_mutex, false);
 	if(err != CHIAKI_ERR_SUCCESS)
 		return err;
+	err = chiaki_mutex_init(&decoder->stats_mutex, false);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		chiaki_mutex_fini(&decoder->codec_mutex);
+		return err;
+	}
 	err = chiaki_mutex_init(&decoder->input_mutex, false);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
+		chiaki_mutex_fini(&decoder->stats_mutex);
 		chiaki_mutex_fini(&decoder->codec_mutex);
 		return err;
 	}
@@ -76,8 +93,46 @@ error_input_cond:
 	chiaki_cond_fini(&decoder->input_cond);
 error_input_mutex:
 	chiaki_mutex_fini(&decoder->input_mutex);
+	chiaki_mutex_fini(&decoder->stats_mutex);
 	chiaki_mutex_fini(&decoder->codec_mutex);
 	return err;
+}
+
+void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
+		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user)
+{
+	chiaki_mutex_lock(&decoder->stats_mutex);
+	decoder->request_idr_cb = cb;
+	decoder->request_idr_cb_user = user;
+	chiaki_mutex_unlock(&decoder->stats_mutex);
+}
+
+static void reset_output_stats(AndroidChiakiVideoDecoder *decoder)
+{
+	chiaki_mutex_lock(&decoder->stats_mutex);
+	decoder->last_queued_frame_index_valid = false;
+	decoder->output_backlog = 0;
+	decoder->output_frames_released = 0;
+	decoder->output_frames_dropped = 0;
+	decoder->backlog_idr_requested = false;
+	chiaki_mutex_unlock(&decoder->stats_mutex);
+}
+
+static void record_output_frame(AndroidChiakiVideoDecoder *decoder, bool dropped,
+		uint64_t *backlog, uint64_t *released, uint64_t *dropped_total)
+{
+	chiaki_mutex_lock(&decoder->stats_mutex);
+	if(decoder->output_backlog > 0)
+		decoder->output_backlog--;
+	decoder->output_frames_released++;
+	if(dropped)
+		decoder->output_frames_dropped++;
+	if(decoder->output_backlog < OUTPUT_BACKLOG_IDR_THRESHOLD)
+		decoder->backlog_idr_requested = false;
+	*backlog = decoder->output_backlog;
+	*released = decoder->output_frames_released;
+	*dropped_total = decoder->output_frames_dropped;
+	chiaki_mutex_unlock(&decoder->stats_mutex);
 }
 
 static AMediaFormat *create_decoder_format(const AndroidChiakiVideoDecoder *decoder, const char *mime, int tier, bool qti_decoder)
@@ -153,6 +208,7 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 		kill_decoder(decoder);
 	free(decoder->input_buf);
 	chiaki_mutex_fini(&decoder->input_mutex);
+	chiaki_mutex_fini(&decoder->stats_mutex);
 	chiaki_mutex_fini(&decoder->codec_mutex);
 }
 
@@ -240,6 +296,9 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		CHIAKI_LOGE(decoder->log, "AMediaCodec_start() failed: %d", (int)r);
 		goto error_codec;
 	}
+	reset_output_stats(decoder);
+	CHIAKI_LOGI(decoder->log, "Decoder late-frame recovery %s (IDR backlog threshold %d)",
+			decoder->late_frame_recovery_enabled ? "enabled" : "disabled", OUTPUT_BACKLOG_IDR_THRESHOLD);
 
 	ChiakiErrorCode err = chiaki_thread_create(&decoder->output_thread, android_chiaki_video_decoder_output_thread_func, decoder);
 	if(err != CHIAKI_ERR_SUCCESS)
@@ -265,6 +324,11 @@ beach:
 static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder, uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index)
 {
 	bool r = true;
+	bool request_idr = false;
+	uint64_t backlog = 0;
+	AndroidChiakiVideoDecoderRequestIDRCallback request_idr_cb = NULL;
+	void *request_idr_cb_user = NULL;
+	bool backlog_recorded = false;
 	chiaki_mutex_lock(&decoder->codec_mutex);
 
 	if(!decoder->codec || decoder->shutdown_output)
@@ -299,10 +363,54 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 			codec_sample_size = codec_buf_size;
 		}
 		memcpy(codec_buf, buf, codec_sample_size);
-		media_status_t r = AMediaCodec_queueInputBuffer(decoder->codec, (size_t)codec_buf_index, 0, codec_sample_size, presentation_time_us, 0);
-		if(r != AMEDIA_OK)
+
+		bool backlog_incremented = false;
+		bool stats_locked = false;
+		bool previous_frame_index_valid = false;
+		ChiakiSeqNum16 previous_frame_index = 0;
+		if(decoder->late_frame_recovery_enabled && !backlog_recorded)
 		{
-			CHIAKI_LOGE(decoder->log, "AMediaCodec_queueInputBuffer() failed: %d", (int)r);
+			chiaki_mutex_lock(&decoder->stats_mutex);
+			stats_locked = true;
+			previous_frame_index_valid = decoder->last_queued_frame_index_valid;
+			previous_frame_index = decoder->last_queued_frame_index;
+			if(!previous_frame_index_valid || previous_frame_index != frame_index)
+			{
+				decoder->last_queued_frame_index = frame_index;
+				decoder->last_queued_frame_index_valid = true;
+				decoder->output_backlog++;
+				backlog_incremented = true;
+			}
+			backlog = decoder->output_backlog;
+			if(backlog >= OUTPUT_BACKLOG_IDR_THRESHOLD && !decoder->backlog_idr_requested)
+			{
+				decoder->backlog_idr_requested = true;
+				request_idr = true;
+				request_idr_cb = decoder->request_idr_cb;
+				request_idr_cb_user = decoder->request_idr_cb_user;
+			}
+			backlog_recorded = true;
+		}
+
+		media_status_t queue_result = AMediaCodec_queueInputBuffer(decoder->codec, (size_t)codec_buf_index, 0, codec_sample_size, presentation_time_us, 0);
+		if(stats_locked)
+		{
+			if(queue_result != AMEDIA_OK && backlog_incremented)
+			{
+				decoder->output_backlog--;
+				decoder->last_queued_frame_index_valid = previous_frame_index_valid;
+				decoder->last_queued_frame_index = previous_frame_index;
+				if(request_idr)
+				{
+					decoder->backlog_idr_requested = false;
+					request_idr = false;
+				}
+			}
+			chiaki_mutex_unlock(&decoder->stats_mutex);
+		}
+		if(queue_result != AMEDIA_OK)
+		{
+			CHIAKI_LOGE(decoder->log, "AMediaCodec_queueInputBuffer() failed: %d", (int)queue_result);
 		}
 		buf += codec_sample_size;
 		buf_size -= codec_sample_size;
@@ -314,6 +422,22 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 
 beach:
 	chiaki_mutex_unlock(&decoder->codec_mutex);
+	if(request_idr)
+	{
+		ChiakiErrorCode err = request_idr_cb ? request_idr_cb(request_idr_cb_user) : CHIAKI_ERR_UNINITIALIZED;
+		if(err == CHIAKI_ERR_SUCCESS)
+		{
+			CHIAKI_LOGW(decoder->log, "Video decoder backlog reached %" PRIu64 "; requested IDR frame", backlog);
+		}
+		else
+		{
+			CHIAKI_LOGW(decoder->log, "Video decoder backlog reached %" PRIu64 "; IDR request failed: %s",
+					backlog, chiaki_error_string(err));
+			chiaki_mutex_lock(&decoder->stats_mutex);
+			decoder->backlog_idr_requested = false;
+			chiaki_mutex_unlock(&decoder->stats_mutex);
+		}
+	}
 	return r;
 }
 
@@ -401,16 +525,57 @@ static void *android_chiaki_video_decoder_output_thread_func(void *user)
 {
 	AndroidChiakiVideoDecoder *decoder = user;
 
+	chiaki_thread_set_affinity(CHIAKI_THREAD_NAME_VIDEO_DECODER);
+
 	while(1)
 	{
 		AMediaCodecBufferInfo info;
 		ssize_t status = AMediaCodec_dequeueOutputBuffer(decoder->codec, &info, -1);
 		if(status >= 0)
 		{
-			if(decoder->real_pts_enabled && info.size != 0)
-				CHIAKI_LOGV(decoder->log, "Video Decoder output PTS: %" PRId64 " us", info.presentationTimeUs);
-			AMediaCodec_releaseOutputBuffer(decoder->codec, (size_t)status, info.size != 0);
-			if(info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM)
+			unsigned int dropped_now = 0;
+			bool eos = false;
+			while(status >= 0)
+			{
+				AMediaCodecBufferInfo newer_info;
+				ssize_t newer_status = -1;
+				if(decoder->late_frame_recovery_enabled && info.size != 0)
+					newer_status = AMediaCodec_dequeueOutputBuffer(decoder->codec, &newer_info, 0);
+
+				bool drop = newer_status >= 0 && newer_info.size != 0;
+				if(decoder->real_pts_enabled && info.size != 0)
+					CHIAKI_LOGV(decoder->log, "Video Decoder output PTS: %" PRId64 " us%s", info.presentationTimeUs,
+							drop ? " (dropped)" : "");
+				AMediaCodec_releaseOutputBuffer(decoder->codec, (size_t)status, info.size != 0 && !drop);
+				eos = (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0;
+				if(decoder->late_frame_recovery_enabled && info.size != 0)
+				{
+					uint64_t backlog;
+					uint64_t released;
+					uint64_t dropped_total;
+					record_output_frame(decoder, drop, &backlog, &released, &dropped_total);
+					if(drop)
+						dropped_now++;
+					else if(released % decoder->fps == 0)
+						CHIAKI_LOGI(decoder->log, "Video decoder output stats: backlog=%" PRIu64 " dropped=%" PRIu64,
+								backlog, dropped_total);
+				}
+
+				if(eos || newer_status < 0)
+					break;
+				status = newer_status;
+				info = newer_info;
+			}
+			if(dropped_now > 0)
+			{
+				chiaki_mutex_lock(&decoder->stats_mutex);
+				uint64_t backlog = decoder->output_backlog;
+				uint64_t dropped_total = decoder->output_frames_dropped;
+				chiaki_mutex_unlock(&decoder->stats_mutex);
+				CHIAKI_LOGW(decoder->log, "Dropped %u stale decoder output frame(s): backlog=%" PRIu64 " dropped=%" PRIu64,
+						dropped_now, backlog, dropped_total);
+			}
+			if(eos)
 			{
 				CHIAKI_LOGI(decoder->log, "AMediaCodec reported EOS");
 				break;
@@ -429,6 +594,13 @@ static void *android_chiaki_video_decoder_output_thread_func(void *user)
 		}
 	}
 
+	if(decoder->late_frame_recovery_enabled)
+	{
+		chiaki_mutex_lock(&decoder->stats_mutex);
+		CHIAKI_LOGI(decoder->log, "Video decoder final output stats: backlog=%" PRIu64 " dropped=%" PRIu64,
+				decoder->output_backlog, decoder->output_frames_dropped);
+		chiaki_mutex_unlock(&decoder->stats_mutex);
+	}
 	CHIAKI_LOGI(decoder->log, "Video Decoder Output Thread exiting");
 
 	return NULL;

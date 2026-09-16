@@ -116,6 +116,7 @@ typedef struct chiaki_takion_connect_info_t
 	bool enable_crypt;
 	bool enable_dualsense;
 	uint8_t protocol_version;
+	bool disable_video_packet_reordering;
 	bool close_socket; // close socket when finishing takion
 } ChiakiTakionConnectInfo;
 
@@ -157,6 +158,7 @@ typedef struct chiaki_takion_t
 	bool video_queue_initialized;
 	int64_t video_queue_head_wait_start_us;
 	uint64_t video_queue_head_wait_seq_num;
+	bool disable_video_packet_reordering;
 	ChiakiTakionSendBuffer send_buffer;
 
 	ChiakiTakionCallback cb;
