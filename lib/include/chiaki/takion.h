@@ -118,8 +118,17 @@ typedef struct chiaki_takion_connect_info_t
 	uint8_t protocol_version;
 	bool disable_video_packet_reordering;
 	bool diagnostics_enabled;
+	uint32_t video_fps;
 	bool close_socket; // close socket when finishing takion
 } ChiakiTakionConnectInfo;
+
+typedef struct chiaki_takion_video_packet_jitter_t
+{
+	bool initialized;
+	uint64_t previous_arrival_us;
+	ChiakiSeqNum16 previous_frame_index;
+	int64_t jitter_us_q4;
+} ChiakiTakionVideoPacketJitter;
 
 
 typedef struct chiaki_takion_t
@@ -163,6 +172,8 @@ typedef struct chiaki_takion_t
 	bool diagnostics_enabled;
 	ChiakiMutex diagnostics_mutex;
 	uint64_t video_reorder_timeouts;
+	uint32_t video_fps;
+	ChiakiTakionVideoPacketJitter video_packet_jitter;
 	ChiakiTakionSendBuffer send_buffer;
 
 	ChiakiTakionCallback cb;
@@ -193,6 +204,10 @@ typedef struct chiaki_takion_t
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, ChiakiTakionConnectInfo *info, chiaki_socket_t *sock);
 CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion);
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *takion);
+CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
+	uint64_t arrival_us, ChiakiSeqNum16 frame_index, uint32_t video_fps);
+CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter);
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *takion);
 
 /**
  * Must be called from within the Takion thread, i.e. inside the callback!

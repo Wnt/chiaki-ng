@@ -366,6 +366,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" dropped_input %llu dropped_presenter %llu dropped_bounded_age %llu"
 					" recovery_flushes %llu recovery_flushed %llu"
 					" lost %llu reorder_timeouts %llu"
+					" packet_jitter_ms %llu.%03llu"
 					" | per_s takion %llu.%03llu feedback %llu.%03llu"
 					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
 					" audio_xruns %s%d audio_underruns %llu%s",
@@ -379,6 +380,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)diagnostics.presenter_recovery_flushed_frames,
 					(unsigned long long)event->stream_stats.video_frames_lost,
 					(unsigned long long)event->stream_stats.video_reorder_timeouts,
+					(unsigned long long)(event->stream_stats.video_packet_jitter_us / 1000),
+					(unsigned long long)(event->stream_stats.video_packet_jitter_us % 1000),
 					(unsigned long long)(takion_per_s_milli / 1000),
 					(unsigned long long)(takion_per_s_milli % 1000),
 					(unsigned long long)(feedback_per_s_milli / 1000),
@@ -404,6 +407,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)diagnostics.missed_vsyncs,
 					(jlong)event->stream_stats.video_frames_lost,
 					(jlong)event->stream_stats.video_reorder_timeouts,
+					(jlong)event->stream_stats.video_packet_jitter_us,
 					(jlong)event->stream_stats.takion_packets_received,
 					(jlong)event->stream_stats.takion_packets_lost,
 					(jlong)event->stream_stats.feedback_packets,
@@ -647,7 +651,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

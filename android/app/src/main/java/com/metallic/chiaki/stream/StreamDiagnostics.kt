@@ -47,7 +47,7 @@ internal object StreamDiagnosticsFormatter
 			"stream %.1f fps | decoder %.1f fps\n" +
 				"decode %.2f ms mean | %.2f ms p95 | q %d\n" +
 				"drop-in %d | late %d | lost %d | reorder %d\n" +
-				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | RTT %.2f ms\n" +
+				"Takion %.1f pkt/s | loss %.2f%% | jitter %.2f ms | feedback %.1f pkt/s | RTT %.2f ms\n" +
 				"audio %.2f ms | xruns %d | underruns %d\n" +
 				"vsync %.3f ms | miss %d | DJB %.1f ms\n" +
 				"stage0 D %.1f target %.1f | err p50 %.1f p99 %.1f ms | decode-ewma %.1f | drops %d\n" +
@@ -64,6 +64,7 @@ internal object StreamDiagnosticsFormatter
 			stats?.reorderQueueTimeouts ?: 0L,
 			rate(received, interval),
 			lossPercent,
+			(stats?.videoPacketJitterMicros ?: 0L) / 1000.0,
 			rate(stats?.feedbackPackets ?: 0L, interval),
 			(stats?.rttMicros ?: 0L) / 1000.0,
 			(stats?.audioLatencyMicros ?: 0L) / 1000.0,

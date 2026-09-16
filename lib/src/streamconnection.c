@@ -171,6 +171,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	bool stream_stats_enabled = session->connect_info.stream_diagnostics_enabled
 		|| session->connect_info.feedback_stats_log_interval_ms > 0;
 	takion_info.diagnostics_enabled = stream_stats_enabled;
+	takion_info.video_fps = session->connect_info.video_profile.max_fps;
 
 	takion_info.cb = stream_connection_takion_cb;
 	takion_info.cb_user = stream_connection;
@@ -360,6 +361,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.stream_frames = stream_frames - previous_stream_frames;
 			stats_event.stream_stats.video_frames_lost = (uint64_t)chiaki_video_receiver_get_frames_lost_total(stream_connection->video_receiver);
 			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);
+			stats_event.stream_stats.video_packet_jitter_us = chiaki_takion_get_video_packet_jitter_us(&stream_connection->takion);
 			stats_event.stream_stats.takion_packets_received = packets_received - previous_packets_received;
 			stats_event.stream_stats.takion_packets_lost = packets_lost - previous_packets_lost;
 			stats_event.stream_stats.feedback_packets = feedback_packets - previous_feedback_packets;
