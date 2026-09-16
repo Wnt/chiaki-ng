@@ -105,7 +105,7 @@ typedef struct chiaki_connect_info_t
 	bool enable_idr_on_fec_failure;
 	bool disable_video_packet_reordering;
 	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
-	uint32_t feedback_stats_log_interval_ms; // 0 = off (default), else log a feedback packet-rate line this often
+	uint32_t feedback_stats_log_interval_ms; // 0 = off (default), else emit the general stream-stats line this often
 	bool stream_diagnostics_enabled; // false by default; emit one CHIAKI_EVENT_STREAM_STATS per second when true
 } ChiakiConnectInfo;
 
@@ -174,6 +174,7 @@ typedef struct chiaki_video_fec_failure_event_t
 typedef struct chiaki_stream_stats_event_t
 {
 	uint64_t interval_ms;
+	uint64_t rtt_us;
 	uint64_t stream_frames;
 	uint64_t video_frames_lost;
 	uint64_t video_reorder_timeouts;

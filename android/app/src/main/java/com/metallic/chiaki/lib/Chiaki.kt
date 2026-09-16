@@ -359,6 +359,7 @@ object RemoteDataSocketNeededEvent: Event()
 data class RegistrationEvent(val host: RegistHost): Event()
 data class StreamStatsEvent(
 	val intervalMillis: Long,
+	val rttMicros: Long,
 	val streamFrames: Long,
 	val decoderFrames: Long,
 	val decodeMeanMicros: Long,
@@ -372,7 +373,10 @@ data class StreamStatsEvent(
 	val takionPacketsLost: Long,
 	val feedbackPackets: Long,
 	val dejitterBufferNanos: Long,
-	val presenterQueueDepth: Long
+	val presenterQueueDepth: Long,
+	val audioLatencyMicros: Long,
+	val audioXruns: Long,
+	val audioUnderruns: Long
 ): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
@@ -475,6 +479,7 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	@Suppress("LongParameterList", "unused") // Called from the single native 1 Hz stats event.
 	private fun eventStreamStats(
 		intervalMillis: Long,
+		rttMicros: Long,
 		streamFrames: Long,
 		decoderFrames: Long,
 		decodeMeanMicros: Long,
@@ -488,11 +493,15 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		takionPacketsLost: Long,
 		feedbackPackets: Long,
 		dejitterBufferNanos: Long,
-		presenterQueueDepth: Long
+		presenterQueueDepth: Long,
+		audioLatencyMicros: Long,
+		audioXruns: Long,
+		audioUnderruns: Long
 	)
 	{
 		event(StreamStatsEvent(
 			intervalMillis = intervalMillis,
+			rttMicros = rttMicros,
 			streamFrames = streamFrames,
 			decoderFrames = decoderFrames,
 			decodeMeanMicros = decodeMeanMicros,
@@ -506,7 +515,10 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			takionPacketsLost = takionPacketsLost,
 			feedbackPackets = feedbackPackets,
 			dejitterBufferNanos = dejitterBufferNanos,
-			presenterQueueDepth = presenterQueueDepth
+			presenterQueueDepth = presenterQueueDepth,
+			audioLatencyMicros = audioLatencyMicros,
+			audioXruns = audioXruns,
+			audioUnderruns = audioUnderruns
 		))
 	}
 
