@@ -35,10 +35,10 @@ replacement values in that file and the runbook.
                                   |                            ^
                                   | static route               |
                                   | 192.168.40.0/24 via        | routed, selected
-                                  | 192.168.1.250              | traffic only
+                                  | 192.168.1.5                | traffic only
                                   v                            |
                          netem guest on pve-nvme --------------+
-                         eth0: 192.168.1.250/24
+                         eth0: 192.168.1.5/24
                          eth1: 192.168.40.1/24
                                   |
                           VLAN 40 `ps-impair`
@@ -54,7 +54,7 @@ replacement values in that file and the runbook.
 | `IMPAIR_VLAN_ID` | `40` | Phase 0 must confirm it is unused |
 | `IMPAIR_SUBNET` | `192.168.40.0/24` | Must not overlap any routed lab network |
 | `IMPAIR_GW` | `192.168.40.1` | Guest `eth1`; DHCP router and DNS forwarder |
-| `IMPAIR_GUEST_LAN_IP` | `192.168.1.250` | Guest `eth0`; Phase 0 must claim it |
+| `IMPAIR_GUEST_LAN_IP` | `192.168.1.5` | Guest `eth0`; outside the Default DHCP pool and claimed by the impairment deployment |
 | `PS5_IP` / peer | `192.168.1.164` | Existing PS5 reservation; never changed here |
 | CT950 | `192.168.1.114` | Existing address; ADB control endpoint |
 | phone | DHCP reservation preferred | Discover by paired ADB GUID; never key safety to an old IP |

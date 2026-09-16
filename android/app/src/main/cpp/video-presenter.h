@@ -57,6 +57,7 @@ typedef struct android_chiaki_video_presenter_config_t
 	uint32_t dejitter_floor_ms;
 	uint32_t dejitter_cap_ms;
 	uint32_t dejitter_queue_age_frames;
+	bool dejitter_half_rate_enabled;
 } AndroidChiakiVideoPresenterConfig;
 
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT { \
@@ -72,6 +73,7 @@ typedef struct android_chiaki_video_presenter_config_t
 	.dejitter_floor_ms = ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_FLOOR_DEFAULT_MS, \
 	.dejitter_cap_ms = ANDROID_CHIAKI_VIDEO_DEJITTER_DEPTH_CAP_DEFAULT_MS, \
 	.dejitter_queue_age_frames = ANDROID_CHIAKI_VIDEO_DEJITTER_QUEUE_AGE_DEFAULT_FRAMES, \
+	.dejitter_half_rate_enabled = false, \
 }
 
 typedef struct android_chiaki_video_presenter_stats_t
@@ -99,6 +101,7 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint64_t cadence_err_p99_ns;
 	uint64_t decode_ewma_ns;
 	uint64_t cadence_window_dropped_frames;
+	bool cadence_half_rate_detected;
 	uint64_t vsync_period_ns;
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;

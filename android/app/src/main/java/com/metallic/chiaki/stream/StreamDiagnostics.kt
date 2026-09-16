@@ -66,7 +66,7 @@ internal object StreamDiagnosticsFormatter
 				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | server-loss %d\n" +
 				"audio %.2f ms | xruns %d | underruns %d\n" +
 				"vsync %.3f ms | miss %d | DJB %.1f ms\n" +
-				"stage0 D %.1f target %.1f | err p50 %.1f p99 %.1f ms | decode-ewma %.1f | drops %d\n" +
+				"stage0 D %.1f target %.1f | err p50 %.1f p99 %.1f ms | decode-ewma %.1f | drops %d | source %s\n" +
 				"display %dx%d@%.2f Hz mode %d | view=%s\n" +
 				"flags $flags$presenter",
 			rate(stats?.streamFrames ?: 0L, interval),
@@ -103,6 +103,7 @@ internal object StreamDiagnosticsFormatter
 			(stats?.cadenceErrP99Nanos ?: 0L) / 1_000_000.0,
 			(stats?.decodeEwmaNanos ?: 0L) / 1_000_000.0,
 			stats?.cadenceWindowDrops ?: 0L,
+			if(stats?.cadenceHalfRateDetected == true) "30-in-60" else "nominal",
 			ui.display.width,
 			ui.display.height,
 			ui.display.refreshRate,

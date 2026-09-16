@@ -254,6 +254,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(videoDejitterEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoDejitterEnabledKey, value).apply() }
 
+	val videoDejitterHalfRateEnabledKey get() = resources.getString(R.string.preferences_video_dejitter_half_rate_enabled_key)
+	var videoDejitterHalfRateEnabled
+		get() = sharedPreferences.getBoolean(videoDejitterHalfRateEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoDejitterHalfRateEnabledKey, value).apply() }
+
 	val videoPacingBoundedAgeEnabledKey get() = resources.getString(R.string.preferences_video_pacing_bounded_age_enabled_key)
 	var videoPacingBoundedAgeEnabled
 		get() = sharedPreferences.getBoolean(videoPacingBoundedAgeEnabledKey, false)
@@ -455,7 +460,8 @@ class Preferences(context: Context)
 		dejitterEnabled = videoDejitterEnabled,
 		dejitterFloorMs = floorMs,
 		dejitterCapMs = capMs,
-		dejitterQueueAgeFrames = videoDejitterQueueAgeFrames
+		dejitterQueueAgeFrames = videoDejitterQueueAgeFrames,
+		dejitterHalfRateEnabled = videoDejitterHalfRateEnabled
 		)
 	}
 

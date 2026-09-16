@@ -41,6 +41,7 @@ typedef struct android_chiaki_video_diagnostics_t
 	uint64_t cadence_err_p99_ns;
 	uint64_t decode_ewma_ns;
 	uint64_t cadence_window_dropped_frames;
+	bool cadence_half_rate_detected;
 	uint64_t vsync_period_ns;
 	uint32_t presenter_queue_depth;
 } AndroidChiakiVideoDiagnostics;

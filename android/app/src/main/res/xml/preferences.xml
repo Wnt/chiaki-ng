@@ -226,6 +226,14 @@
 			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_video_dejitter_half_rate_enabled_key"
+			app:title="@string/preferences_video_dejitter_half_rate_enabled_title"
+			app:summary="@string/preferences_video_dejitter_half_rate_enabled_summary"
+			app:defaultValue="false"
+			app:dependency="@string/preferences_video_dejitter_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
 		<EditTextPreference
 			app:key="@string/preferences_video_dejitter_floor_ms_key"
 			app:title="@string/preferences_video_dejitter_floor_ms_title"

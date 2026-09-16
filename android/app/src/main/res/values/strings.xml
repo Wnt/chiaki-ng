@@ -108,6 +108,8 @@
 	<string name="preferences_video_pacing_high_refresh_enabled_summary">Allow timestamped frame release at 119 Hz and above (experimental; reconnect required)</string>
 	<string name="preferences_video_dejitter_enabled_title">Arrival-based de-jitter policy</string>
 	<string name="preferences_video_dejitter_enabled_summary">Schedule paced frames from receiver-ready time and measured arrival depth instead of the PTS timeline (experimental; reconnect required)</string>
+	<string name="preferences_video_dejitter_half_rate_enabled_title">Adapt to 30 fps source cadence</string>
+	<string name="preferences_video_dejitter_half_rate_enabled_summary">Use a doubled cadence-clock period when 30 fps content is detected inside a 60 fps stream (experimental; reconnect required)</string>
 	<string name="preferences_video_dejitter_floor_ms_title">De-jitter depth floor</string>
 	<string name="preferences_video_dejitter_cap_ms_title">De-jitter depth cap</string>
 	<string name="preferences_video_dejitter_depth_ms_value">%d ms (1–256)</string>
@@ -244,6 +246,7 @@
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_high_refresh_enabled_key">stream_video_pacing_high_refresh</string>
 	<string name="preferences_video_dejitter_enabled_key">stream_video_dejitter_enabled</string>
+	<string name="preferences_video_dejitter_half_rate_enabled_key">stream_video_dejitter_half_rate_enabled</string>
 	<string name="preferences_video_dejitter_floor_ms_key">stream_video_dejitter_floor_ms</string>
 	<string name="preferences_video_dejitter_cap_ms_key">stream_video_dejitter_cap_ms</string>
 	<string name="preferences_video_dejitter_queue_age_frames_key">stream_video_dejitter_queue_age_frames</string>

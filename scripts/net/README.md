@@ -123,7 +123,7 @@ rate option.
 Create `~/.config/pleikkari/impair.env` (shell export syntax is also accepted):
 
 ```sh
-IMPAIR_HOST=root@192.168.1.250
+IMPAIR_HOST=root@192.168.1.5
 IMPAIR_PEER=192.168.1.164
 ```
 
