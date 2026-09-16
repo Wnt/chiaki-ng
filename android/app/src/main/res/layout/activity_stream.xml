@@ -41,8 +41,8 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center" />
 
-    <!-- PLE-335: shown while a console that has just been linked finishes settling, so the
-         handoff never looks like a failure. -->
+    <!-- PLE-335/PLE-337: names the wait the connect is in - a linked console still settling, or
+         the stream being asked for - so the handoff never looks like a failure. -->
     <TextView
         android:id="@+id/connectingStatusText"
         android:layout_width="wrap_content"
@@ -56,7 +56,25 @@
         android:textSize="16sp"
         android:textColor="@android:color/white"
         android:visibility="gone"
-        tools:text="@string/stream_linked_starting"
+        tools:text="@string/connect_phase_console_not_ready"
+        tools:visibility="visible" />
+
+    <!-- PLE-337: the step count and the seconds spent in this phase, so a long wait visibly moves. -->
+    <TextView
+        android:id="@+id/connectingDetailText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginTop="130dp"
+        android:alpha="0.7"
+        android:gravity="center"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:textAlignment="center"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:visibility="gone"
+        tools:text="Step 6 of 6 · 12 s"
         tools:visibility="visible" />
 
     <fragment

@@ -11,6 +11,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.metallic.chiaki.R
 import com.metallic.chiaki.databinding.ItemDisplayHostBinding
+import com.metallic.chiaki.remote.ConnectProgress
+import com.metallic.chiaki.remote.detailText
 
 private class HomeConsoleDiffCallback(
 	private val old: List<HomeConsole>,
@@ -47,6 +49,16 @@ class DisplayHostRecyclerViewAdapter(
 			notifyDataSetChanged()
 		}
 
+	/** Live progress for the console named by [action] (PLE-337); null when nothing is connecting. */
+	var progress: ConnectProgress? = null
+		set(value)
+		{
+			if(field == value)
+				return
+			field = value
+			notifyDataSetChanged()
+		}
+
 	class ViewHolder(val binding: ItemDisplayHostBinding): RecyclerView.ViewHolder(binding.root)
 
 	override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ViewHolder(
@@ -71,8 +83,16 @@ class DisplayHostRecyclerViewAdapter(
 					R.string.console_status_remote_psn else R.string.console_status_remote
 				HomeConsoleStatus.REGISTRATION_REQUIRED -> R.string.console_status_registration_required
 			})
+			val consoleProgress = if(thisBusy) progress else null
 			detailTextView.text = console.detail
-			detailTextView.isVisible = !console.detail.isNullOrBlank()
+			detailTextView.isVisible = !console.detail.isNullOrBlank() && consoleProgress == null
+			actionStatusTextView.isVisible = consoleProgress != null
+			actionDetailTextView.isVisible = consoleProgress != null
+			if(consoleProgress != null)
+			{
+				actionStatusTextView.setText(consoleProgress.phase.labelRes)
+				actionDetailTextView.text = consoleProgress.detailText(context)
+			}
 			stateIndicatorImageView.setImageResource(
 				if(console.displayHost?.isPS5 != false) R.drawable.ic_console_ps5 else R.drawable.ic_console
 			)

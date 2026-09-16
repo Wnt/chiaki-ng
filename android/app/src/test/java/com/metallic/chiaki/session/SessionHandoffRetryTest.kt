@@ -21,13 +21,13 @@ class SessionHandoffRetryPolicyTest
 	fun `the first refusal after a link is waited out, not reported`()
 	{
 		assertEquals(
-			HandoffDecision.Retry(1_000L, 1),
+			HandoffDecision.Retry(SessionHandoffRetryPolicy.FIRST_DELAY_MS, 1),
 			policy.decide(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, retriesMade = 0, elapsedMs = 0)
 		)
 	}
 
 	@Test
-	fun `delays back off in the declared order`()
+	fun `delays follow the declared ladder`()
 	{
 		val delays = (0 until SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS.size).map { retries ->
 			val decision = policy.decide(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, retries, elapsedMs = 0)
@@ -59,16 +59,16 @@ class SessionHandoffRetryPolicyTest
 	fun `a console still holding the old session is retried on a shorter budget`()
 	{
 		assertEquals(
-			HandoffDecision.Retry(1_000L, 1),
+			HandoffDecision.Retry(SessionHandoffRetryPolicy.FIRST_DELAY_MS, 1),
 			policy.decide(QUIT_REASON_SESSION_REQUEST_RP_IN_USE, retriesMade = 0, elapsedMs = 0)
 		)
 		assertEquals(
 			HandoffDecision.Report,
-			policy.decide(QUIT_REASON_SESSION_REQUEST_RP_IN_USE, retriesMade = 4, elapsedMs = 11_000)
+			policy.decide(QUIT_REASON_SESSION_REQUEST_RP_IN_USE, retriesMade = 4, elapsedMs = 14_500)
 		)
 		// the same point in the same handoff, but refused rather than in use: still worth waiting
 		assertTrue(
-			policy.decide(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, retriesMade = 4, elapsedMs = 11_000)
+			policy.decide(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, retriesMade = 4, elapsedMs = 14_500)
 				is HandoffDecision.Retry
 		)
 	}
@@ -106,6 +106,69 @@ class SessionHandoffRetryPolicyTest
 		assertEquals(SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS.size, retries)
 		assertTrue("the ladder must stay inside the budget", elapsed <= SessionHandoffRetryPolicy.REFUSED_BUDGET_MS)
 	}
+
+	// PLE-337: a refused connect costs 4-5 ms, so the interval must stay short for the whole budget.
+
+	@Test
+	fun `the interval never grows beyond the steady one`()
+	{
+		val ladder = SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS
+		assertEquals(SessionHandoffRetryPolicy.FIRST_DELAY_MS, ladder.first())
+		ladder.drop(1).forEach { delay ->
+			assertEquals(SessionHandoffRetryPolicy.STEADY_DELAY_MS, delay)
+		}
+		assertTrue("the ladder must never back off", ladder.max() <= SessionHandoffRetryPolicy.STEADY_DELAY_MS)
+	}
+
+	@Test
+	fun `the last second of the budget is still polled`()
+	{
+		// The console can become ready at any moment; the old 8 s tail could miss it by 8 s.
+		var elapsed = 0L
+		var retries = 0
+		var longestGapMs = 0L
+		while(true)
+		{
+			val decision = policy.decide(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED, retries, elapsed)
+			if(decision !is HandoffDecision.Retry)
+				break
+			longestGapMs = maxOf(longestGapMs, decision.delayMs)
+			elapsed += decision.delayMs
+			retries++
+		}
+		assertTrue("no gap may exceed 2 s", longestGapMs <= 2_000L)
+		assertTrue("the ladder must reach within one gap of the ceiling",
+			SessionHandoffRetryPolicy.REFUSED_BUDGET_MS - elapsed <= longestGapMs)
+		assertTrue("a short interval means many more chances than the old eight", retries >= 30)
+	}
+
+	@Test
+	fun `a busy console is polled just as tightly on its shorter budget`()
+	{
+		var elapsed = 0L
+		var retries = 0
+		while(true)
+		{
+			val decision = policy.decide(QUIT_REASON_SESSION_REQUEST_RP_IN_USE, retries, elapsed)
+			if(decision !is HandoffDecision.Retry)
+				break
+			elapsed += decision.delayMs
+			retries++
+		}
+		assertTrue("the in-use wait must stay inside its own budget",
+			elapsed <= SessionHandoffRetryPolicy.IN_USE_BUDGET_MS)
+		assertTrue("and must use most of it", elapsed >= SessionHandoffRetryPolicy.IN_USE_BUDGET_MS - 2_000L)
+	}
+
+	@Test
+	fun `a steady ladder is built from the interval and the budget`()
+	{
+		assertEquals(
+			listOf(500L, 1_200L, 1_200L),
+			SessionHandoffRetryPolicy.steadyDelays(500L, 1_200L, 3_000L)
+		)
+		assertEquals(emptyList<Long>(), SessionHandoffRetryPolicy.steadyDelays(500L, 1_200L, 400L))
+	}
 }
 
 class SessionHandoffRetryTest
@@ -127,12 +190,14 @@ class SessionHandoffRetryTest
 		val handoff = retry()
 		handoff.arm()
 		assertFalse(handoff.handoffInProgress)
-		assertEquals(HandoffDecision.Retry(1_000L, 1), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
+		val first = SessionHandoffRetryPolicy.FIRST_DELAY_MS
+		val steady = SessionHandoffRetryPolicy.STEADY_DELAY_MS
+		assertEquals(HandoffDecision.Retry(first, 1), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
 		assertTrue(handoff.handoffInProgress)
-		now += 1_000
-		assertEquals(HandoffDecision.Retry(2_000L, 2), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
-		now += 2_000
-		assertEquals(HandoffDecision.Retry(3_000L, 3), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
+		now += first
+		assertEquals(HandoffDecision.Retry(steady, 2), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
+		now += steady
+		assertEquals(HandoffDecision.Retry(steady, 3), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
 	}
 
 	@Test
@@ -145,7 +210,7 @@ class SessionHandoffRetryTest
 		{
 			decisions++
 			now += SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS[decisions - 1]
-			if(decisions > 20)
+			if(decisions > SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS.size)
 				break
 		}
 		assertEquals(SessionHandoffRetryPolicy.DEFAULT_DELAYS_MS.size, decisions)
