@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <SwitchPreference
+        app:key="@string/preferences_swap_cross_moon_key"
+        app:icon="@drawable/ic_gamepad"
+        app:summary="@string/preferences_swap_cross_moon_summary"
+        app:title="@string/preferences_swap_cross_moon_title" />
+
+    <SwitchPreference
+        app:key="@string/preferences_rumble_enabled_key"
+        app:icon="@drawable/ic_rumble"
+        app:summary="@string/preferences_rumble_enabled_summary"
+        app:title="@string/preferences_rumble_enabled_title" />
+
+    <SwitchPreference
+        app:key="preferences_touchscreen_touchpad_enabled"
+        app:defaultValue="false"
+        app:icon="@drawable/ic_gamepad"
+        app:summary="Use the stream area as a touchpad"
+        app:title="Touchscreen as Touchpad" />
+
+    <SwitchPreference
+        app:key="@string/preferences_motion_enabled_key"
+        app:icon="@drawable/ic_motion"
+        app:summary="@string/preferences_motion_enabled_summary"
+        app:title="@string/preferences_motion_enabled_title" />
+
+    <SwitchPreference
+        app:key="@string/preferences_button_haptic_enabled_key"
+        app:icon="@drawable/ic_button_haptic"
+        app:summary="@string/preferences_button_haptic_enabled_summary"
+        app:title="@string/preferences_button_haptic_enabled_title" />
+
+    <Preference
+        app:key="controller_mapping"
+        app:fragment="com.metallic.chiaki.settings.ControllerMappingSettingsFragment"
+        app:icon="@drawable/ic_gamepad"
+        app:title="@string/preferences_controller_mapping_title" />
+</PreferenceScreen>
