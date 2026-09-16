@@ -590,6 +590,22 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 		strncpy(remote_info.regist_local_ip, local_addr, sizeof(remote_info.regist_local_ip) - 1);
 		E->ReleaseStringUTFChars(env, selected_addr_string, selected_addr);
 		E->ReleaseStringUTFChars(env, local_addr_string, local_addr);
+		// The PSN registration request carries our own address as its HOST header. A punched
+		// DatagramSocket is bound to the wildcard, so Java reports 0.0.0.0 for it; upstream
+		// instead sends the LAN address of its advertised LOCAL candidate. Recover the
+		// equivalent from the route to the console we actually punched.
+		if(!chiaki_regist_local_addr_usable(remote_info.regist_local_ip))
+		{
+			char derived_local_addr[INET6_ADDRSTRLEN] = { 0 };
+			if(chiaki_regist_local_addr_for_peer(remote_info.selected_addr,
+					derived_local_addr, sizeof(derived_local_addr)) == CHIAKI_ERR_SUCCESS)
+			{
+				CHIAKI_LOGI(log, "Remote session had no usable local address; derived one from the route to the console");
+				memcpy(remote_info.regist_local_ip, derived_local_addr, sizeof(derived_local_addr));
+			}
+			else
+				CHIAKI_LOGW(log, "Remote session had no usable local address and none could be derived; regist will use its fallback");
+		}
 		connect_info.remote_connection = &remote_info;
 	}
 
