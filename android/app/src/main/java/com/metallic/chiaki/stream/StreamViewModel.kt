@@ -33,7 +33,9 @@ class StreamViewModel(
 	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
 		preferences.videoPacingMode.nativeValue, preferences.videoPresenterLead.nativeValue,
-		input, externallyManaged = psnDevice != null || diagnosticsPreview)
+		preferences.videoPacingBoundedAgeEnabled,
+		preferences.videoPacingMaxFrameAgePeriods, input,
+		externallyManaged = psnDevice != null || diagnosticsPreview)
 
 	private val remoteController: PsnRemoteController? = psnDevice?.let {
 		val bridge = AndroidPsnRemoteNativeBridge(

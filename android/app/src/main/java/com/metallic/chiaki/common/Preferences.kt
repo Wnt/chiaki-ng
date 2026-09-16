@@ -71,6 +71,7 @@ class Preferences(context: Context)
 		val videoPacingModeAll = VideoPacingMode.values()
 		val videoPresenterLeadDefault = VideoPresenterLead.TWO_MS
 		val videoPresenterLeadAll = VideoPresenterLead.values()
+		const val videoPacingMaxFrameAgePeriodsDefault = 2
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 		const val packetLossMaxPercentDefault = 5
@@ -226,6 +227,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(videoPacingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoPacingEnabledKey, value).apply() }
 
+	val videoPacingBoundedAgeEnabledKey get() = resources.getString(R.string.preferences_video_pacing_bounded_age_enabled_key)
+	var videoPacingBoundedAgeEnabled
+		get() = sharedPreferences.getBoolean(videoPacingBoundedAgeEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoPacingBoundedAgeEnabledKey, value).apply() }
+
 	val controllerInputCoalescingEnabledKey get() = resources.getString(R.string.preferences_controller_input_coalescing_enabled_key)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
@@ -362,6 +368,14 @@ class Preferences(context: Context)
 			VideoPresenterLead.values().firstOrNull { it.value == value }
 		} ?: videoPresenterLeadDefault
 		set(value) { sharedPreferences.edit().putString(videoPresenterLeadKey, value.value).apply() }
+
+	fun validateVideoPacingMaxFrameAgePeriods(periods: Int) = max(1, min(10, periods))
+	val videoPacingMaxFrameAgePeriodsKey get() = resources.getString(R.string.preferences_video_pacing_max_frame_age_periods_key)
+	var videoPacingMaxFrameAgePeriods
+		get() = validateVideoPacingMaxFrameAgePeriods(sharedPreferences.getInt(
+			videoPacingMaxFrameAgePeriodsKey, videoPacingMaxFrameAgePeriodsDefault))
+		set(value) { sharedPreferences.edit().putInt(videoPacingMaxFrameAgePeriodsKey,
+			validateVideoPacingMaxFrameAgePeriods(value)).apply() }
 
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)
