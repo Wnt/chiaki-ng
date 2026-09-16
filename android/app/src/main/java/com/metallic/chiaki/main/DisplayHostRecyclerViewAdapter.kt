@@ -14,7 +14,8 @@ import com.metallic.chiaki.common.DiscoveredDisplayHost
 import com.metallic.chiaki.databinding.ItemConsoleListHeaderBinding
 import com.metallic.chiaki.databinding.ItemDisplayHostBinding
 import com.metallic.chiaki.remote.ConnectProgress
-import com.metallic.chiaki.remote.detailText
+import com.metallic.chiaki.remote.applyTo
+import com.metallic.chiaki.remote.hideConnectBar
 
 /**
  * A row in the console list (PLE-338): either the "Network discovered PlayStation(s)"
@@ -174,12 +175,13 @@ class DisplayHostRecyclerViewAdapter(
 			// in-flight connect; PLE-337's progress and PLE-338's tag never show together.
 			linkedTagTextView.isVisible = linked && consoleProgress == null
 			actionStatusTextView.isVisible = consoleProgress != null
-			actionDetailTextView.isVisible = consoleProgress != null
 			if(consoleProgress != null)
 			{
 				actionStatusTextView.setText(consoleProgress.phase.labelRes)
-				actionDetailTextView.text = consoleProgress.detailText(context)
+				consoleProgress.applyTo(actionConnectProgressBar, actionOvertimeTextView)
 			}
+			else
+				hideConnectBar(actionConnectProgressBar, actionOvertimeTextView)
 			stateIndicatorImageView.setImageResource(
 				if(console.displayHost?.isPS5 != false) R.drawable.ic_console_ps5 else R.drawable.ic_console
 			)
