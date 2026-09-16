@@ -252,9 +252,11 @@ static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 		if(presenter->stats_log_enabled)
 			CHIAKI_LOGI(presenter->log,
 					"Video presenter DJB D=%.1f ms target=%.1f ms"
-					" (err p50 %.1f p99 %.1f ms, decode %.1f ms, drops %llu)",
+					" (J p95 %.1f ms, G %u, err p50 %.1f p99 %.1f ms, decode %.1f ms, drops %llu)",
 					(double)presenter->cadence.depth_ns / 1000000.0,
 					(double)presenter->cadence.target_ns / 1000000.0,
+					(double)presenter->cadence.jitter_p95_ns / 1000000.0,
+					presenter->cadence.gaps,
 					(double)presenter->cadence.err_p50_ns / 1000000.0,
 					(double)presenter->cadence.err_p99_ns / 1000000.0,
 					(double)presenter->cadence.decode_ewma_ns / 1000000.0,

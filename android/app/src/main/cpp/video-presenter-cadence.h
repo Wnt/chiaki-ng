@@ -21,7 +21,10 @@ typedef struct android_chiaki_video_cadence_t
 	uint64_t last_frame_index;
 	int64_t anchor_ns;
 	int64_t previous_positive_err_ns;
+	int64_t previous_ready_ns;
 	AndroidChiakiVideoHistogram err_histogram;
+	AndroidChiakiVideoHistogram jitter_histogram;
+	uint32_t gap_count;
 	uint64_t decode_ewma_ns;
 	uint64_t decode_window_max_ns;
 	uint64_t decode_high_windows[ANDROID_CHIAKI_VIDEO_DECODE_HIGH_WINDOWS];
@@ -31,6 +34,8 @@ typedef struct android_chiaki_video_cadence_t
 	uint64_t target_ns;
 	uint64_t err_p50_ns;
 	uint64_t err_p99_ns;
+	uint64_t jitter_p95_ns;
+	uint32_t gaps;
 	uint64_t generation;
 } AndroidChiakiVideoCadence;
 

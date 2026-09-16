@@ -20,6 +20,7 @@ void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence)
 	memset(cadence, 0, sizeof(*cadence));
 	chiaki_seq_num_16_unwrapper_init(&cadence->frame_index_unwrapper);
 	android_chiaki_video_histogram_reset(&cadence->err_histogram);
+	android_chiaki_video_histogram_reset(&cadence->jitter_histogram);
 	cadence->depth_ns = VIDEO_CADENCE_DEPTH_FLOOR_NS;
 }
 
@@ -42,6 +43,9 @@ static void finish_window(AndroidChiakiVideoCadence *cadence)
 			&cadence->err_histogram, 50, 100);
 	cadence->err_p99_ns = android_chiaki_video_histogram_percentile(
 			&cadence->err_histogram, 99, 100);
+	cadence->jitter_p95_ns = android_chiaki_video_histogram_percentile(
+			&cadence->jitter_histogram, 95, 100);
+	cadence->gaps = cadence->gap_count;
 
 	cadence->decode_high_windows[cadence->decode_high_next] = cadence->decode_window_max_ns;
 	cadence->decode_high_next = (cadence->decode_high_next + 1)
@@ -73,6 +77,8 @@ static void finish_window(AndroidChiakiVideoCadence *cadence)
 
 	cadence->decode_window_max_ns = 0;
 	android_chiaki_video_histogram_reset(&cadence->err_histogram);
+	android_chiaki_video_histogram_reset(&cadence->jitter_histogram);
+	cadence->gap_count = 0;
 	cadence->generation++;
 }
 
@@ -83,6 +89,7 @@ bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadenc
 		return false;
 	uint64_t unwrapped = chiaki_seq_num_16_unwrap(&cadence->frame_index_unwrapper, frame_index);
 	int64_t ready_ns = (int64_t)(frame_ready_time_us * 1000);
+	uint64_t period_ns = 1000000000ULL / stream_fps;
 	if(!cadence->clock_valid || unwrapped <= cadence->last_frame_index)
 	{
 		cadence->clock_valid = true;
@@ -94,8 +101,13 @@ bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadenc
 	}
 	else
 	{
+		int64_t deviation_ns = ready_ns - cadence->previous_ready_ns - (int64_t)period_ns;
+		uint64_t absolute_deviation_ns = deviation_ns < 0
+				? (uint64_t)(-deviation_ns) : (uint64_t)deviation_ns;
+		android_chiaki_video_histogram_add(&cadence->jitter_histogram, absolute_deviation_ns);
+		if(deviation_ns > (int64_t)(period_ns / 2))
+			cadence->gap_count++;
 		uint64_t frame_delta = unwrapped - cadence->base_frame_index;
-		uint64_t period_ns = 1000000000ULL / stream_fps;
 		if(frame_delta > (uint64_t)INT64_MAX / period_ns)
 			return false;
 		int64_t expected_ns = cadence->anchor_ns + (int64_t)(frame_delta * period_ns);
@@ -130,6 +142,7 @@ bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadenc
 				err_ns > 0 ? (uint64_t)err_ns : 0);
 		cadence->last_frame_index = unwrapped;
 	}
+	cadence->previous_ready_ns = ready_ns;
 
 	if(cadence->err_histogram.count < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW)
 		return false;

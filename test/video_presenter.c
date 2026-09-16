@@ -107,6 +107,8 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	munit_assert_uint64(cadence.generation, ==, 1);
 	munit_assert_uint64(cadence.err_p50_ns, ==, 0);
 	munit_assert_uint64(cadence.err_p99_ns, ==, 0);
+	munit_assert_uint64(cadence.jitter_p95_ns, ==, 0);
+	munit_assert_uint32(cadence.gaps, ==, 0);
 	munit_assert_uint64(cadence.decode_ewma_ns, ==, 8000000);
 	munit_assert_uint64(cadence.target_ns, ==, 4000000);
 	munit_assert_uint64(cadence.depth_ns, ==, 4000000);
@@ -135,6 +137,8 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 	munit_assert_uint64(cadence.err_p99_ns, >=, 8000000);
 	munit_assert_uint64(cadence.target_ns, >=, 9000000);
 	munit_assert_uint64(cadence.depth_ns, ==, cadence.target_ns);
+	munit_assert_uint64(cadence.jitter_p95_ns, >=, 9000000);
+	munit_assert_uint32(cadence.gaps, >=, 5);
 	return MUNIT_OK;
 }
 
