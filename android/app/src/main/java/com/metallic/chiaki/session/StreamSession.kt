@@ -20,7 +20,8 @@ data class StreamStateQuit(val reason: QuitReason, val reasonString: String?): S
 data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
 class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
-	val decoderInputThread: Boolean, val input: StreamInput)
+		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
+		val input: StreamInput)
 {
 	var session: Session? = null
 		private set
@@ -32,6 +33,9 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 
 	private var surfaceTexture: SurfaceTexture? = null
 	private var surface: Surface? = null
+	private var surfaceRefreshHz = connectInfo.videoProfile.maxFPS.toDouble()
+	private var surfaceVsyncOffsetNanos = 0L
+	private val nativePacingMode get() = if(videoPacingEnabled) videoPacingMode else 0
 
 	init
 	{
@@ -61,13 +65,15 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 			return
 		try
 		{
-			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose, realVideoTimestamps, decoderInputThread)
+			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose,
+				realVideoTimestamps || videoPacingEnabled, decoderInputThread)
 			_state.value = StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
 			val surface = surface
 			if(surface != null)
-				session.setSurface(surface)
+				session.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+					surfaceVsyncOffsetNanos, nativePacingMode)
 			this.session = session
 		}
 		catch(e: CreateError)
@@ -93,6 +99,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 				)
 			)
 			is RumbleEvent -> _rumbleState.postValue(event)
+			is RemoteDataSocketNeededEvent -> Unit // handled by the PSN control-plane bridge
 		}
 	}
 
@@ -103,8 +110,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 			{
 				val surface = holder.surface
 				applyFrameRate(surface, frameRate)
-				this@StreamSession.surface = surface
-				session?.setSurface(surface)
+				setSurface(surface, surfaceView.display, frameRate?.toDouble())
 			}
 
 			override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) { }
@@ -113,15 +119,15 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 			{
 				clearFrameRate(holder.surface, frameRate)
 				this@StreamSession.surface = null
-				session?.setSurface(null)
+				session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+					surfaceVsyncOffsetNanos, nativePacingMode)
 			}
 		})
 		
 		val surface = surfaceView.holder.surface
 		if (surface?.isValid == true) {
 			applyFrameRate(surface, frameRate)
-			this.surface = surface
-			session?.setSurface(surface)
+			setSurface(surface, surfaceView.display, frameRate?.toDouble())
 		}
 	}
 
@@ -170,16 +176,25 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 	/**
 	 * Attach to a custom Surface (e.g., from GLSurfaceView with debanding)
 	 */
-	fun attachToSurface(surface: Surface)
+	fun attachToSurface(surface: Surface, display: Display? = null, refreshHz: Double? = null)
+	{
+		setSurface(surface, display, refreshHz)
+	}
+
+	private fun setSurface(surface: Surface, display: Display?, refreshHz: Double? = null)
 	{
 		this.surface = surface
-		session?.setSurface(surface)
+		surfaceRefreshHz = refreshHz ?: display?.refreshRate?.toDouble() ?: connectInfo.videoProfile.maxFPS.toDouble()
+		surfaceVsyncOffsetNanos = display?.appVsyncOffsetNanos ?: 0L
+		session?.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+			surfaceVsyncOffsetNanos, nativePacingMode)
 	}
 
 	fun detachSurface()
 	{
 		this.surface = null
-		session?.setSurface(null)
+		session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
+			surfaceVsyncOffsetNanos, nativePacingMode)
 	}
 
 	fun attachToTextureView(textureView: TextureView)
@@ -190,8 +205,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 				if(surfaceTexture != null)
 					return
 				surfaceTexture = surface
-				this@StreamSession.surface = Surface(surfaceTexture)
-				session?.setSurface(Surface(surface))
+				setSurface(Surface(surface), textureView.display)
 			}
 
 			override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean

@@ -184,7 +184,13 @@ class StreamActivity : AppCompatActivity()
 			viewModel.connectInfo.videoProfile.width,
 			viewModel.connectInfo.videoProfile.height,
 			prefs.sharpnessIntensity,
-			onDecoderSurfaceReady = { surface -> viewModel.session.attachToSurface(surface) },
+			onDecoderSurfaceReady = { surface ->
+				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
+				else
+					null
+				viewModel.session.attachToSurface(surface, binding.surfaceView.display, refreshHz)
+			},
 			onDecoderSurfaceDestroyed = { viewModel.session.detachSurface() },
 			onUnavailable = { failedRenderer ->
 				if(eglRenderer === failedRenderer)
@@ -205,7 +211,13 @@ class StreamActivity : AppCompatActivity()
 		binding.surfaceView.visibility = View.GONE
 		binding.debandSurfaceView.visibility = View.VISIBLE
 		debandRenderer = DebandRenderer(
-			onSurfaceReady = { surface -> viewModel.session.attachToSurface(surface) },
+			onSurfaceReady = { surface ->
+				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
+				else
+					null
+				viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
+			},
 			onRequestRender = { binding.debandSurfaceView.requestRender() }
 		)
 		binding.debandSurfaceView.setEGLContextClientVersion(3)

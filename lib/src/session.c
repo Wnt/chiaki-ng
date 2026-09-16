@@ -181,6 +181,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, Chiaki
 	session->target = connect_info->ps5 ? CHIAKI_TARGET_PS5_1 : CHIAKI_TARGET_PS4_10;
 	session->auto_regist = connect_info->auto_regist;
 	session->holepunch_session = connect_info->holepunch_session;
+	session->remote_connection = connect_info->remote_connection != NULL;
+	if(session->remote_connection)
+		session->remote_connection_info = *connect_info->remote_connection;
 	session->rudp = NULL;
 	session->dontfrag = true;
 
@@ -221,7 +224,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, Chiaki
 		goto error_ctrl;
 	}
 
-	if(session->holepunch_session)
+	if(session->holepunch_session || session->remote_connection)
 	{
 		memcpy(session->connect_info.psn_account_id, connect_info->psn_account_id, sizeof(connect_info->psn_account_id));
 	}
@@ -265,6 +268,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, Chiaki
 	session->connect_info.enable_dualsense = connect_info->enable_dualsense;
 	session->connect_info.enable_idr_on_fec_failure = connect_info->enable_idr_on_fec_failure;
 	session->connect_info.disable_video_packet_reordering = connect_info->disable_video_packet_reordering;
+	session->connect_info.feedback_state_min_interval_ms = connect_info->feedback_state_min_interval_ms;
 
 	return CHIAKI_ERR_SUCCESS;
 
@@ -277,8 +281,10 @@ error_state_mutex:
 error_state_cond:
 	chiaki_cond_fini(&session->state_cond);
 error:
+#ifndef __ANDROID__
 	if(session->holepunch_session)
 		chiaki_holepunch_session_fini(session->holepunch_session);
+#endif
 	return err;
 }
 
@@ -295,8 +301,17 @@ CHIAKI_EXPORT void chiaki_session_fini(ChiakiSession *session)
 	chiaki_ctrl_fini(&session->ctrl);
 	if(session->rudp)
 		chiaki_rudp_fini(session->rudp);
+#ifndef __ANDROID__
 	if(session->holepunch_session)
 		chiaki_holepunch_session_fini(session->holepunch_session);
+#endif
+	if(session->remote_connection)
+	{
+		if(!CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.ctrl_sock))
+			CHIAKI_SOCKET_CLOSE(session->remote_connection_info.ctrl_sock);
+		if(!CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.data_sock))
+			CHIAKI_SOCKET_CLOSE(session->remote_connection_info.data_sock);
+	}
 	chiaki_stop_pipe_fini(&session->stop_pipe);
 	chiaki_cond_fini(&session->state_cond);
 	chiaki_mutex_fini(&session->state_mutex);
@@ -378,6 +393,24 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_stream_connection_switch_receiv
 	return CHIAKI_ERR_SUCCESS;
 }
 
+CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_remote_data_socket(ChiakiSession *session, chiaki_socket_t data_sock)
+{
+	if(!session || !session->remote_connection || CHIAKI_SOCKET_IS_INVALID(data_sock))
+		return CHIAKI_ERR_INVALID_DATA;
+	ChiakiErrorCode err = chiaki_mutex_lock(&session->state_mutex);
+	if(err != CHIAKI_ERR_SUCCESS)
+		return err;
+	if(!CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.data_sock))
+	{
+		chiaki_mutex_unlock(&session->state_mutex);
+		return CHIAKI_ERR_INVALID_DATA;
+	}
+	session->remote_connection_info.data_sock = data_sock;
+	chiaki_cond_signal(&session->state_cond);
+	chiaki_mutex_unlock(&session->state_mutex);
+	return CHIAKI_ERR_SUCCESS;
+}
+
 void chiaki_session_send_event(ChiakiSession *session, ChiakiEvent *event)
 {
 	if(!session->event_cb)
@@ -426,6 +459,12 @@ static bool session_check_state_pred_regist(void *user)
 		|| session->psn_regist_succeeded;
 }
 
+static bool session_check_state_pred_remote_data(void *user)
+{
+	ChiakiSession *session = user;
+	return session->should_stop || !CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.data_sock);
+}
+
 #define ENABLE_SENKUSHA
 
 static void *session_thread_func(void *arg)
@@ -448,22 +487,45 @@ static void *session_thread_func(void *arg)
 
 	CHECK_STOP(quit);
 
-	if(session->holepunch_session)
+	if(session->holepunch_session || session->remote_connection)
 	{
-		chiaki_socket_t *rudp_sock = chiaki_get_holepunch_sock(session->holepunch_session, CHIAKI_HOLEPUNCH_PORT_TYPE_CTRL);
+		chiaki_socket_t *rudp_sock = NULL;
+		if(session->remote_connection)
+			rudp_sock = &session->remote_connection_info.ctrl_sock;
+#ifndef __ANDROID__
+		else
+			rudp_sock = chiaki_get_holepunch_sock(session->holepunch_session, CHIAKI_HOLEPUNCH_PORT_TYPE_CTRL);
+#endif
 		session->rudp = chiaki_rudp_init(rudp_sock, session->log);
 		if(!session->rudp)
 		{
 			CHIAKI_LOGE(session->log, "Initializing rudp failed");
 			CHECK_STOP(quit);
 		}
+		if(session->remote_connection)
+			session->remote_connection_info.ctrl_sock = CHIAKI_INVALID_SOCKET;
 	}
 	// PSN Connection
 	if(session->rudp)
 	{
 		ChiakiRegist regist;
 		ChiakiRegistInfo info;
-		ChiakiHolepunchRegistInfo hinfo = chiaki_get_regist_info(session->holepunch_session);
+		ChiakiHolepunchRegistInfo hinfo;
+		if(session->remote_connection)
+		{
+			memcpy(hinfo.data1, session->remote_connection_info.data1, sizeof(hinfo.data1));
+			memcpy(hinfo.data2, session->remote_connection_info.data2, sizeof(hinfo.data2));
+			memcpy(hinfo.custom_data1, session->remote_connection_info.custom_data1, sizeof(hinfo.custom_data1));
+			memcpy(hinfo.regist_local_ip, session->remote_connection_info.regist_local_ip, sizeof(hinfo.regist_local_ip));
+		}
+		else
+		{
+#ifndef __ANDROID__
+			hinfo = chiaki_get_regist_info(session->holepunch_session);
+#else
+			memset(&hinfo, 0, sizeof(hinfo));
+#endif
+		}
 		info.holepunch_info = &hinfo;
 		info.host = NULL;
 		info.broadcast = false;
@@ -567,7 +629,8 @@ static void *session_thread_func(void *arg)
 	}
 
 	chiaki_socket_t *data_sock = NULL;
-	if(session->rudp)
+#ifndef __ANDROID__
+	if(session->holepunch_session)
 	{
 		ChiakiErrorCode err = holepunch_session_create_offer(session->holepunch_session);
 		if (err != CHIAKI_ERR_SUCCESS)
@@ -594,6 +657,23 @@ static void *session_thread_func(void *arg)
 		chiaki_session_send_event(session, &event_finish);
 		err = chiaki_cond_timedwait_pred(&session->state_cond, &session->state_mutex, SESSION_EXPECT_TIMEOUT_MS, session_check_state_pred_ctrl_start, session);
 		CHECK_STOP(quit_ctrl);
+	}
+	else
+#endif
+	if(session->remote_connection)
+	{
+		ChiakiEvent event = { 0 };
+		event.type = CHIAKI_EVENT_REMOTE_DATA_SOCKET_NEEDED;
+		chiaki_session_send_event(session, &event);
+		err = chiaki_cond_timedwait_pred(&session->state_cond, &session->state_mutex, 30000,
+			session_check_state_pred_remote_data, session);
+		CHECK_STOP(quit_ctrl);
+		if(err != CHIAKI_ERR_SUCCESS || CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.data_sock))
+		{
+			CHIAKI_LOGE(session->log, "Timed out waiting for Android remote data socket");
+			QUIT(quit_ctrl);
+		}
+		data_sock = &session->remote_connection_info.data_sock;
 	}
 
 	if(!session->ctrl_session_id_received)
@@ -681,6 +761,8 @@ ctrl_failed:
 
 	chiaki_mutex_unlock(&session->state_mutex);
 	err = chiaki_stream_connection_run(&session->stream_connection, data_sock);
+	if(session->remote_connection)
+		session->remote_connection_info.data_sock = CHIAKI_INVALID_SOCKET;
 	chiaki_mutex_lock(&session->state_mutex);
 	if(err == CHIAKI_ERR_DISCONNECTED)
 	{
@@ -934,10 +1016,20 @@ static ChiakiErrorCode session_thread_request_session(ChiakiSession *session, Ch
 
 	char send_buf[512];
 	int port = SESSION_PORT;
+#ifndef __ANDROID__
 	if(session->holepunch_session)
 	{
 		chiaki_get_ps_selected_addr(session->holepunch_session, session->connect_info.hostname);
 		port = chiaki_get_ps_ctrl_port(session->holepunch_session);
+	}
+	else
+#endif
+	if(session->remote_connection)
+	{
+		strncpy(session->connect_info.hostname, session->remote_connection_info.selected_addr,
+			sizeof(session->connect_info.hostname) - 1);
+		session->connect_info.hostname[sizeof(session->connect_info.hostname) - 1] = '\0';
+		port = session->remote_connection_info.ctrl_port;
 	}
 	int request_len = snprintf(send_buf, sizeof(send_buf), session_request_fmt,
 			path, session->connect_info.hostname, port, regist_key_hex, rp_version_str);

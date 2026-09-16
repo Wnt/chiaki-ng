@@ -7,4 +7,3 @@
  * egl-renderer.cpp.  The implementation is deliberately isolated so an OFF
  * CHIAKI_ANDROID_EGL_RENDERER build neither compiles nor links EGL/GLES code.
  */
-

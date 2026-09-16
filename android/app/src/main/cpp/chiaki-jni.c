@@ -165,6 +165,7 @@ typedef struct android_chiaki_session_t
 	jmethodID java_session_event_login_pin_request_meth;
 	jmethodID java_session_event_quit_meth;
 	jmethodID java_session_event_rumble_meth;
+	jmethodID java_session_event_remote_data_socket_needed_meth;
 	jfieldID java_controller_state_buttons;
 	jfieldID java_controller_state_l2_state;
 	jfieldID java_controller_state_r2_state;
@@ -236,6 +237,10 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 							  (jint)event->rumble.left,
 							  (jint)event->rumble.right);
 			break;
+		case CHIAKI_EVENT_REMOTE_DATA_SOCKET_NEEDED:
+			E->CallVoidMethod(env, session->java_session,
+					session->java_session_event_remote_data_socket_needed_meth);
+			break;
 		default:
 			break;
 	}
@@ -243,7 +248,11 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 	(*global_vm)->DetachCurrentThread(global_vm);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result, jobject connect_info_obj, jstring log_file_str, jboolean log_verbose, jboolean real_video_timestamps, jboolean decoder_input_thread, jobject java_session)
+static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj, jstring log_file_str,
+		jboolean log_verbose, jboolean real_video_timestamps, jboolean decoder_input_thread,
+		jint remote_ctrl_fd, jbyteArray psn_account_id_array, jstring selected_addr_string,
+		jint ctrl_port, jbyteArray data1_array, jbyteArray data2_array,
+		jbyteArray custom_data1_array, jstring local_addr_string, jobject java_session)
 {
 	AndroidChiakiSession *session = NULL;
 	ChiakiLog *log = malloc(sizeof(ChiakiLog));
@@ -266,6 +275,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
 		E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
+	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
 	jbyteArray morning_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "morning", "[B"));
@@ -273,8 +283,43 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	jclass connect_video_profile_class = E->GetObjectClass(env, connect_video_profile_obj);
 
 	ChiakiConnectInfo connect_info = { 0 };
+	ChiakiRemoteConnectionInfo remote_info = { .ctrl_sock = CHIAKI_INVALID_SOCKET, .data_sock = CHIAKI_INVALID_SOCKET };
 	connect_info.ps5 = ps5;
+	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
+	if(remote_ctrl_fd >= 0)
+	{
+		if(!psn_account_id_array || E->GetArrayLength(env, psn_account_id_array) != CHIAKI_PSN_ACCOUNT_ID_SIZE
+				|| !data1_array || E->GetArrayLength(env, data1_array) != sizeof(remote_info.data1)
+				|| !data2_array || E->GetArrayLength(env, data2_array) != sizeof(remote_info.data2)
+				|| !custom_data1_array || E->GetArrayLength(env, custom_data1_array) != sizeof(remote_info.custom_data1)
+				|| !selected_addr_string || !local_addr_string || ctrl_port <= 0 || ctrl_port > UINT16_MAX)
+		{
+			err = CHIAKI_ERR_INVALID_DATA;
+			goto beach;
+		}
+		remote_info.ctrl_sock = (chiaki_socket_t)remote_ctrl_fd;
+		remote_info.ctrl_port = (uint16_t)ctrl_port;
+		jbyte *remote_bytes = E->GetByteArrayElements(env, psn_account_id_array, NULL);
+		memcpy(connect_info.psn_account_id, remote_bytes, CHIAKI_PSN_ACCOUNT_ID_SIZE);
+		E->ReleaseByteArrayElements(env, psn_account_id_array, remote_bytes, JNI_ABORT);
+#define COPY_REMOTE_ARRAY(java_array, field) do { \
+	remote_bytes = E->GetByteArrayElements(env, (java_array), NULL); \
+	memcpy(remote_info.field, remote_bytes, sizeof(remote_info.field)); \
+	E->ReleaseByteArrayElements(env, (java_array), remote_bytes, JNI_ABORT); \
+} while(0)
+		COPY_REMOTE_ARRAY(data1_array, data1);
+		COPY_REMOTE_ARRAY(data2_array, data2);
+		COPY_REMOTE_ARRAY(custom_data1_array, custom_data1);
+#undef COPY_REMOTE_ARRAY
+		const char *selected_addr = E->GetStringUTFChars(env, selected_addr_string, NULL);
+		const char *local_addr = E->GetStringUTFChars(env, local_addr_string, NULL);
+		strncpy(remote_info.selected_addr, selected_addr, sizeof(remote_info.selected_addr) - 1);
+		strncpy(remote_info.regist_local_ip, local_addr, sizeof(remote_info.regist_local_ip) - 1);
+		E->ReleaseStringUTFChars(env, selected_addr_string, selected_addr);
+		E->ReleaseStringUTFChars(env, local_addr_string, local_addr);
+		connect_info.remote_connection = &remote_info;
+	}
 
 	const char *str_borrow = E->GetStringUTFChars(env, host_string, NULL);
 	connect_info.host = host_str = strdup(str_borrow);
@@ -369,6 +414,7 @@ JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject 
 	session->java_session_event_login_pin_request_meth = E->GetMethodID(env, session->java_session_class, "eventLoginPinRequest", "(Z)V");
 	session->java_session_event_quit_meth = E->GetMethodID(env, session->java_session_class, "eventQuit", "(ILjava/lang/String;)V");
 	session->java_session_event_rumble_meth = E->GetMethodID(env, session->java_session_class, "eventRumble", "(II)V");
+	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 
 	jclass controller_state_class = E->FindClass(env, BASE_PACKAGE"/ControllerState");
 	session->java_controller_state_buttons = E->GetFieldID(env, controller_state_class, "buttons", "I");
@@ -414,6 +460,29 @@ beach:
 	E->SetLongField(env, result, E->GetFieldID(env, result_class, "ptr", "J"), (jlong)session);
 }
 
+JNIEXPORT void JNICALL JNI_FCN(sessionCreate)(JNIEnv *env, jobject obj, jobject result,
+		jobject connect_info_obj, jstring log_file_str, jboolean log_verbose,
+		jboolean real_video_timestamps, jboolean decoder_input_thread, jobject java_session)
+{
+	(void)obj;
+	session_create(env, result, connect_info_obj, log_file_str, log_verbose,
+		real_video_timestamps, decoder_input_thread, -1, NULL, NULL, 0,
+		NULL, NULL, NULL, NULL, java_session);
+}
+
+JNIEXPORT void JNICALL JNI_FCN(sessionCreateRemote)(JNIEnv *env, jobject obj, jobject result,
+		jobject connect_info_obj, jstring log_file_str, jboolean log_verbose,
+		jboolean real_video_timestamps, jboolean decoder_input_thread, jint control_fd,
+		jbyteArray psn_account_id, jstring selected_addr, jint control_port,
+		jbyteArray data1, jbyteArray data2, jbyteArray custom_data1, jstring local_addr,
+		jobject java_session)
+{
+	(void)obj;
+	session_create(env, result, connect_info_obj, log_file_str, log_verbose,
+		real_video_timestamps, decoder_input_thread, control_fd, psn_account_id,
+		selected_addr, control_port, data1, data2, custom_data1, local_addr, java_session);
+}
+
 JNIEXPORT void JNICALL JNI_FCN(sessionFree)(JNIEnv *env, jobject obj, jlong ptr)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
@@ -453,10 +522,30 @@ JNIEXPORT jint JNICALL JNI_FCN(sessionJoin)(JNIEnv *env, jobject obj, jlong ptr)
 	return chiaki_session_join(&session->session);
 }
 
-JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface)
+JNIEXPORT jint JNICALL JNI_FCN(sessionSetRemoteDataSocket)(JNIEnv *env, jobject obj, jlong ptr, jint fd)
+{
+	(void)env;
+	(void)obj;
+	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
+	if(!session)
+		return CHIAKI_ERR_INVALID_DATA;
+	return chiaki_session_set_remote_data_socket(&session->session, (chiaki_socket_t)fd);
+}
+
+JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface,
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
-	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface);
+	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface,
+			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
+}
+
+JNIEXPORT void JNICALL JNI_FCN(sessionSetPacingMode)(JNIEnv *env, jobject obj, jlong ptr, jint pacing_mode)
+{
+	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
+	android_chiaki_video_decoder_set_pacing_mode(&session->video_decoder,
+			(AndroidChiakiVideoPacingMode)pacing_mode);
 }
 
 JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj, jlong ptr)
@@ -466,8 +555,10 @@ JNIEXPORT jobject JNICALL JNI_FCN(sessionGetVideoStats)(JNIEnv *env, jobject obj
 	android_chiaki_video_decoder_get_stats(&session->video_decoder, &stats);
 
 	jclass stats_class = E->FindClass(env, BASE_PACKAGE"/VideoStats");
-	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(J)V");
-	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped);
+	jmethodID constructor = E->GetMethodID(env, stats_class, "<init>", "(JJJJ)V");
+	return E->NewObject(env, stats_class, constructor, (jlong)stats.input_frames_dropped,
+			(jlong)stats.missed_vsyncs, (jlong)stats.presenter_frames_dropped,
+			(jlong)stats.dejitter_buffer_ns);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetControllerState)(JNIEnv *env, jobject obj, jlong ptr, jobject controller_state_java)

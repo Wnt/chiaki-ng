@@ -185,7 +185,8 @@ class MainActivity : AppCompatActivity()
 					preferences.videoProfile, preferences.decoderLowLatencyEnabled,
 					preferences.threadPriorityBoostEnabled, preferences.decoderLateFrameRecoveryEnabled,
 					preferences.packetLossMax,
-					preferences.takionVideoPacketReorderingDisabled)
+					preferences.takionVideoPacketReorderingDisabled,
+					if(preferences.feedbackReducedIntervalEnabled) 4 else 0)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
 					startActivity(it)

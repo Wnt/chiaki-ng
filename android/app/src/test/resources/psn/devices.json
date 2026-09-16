@@ -1,0 +1,1 @@
+{"clients":[{"duid":"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff","device":{"name":"Fixture PS5","enabledFeatures":["remotePlay"]}},{"duid":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","device":{"name":"Not remote capable","enabledFeatures":[]}}]}

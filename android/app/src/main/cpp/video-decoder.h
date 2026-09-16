@@ -9,12 +9,17 @@
 #include <chiaki/log.h>
 #include <chiaki/seqnum.h>
 
+#include "video-presenter.h"
+
 typedef struct AMediaCodec AMediaCodec;
 typedef struct ANativeWindow ANativeWindow;
 
 typedef struct android_chiaki_video_stats_t
 {
 	uint64_t input_frames_dropped;
+	uint64_t missed_vsyncs;
+	uint64_t presenter_frames_dropped;
+	uint64_t dejitter_buffer_ns;
 } AndroidChiakiVideoStats;
 
 typedef ChiakiErrorCode (*AndroidChiakiVideoDecoderRequestIDRCallback)(void *user);
@@ -32,8 +37,7 @@ typedef struct android_chiaki_video_decoder_t
 	unsigned int fps;
 	bool real_pts_enabled;
 	ChiakiSeqNum16Unwrapper frame_index_unwrapper;
-	ChiakiThread output_thread;
-	bool shutdown_output;
+	AndroidChiakiVideoPresenter presenter;
 	ChiakiThread input_thread;
 	bool input_thread_enabled;
 	bool shutdown_input;
@@ -65,7 +69,11 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
-void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface);
+void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
+		AndroidChiakiVideoPacingMode pacing_mode);
+void android_chiaki_video_decoder_set_pacing_mode(AndroidChiakiVideoDecoder *decoder,
+		AndroidChiakiVideoPacingMode pacing_mode);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user);
 void android_chiaki_video_decoder_get_stats(AndroidChiakiVideoDecoder *decoder, AndroidChiakiVideoStats *stats);
 

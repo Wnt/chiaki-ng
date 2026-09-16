@@ -54,6 +54,19 @@ typedef struct chiaki_connect_video_profile_t
 	ChiakiCodec codec;
 } ChiakiConnectVideoProfile;
 
+/** Android-owned PSN control-plane result. Connected sockets are transferred to the session. */
+typedef struct chiaki_remote_connection_info_t
+{
+	chiaki_socket_t ctrl_sock;
+	chiaki_socket_t data_sock;
+	uint8_t data1[16];
+	uint8_t data2[16];
+	uint8_t custom_data1[16];
+	char regist_local_ip[INET6_ADDRSTRLEN];
+	char selected_addr[INET6_ADDRSTRLEN];
+	uint16_t ctrl_port;
+} ChiakiRemoteConnectionInfo;
+
 typedef enum {
 	// values must not change
 	CHIAKI_VIDEO_RESOLUTION_PRESET_360p = 1,
@@ -85,11 +98,13 @@ typedef struct chiaki_connect_info_t
 	ChiakiDisableAudioVideo audio_video_disabled;
 	bool auto_regist;
 	ChiakiHolepunchSession holepunch_session;
+	ChiakiRemoteConnectionInfo *remote_connection;
 	chiaki_socket_t *rudp_sock;
 	uint8_t psn_account_id[CHIAKI_PSN_ACCOUNT_ID_SIZE];
 	double packet_loss_max;
 	bool enable_idr_on_fec_failure;
 	bool disable_video_packet_reordering;
+	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
 } ChiakiConnectInfo;
 
 
@@ -172,6 +187,7 @@ typedef enum {
 	CHIAKI_EVENT_HAPTIC_INTENSITY,
 	CHIAKI_EVENT_TRIGGER_INTENSITY,
 	CHIAKI_EVENT_VIDEO_FEC_FAILURE,
+	CHIAKI_EVENT_REMOTE_DATA_SOCKET_NEEDED,
 } ChiakiEventType;
 
 typedef struct chiaki_event_t
@@ -230,6 +246,7 @@ typedef struct chiaki_session_t
 		uint8_t psn_account_id[CHIAKI_PSN_ACCOUNT_ID_SIZE];
 		bool enable_idr_on_fec_failure;
 		bool disable_video_packet_reordering;
+		uint32_t feedback_state_min_interval_ms;
 	} connect_info;
 
 	ChiakiTarget target;
@@ -274,6 +291,8 @@ typedef struct chiaki_session_t
 
 	ChiakiCtrl ctrl;
 	ChiakiHolepunchSession holepunch_session;
+	bool remote_connection;
+	ChiakiRemoteConnectionInfo remote_connection_info;
 	ChiakiRudp rudp;
 
 	ChiakiLog *log;
@@ -295,6 +314,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_request_idr(ChiakiSession *session)
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_controller_state(ChiakiSession *session, ChiakiControllerState *state);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_login_pin(ChiakiSession *session, const uint8_t *pin, size_t pin_size);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_stream_connection_switch_received(ChiakiSession *session);
+/** Takes ownership of data_sock only when CHIAKI_ERR_SUCCESS is returned. */
+CHIAKI_EXPORT ChiakiErrorCode chiaki_session_set_remote_data_socket(ChiakiSession *session, chiaki_socket_t data_sock);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_goto_bed(ChiakiSession *session);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_toggle_microphone(ChiakiSession *session, bool muted);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_connect_microphone(ChiakiSession *session);
