@@ -1,0 +1,2 @@
+# Fork-side entries for scripts/dev/flag-gate.py (format: see scripts/dev/flag-gate-allowlist.txt).
+debug-guard | source set: android/app/src/debug/java/com/metallic/chiaki/remote/PsnMockFault.kt | debug-harness | PLE-302: reintroduces a known onboarding defect in a -PchiakiPsnMock build only, when a debug.* device property asks, so the onboarding driver can prove it catches it

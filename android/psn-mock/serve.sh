@@ -6,6 +6,8 @@
 #   serve.sh stop      stop both
 #   serve.sh status    show processes and probe both public hosts
 #   serve.sh run       run both in the foreground (for a systemd unit)
+#   serve.sh install   install and start the pleikkari-psn-mock user unit, run from
+#                      the shared clone, so it outlives any ticket worktree
 #
 # The agent token is read from $FORWARDER_AGENT_TOKEN, else the first existing
 # env file in $PSN_MOCK_AGENT_ENV, ~/.config/pleikkari/forwarder-agent.env,
@@ -20,6 +22,10 @@ PORT="${PSN_MOCK_PORT:-18284}"
 CONTROL="${PSN_MOCK_CONTROL_HOST:-tunnel.lab.madekivi.fi}"
 STATE="${PSN_MOCK_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/pleikkari-psn-mock}"
 AGENT="${PSN_MOCK_AGENT:-$HOME/.cache/pleikkari/forwarder/forwarder-agent}"
+UNIT="pleikkari-psn-mock.service"
+# The unit runs this script from the shared clone, which is updated only by landing and never
+# garbage-collected like a ticket worktree (PLE-302: the mock ran from wt/ple-284).
+SHARED="${PSN_MOCK_SHARED_CLONE:-/home/wnt/gta6/chiaki-ng}/android/psn-mock"
 
 die() { printf 'psn-mock: %s\n' "$*" >&2; exit 1; }
 say() { printf 'psn-mock: %s\n' "$*"; }
@@ -98,6 +104,7 @@ cmd_status() {
 	for name in mock agent; do
 		if pid_alive "$STATE/$name.pid"; then say "$name running (pid $(cat "$STATE/$name.pid"))"; else say "$name not running"; fi
 	done
+	command -v systemctl >/dev/null && say "$UNIT: $(systemctl --user is-active "$UNIT" 2>/dev/null || true)"
 	for host in "$VERIFIED_HOST" "$NOLINK_HOST"; do
 		code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$host/.well-known/assetlinks.json" || true)"
 		say "https://$host/.well-known/assetlinks.json -> HTTP $code"
@@ -112,8 +119,47 @@ cmd_run() {
 	local mock=$!
 	(agent_cmd) &
 	local agent=$!
-	trap 'kill $mock $agent 2>/dev/null' EXIT INT TERM
+	# The pid files let status, and a stray `start`, see the unit's processes.
+	echo "$mock" >"$STATE/mock.pid"
+	echo "$agent" >"$STATE/agent.pid"
+	trap 'kill $mock $agent 2>/dev/null; rm -f "$STATE/mock.pid" "$STATE/agent.pid"' EXIT INT TERM
 	wait -n $mock $agent
+}
+
+cmd_install() {
+	[ -x "$SHARED/serve.sh" ] || die "no $SHARED/serve.sh: the shared clone has no PSN mock yet"
+	load_token
+	ensure_agent
+	local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+	mkdir -p "$dir"
+	cat >"$dir/$UNIT" <<-UNIT
+		# Installed by android/psn-mock/serve.sh install (PLE-302). Restart: systemctl --user restart $UNIT
+		[Unit]
+		Description=Pleikkari PSN sign-in mock behind forwarder-agent
+		After=network-online.target
+
+		[Service]
+		ExecStart=$SHARED/serve.sh run
+		Restart=always
+		RestartSec=5
+
+		[Install]
+		WantedBy=default.target
+	UNIT
+	# A mock started by hand, from any checkout, holds the port the unit needs.
+	if systemctl --user is-active --quiet "$UNIT"; then :; else cmd_stop; fi
+	systemctl --user daemon-reload
+	systemctl --user enable "$UNIT"
+	systemctl --user restart "$UNIT"
+	local i
+	for i in $(seq 1 30); do
+		if curl -fsS --max-time 5 "https://$VERIFIED_HOST/healthz" 2>/dev/null | grep -q "psn-mock ok"; then
+			say "$UNIT running from $SHARED; restart with: systemctl --user restart $UNIT"
+			return 0
+		fi
+		sleep 1
+	done
+	die "$UNIT is not answering at https://$VERIFIED_HOST; see journalctl --user -u $UNIT"
 }
 
 case "${1:-}" in
@@ -121,5 +167,6 @@ case "${1:-}" in
 	stop) cmd_stop ;;
 	status) cmd_status ;;
 	run) cmd_run ;;
-	*) sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+	install) cmd_install ;;
+	*) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
