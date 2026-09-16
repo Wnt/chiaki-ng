@@ -6,11 +6,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.fragment.app.Fragment
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
+import com.metallic.chiaki.R
 import com.metallic.chiaki.databinding.FragmentControlsBinding
 import com.metallic.chiaki.lib.ControllerState
 import kotlinx.coroutines.flow.Flow
@@ -42,12 +45,25 @@ abstract class TouchControlsFragment : Fragment()
 
 	var onScreenControlsEnabled: LiveData<Boolean>? = null
 	var overlayRevealRequested: (() -> Unit)? = null
+	var windowLayoutEnabled = false
+		set(value)
+		{
+			field = value
+			(this as? DefaultTouchControlsFragment)?.applyWindowLayout()
+		}
+	var controlsBelowVideo = false
+		set(value)
+		{
+			field = value
+			(this as? DefaultTouchControlsFragment)?.applyWindowInsets()
+		}
 }
 
 class DefaultTouchControlsFragment : TouchControlsFragment()
 {
 	private var _binding: FragmentControlsBinding? = null
 	private val binding get() = _binding!!
+	private var lastInsets: WindowInsetsCompat? = null
 
 	override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
 		FragmentControlsBinding.inflate(inflater, container, false).let {
@@ -60,18 +76,11 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 	override fun onViewCreated(view: View, savedInstanceState: Bundle?)
 	{
 		super.onViewCreated(view, savedInstanceState)
+		applyWindowLayout()
 		binding.controlsBackgroundView.setOnClickListener { overlayRevealRequested?.invoke() }
-		ViewCompat.setOnApplyWindowInsetsListener(view) { safeView, insets ->
-			val safe = insets.getInsetsIgnoringVisibility(
-				WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-			)
-			val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
-			safeView.setPadding(
-				max(safe.left, gestures.left),
-				max(safe.top, gestures.top),
-				max(safe.right, gestures.right),
-				max(safe.bottom, gestures.bottom)
-			)
+		ViewCompat.setOnApplyWindowInsetsListener(view) { _, insets ->
+			lastInsets = insets
+			applyWindowInsets()
 			insets
 		}
 		ViewCompat.requestApplyInsets(view)
@@ -108,6 +117,67 @@ class DefaultTouchControlsFragment : TouchControlsFragment()
 		onScreenControlsEnabled?.observe(viewLifecycleOwner, Observer {
 			view.visibility = if(it) View.VISIBLE else View.GONE
 		})
+	}
+
+	internal fun applyWindowLayout()
+	{
+		val currentBinding = _binding ?: return
+		currentBinding.controllerDock.layoutParams =
+			(currentBinding.controllerDock.layoutParams as ConstraintLayout.LayoutParams).apply {
+				// Zero is ConstraintLayout's "no maximum" value. The XML caps remain the
+				// untouched, flag-off baseline.
+				matchConstraintMaxWidth = if(windowLayoutEnabled) 0 else dp(440)
+				matchConstraintMaxHeight = if(windowLayoutEnabled) 0 else dp(400)
+			}
+		updateWindowVerticalAnchors(
+			currentBinding.dpadView,
+			R.id.l2ButtonView,
+			R.id.leftAnalogStickView,
+			0.42f
+		)
+		updateWindowVerticalAnchors(
+			currentBinding.faceButtonsLayout,
+			R.id.r2ButtonView,
+			R.id.rightAnalogStickView,
+			0.4f
+		)
+		currentBinding.controllerDock.requestLayout()
+	}
+
+	private fun updateWindowVerticalAnchors(view: View, legacyTop: Int, legacyBottom: Int, windowBias: Float)
+	{
+		view.layoutParams = (view.layoutParams as ConstraintLayout.LayoutParams).apply {
+			topToTop = if(windowLayoutEnabled) ConstraintSet.PARENT_ID else ConstraintSet.UNSET
+			bottomToBottom = if(windowLayoutEnabled) ConstraintSet.PARENT_ID else ConstraintSet.UNSET
+			topToBottom = if(windowLayoutEnabled) ConstraintSet.UNSET else legacyTop
+			bottomToTop = if(windowLayoutEnabled) ConstraintSet.UNSET else legacyBottom
+			verticalBias = if(windowLayoutEnabled) windowBias else 0.5f
+		}
+	}
+
+	internal fun applyWindowInsets()
+	{
+		val safeView = _binding?.root ?: return
+		val insets = lastInsets ?: return
+		val safe = insets.getInsetsIgnoringVisibility(
+			WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+		)
+		val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
+		safeView.setPadding(
+			max(safe.left, gestures.left),
+			if(windowLayoutEnabled && controlsBelowVideo) 0 else max(safe.top, gestures.top),
+			max(safe.right, gestures.right),
+			max(safe.bottom, gestures.bottom)
+		)
+	}
+
+	private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+
+	override fun onDestroyView()
+	{
+		lastInsets = null
+		_binding = null
+		super.onDestroyView()
 	}
 
 	private fun dpadStateChanged(direction: DPadView.Direction?)

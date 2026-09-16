@@ -9,15 +9,18 @@ import android.content.res.ColorStateList
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.graphics.Matrix
+import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
+import android.provider.Settings
 import android.util.Log
 import android.view.*
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
@@ -76,6 +79,10 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_PSN_DEVICE = "psn_device"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		const val EXTRA_STREAM_SUMMARY = "stream_summary"
+		// Private device experiment setting, intentionally absent from the user-facing Settings
+		// screen. `adb shell settings put global ple_244_window_touch_layout 1` enables the A/B
+		// candidate; a missing key preserves the current layout.
+		const val WINDOW_TOUCH_LAYOUT_SETTING = "ple_244_window_touch_layout"
 		private const val HIDE_UI_TIMEOUT_MS = 3500L
 
 		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
@@ -109,6 +116,12 @@ class StreamActivity : AppCompatActivity()
 	private var networkQuality = NetworkQualitySnapshot.UNKNOWN
 	private var networkQualityDetailsExpanded = false
 	private var streamTransformMode = TransformMode.FIT
+	private var touchControlsFragment: TouchControlsFragment? = null
+	private var lastWindowInsets: WindowInsetsCompat? = null
+	private var lastLayoutBoundsLog: String? = null
+	private val windowTouchLayoutEnabled by lazy {
+		Settings.Global.getInt(contentResolver, WINDOW_TOUCH_LAYOUT_SETTING, 0) == 1
+	}
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -134,6 +147,7 @@ class StreamActivity : AppCompatActivity()
 
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		prepareWindowTouchLayout()
 		performanceModeRequested = connectInfo.performanceModeEnabled
 
 		val preferences = Preferences(this)
@@ -150,11 +164,15 @@ class StreamActivity : AppCompatActivity()
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
 		ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+			lastWindowInsets = insets
 			applyOverlayInsets(insets)
 			val systemBars = insets.isVisible(WindowInsetsCompat.Type.systemBars())
 			if(systemBars)
 				showOverlay()
 			insets
+		}
+		binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+			applyWindowTouchLayout()
 		}
 
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
@@ -448,6 +466,8 @@ class StreamActivity : AppCompatActivity()
 				.launchIn(lifecycleScope)
 			fragment.onScreenControlsEnabled = viewModel.onScreenControlsEnabled
 			fragment.overlayRevealRequested = ::showOverlay
+			fragment.windowLayoutEnabled = windowTouchLayoutEnabled
+			touchControlsFragment = fragment
 		}
 	}
 
@@ -528,6 +548,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onConfigurationChanged(newConfig)
 		viewModel.input.refreshDisplayRotation()
+		binding.root.post(::applyWindowTouchLayout)
 	}
 
 	override fun onDestroy()
@@ -649,9 +670,93 @@ class StreamActivity : AppCompatActivity()
 		)
 		val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
 		val baseMargin = (12 * resources.displayMetrics.density).toInt()
+		val controlsTop = portraitControlsTop()
 		binding.streamControlDock.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-			topMargin = baseMargin + maxOf(safe.top, gestures.top)
+			topMargin = baseMargin + if(controlsTop > 0) controlsTop else maxOf(safe.top, gestures.top)
 			marginEnd = baseMargin + maxOf(safe.right, gestures.right)
+		}
+	}
+
+	private fun prepareWindowTouchLayout()
+	{
+		binding.aspectRatioLayout.forceFitInPortrait = windowTouchLayoutEnabled
+		if(!windowTouchLayoutEnabled || binding.streamTouchpadView.parent === binding.root)
+			return
+		(binding.streamTouchpadView.parent as ViewGroup).removeView(binding.streamTouchpadView)
+		val videoIndex = binding.root.indexOfChild(binding.aspectRatioLayout)
+		binding.root.addView(
+			binding.streamTouchpadView,
+			videoIndex + 1,
+			FrameLayout.LayoutParams(
+				ViewGroup.LayoutParams.MATCH_PARENT,
+				ViewGroup.LayoutParams.MATCH_PARENT
+			)
+		)
+	}
+
+	private fun portraitControlsTop(): Int
+	{
+		if(!windowTouchLayoutEnabled || binding.root.width <= 0 || binding.root.height <= binding.root.width)
+			return 0
+		val ratio = binding.aspectRatioLayout.aspectRatio
+		return if(ratio > 0f) (binding.root.width / ratio).toInt().coerceAtMost(binding.root.height) else 0
+	}
+
+	private fun applyWindowTouchLayout()
+	{
+		if(!windowTouchLayoutEnabled || binding.root.width <= 0)
+			return
+		val controlsTop = portraitControlsTop()
+		val portrait = controlsTop > 0
+		val videoGravity = if(portrait) Gravity.TOP or Gravity.CENTER_HORIZONTAL else Gravity.CENTER
+		val videoParams = binding.aspectRatioLayout.layoutParams as FrameLayout.LayoutParams
+		if(videoParams.gravity != videoGravity)
+		{
+			videoParams.gravity = videoGravity
+			binding.aspectRatioLayout.layoutParams = videoParams
+		}
+		updateWindowTouchRegion(binding.streamTouchpadView, controlsTop)
+		findViewById<View>(R.id.controlsFragment)?.let { updateWindowTouchRegion(it, controlsTop) }
+		touchControlsFragment?.controlsBelowVideo = portrait
+		lastWindowInsets?.let(::applyOverlayInsets)
+		binding.root.post(::logWindowTouchBounds)
+	}
+
+	private fun updateWindowTouchRegion(view: View, top: Int)
+	{
+		val params = view.layoutParams as FrameLayout.LayoutParams
+		if(params.width == ViewGroup.LayoutParams.MATCH_PARENT
+			&& params.height == ViewGroup.LayoutParams.MATCH_PARENT
+			&& params.topMargin == top
+			&& params.bottomMargin == 0
+			&& params.gravity == Gravity.TOP)
+			return
+		params.width = ViewGroup.LayoutParams.MATCH_PARENT
+		params.height = ViewGroup.LayoutParams.MATCH_PARENT
+		params.topMargin = top
+		params.bottomMargin = 0
+		params.gravity = Gravity.TOP
+		view.layoutParams = params
+	}
+
+	private fun logWindowTouchBounds()
+	{
+		if(!windowTouchLayoutEnabled)
+			return
+		fun View.boundsString(): String
+		{
+			val bounds = Rect()
+			getGlobalVisibleRect(bounds)
+			return "[${bounds.left},${bounds.top}][${bounds.right},${bounds.bottom}]"
+		}
+		val controls = findViewById<View>(R.id.controlsFragment) ?: return
+		val message = "PLE-244 bounds orientation=${if(binding.root.height > binding.root.width) "portrait" else "landscape"} " +
+			"window=${binding.root.boundsString()} video=${binding.aspectRatioLayout.boundsString()} " +
+			"controls=${controls.boundsString()}"
+		if(message != lastLayoutBoundsLog)
+		{
+			lastLayoutBoundsLog = message
+			Log.i("StreamActivity", message)
 		}
 	}
 
