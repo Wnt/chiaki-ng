@@ -162,13 +162,44 @@ It also requires the package to be `com.metallic.chiaki`, and requires Sony's pr
 to be found, so an empty scan cannot pass. `--control` scans a mock debug APK and requires the markers
 to be found there, which shows the scan would catch a mock build.
 
+## Passkeys in the app's own WebView: the probe (PLE-324)
+
+Since androidx.webkit 1.12, `WebSettingsCompat.setWebAuthenticationSupport(settings, WEB_AUTHENTICATION_SUPPORT_FOR_BROWSER)`
+lets a WebView make WebAuthn calls for any origin. If the app could use it, sign-in could stay in the
+app's WebView, which sees the redirect, and no tap on the tab would be needed. **It does not work for
+this app.** The WebView itself does not stop it: Chromium only records whether the app holds
+`CREDENTIAL_MANAGER_SET_ORIGIN`, a normal permission. The providers stop it. They only serve an asserted
+origin to an allowlisted browser, which they identify by package and signing certificate:
+
+| Provider (S25, SM-S938B, Android 16, WebView 152.0.7977.88) | Result for `com.metallic.chiaki.psnmock` |
+|---|---|
+| Google Password Manager, including hybrid (phone as a security key) | `[28442] Invalid calling package`. GMS logs `rejecting asserted origin from app … did not match the privileged allowlist` (the list is `https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json`; Google approves additions through a request form) |
+| Samsung Pass | shows its sheet and the fingerprint prompt, then `CreatePasskeyActivity: not privileged browser` |
+
+The page receives `NotAllowedError`. Nothing is saved. Before Android 14, a browser-mode WebView uses
+GMS's FIDO2 browser API instead. That API is also reserved for approved browsers, but no phone below Android 14 was tested.
+The feature needs WebView M124 or later (Chromium 916b2555, 2024-03-07), found with
+`WebViewFeature.isFeatureSupported(WEB_AUTHENTICATION)`. The raw captures are in
+`build/captures/ple324/` in the workspace.
+
+A `-PchiakiPsnMock` build has the probe activity, so this can be re-checked when a provider or WebView changes:
+
+```bash
+adb shell am start -n com.metallic.chiaki.psnmock/com.metallic.chiaki.regist.PsnMockWebAuthnProbe \
+    --es mode browser --es target mock      # mode: browser|app|none; target: mock|sony
+adb logcat -s PsnWebAuthnProbe CredentialManager
+```
+
+It logs feature support, the WebView package, the permission, each WebAuthn call and its exact
+outcome, and whether the redirect was captured. It never exchanges or logs the code.
+
 ## What the mock cannot reproduce about Sony
 
 This list is where the next surprise will come from.
 
 1. **Sony's page is a multi-step JavaScript app. The mock's is a single form.** Sony asks for the ID and the password on separate steps. It can add 2-step verification, captcha or bot checks, "trust this browser", consent and age screens, account-locked and region errors. The mock models none of these.
 2. **How Sony redirects.** The mock answers the password form with a plain `302` straight after the user's tap. That is the navigation Chrome most readily hands to an app link. Sony's redirect may come from script, after asynchronous steps and after the tap's user activation has expired. Chrome may then show the blank redirect page even for a link it would otherwise open in the app. The mock's passkey branch does navigate from script (`location.assign`), which is the closer model.
-3. **Passkeys.** On the mock, the relying party is the mock host. On Sony it is Sony's domain, whose assetlinks list only Sony's apps. Credential Manager in the app's WebView can never use a Sony passkey. The mock deliberately does not delegate (`handle_all_urls` only). Still, no Android passkey provider was exercised here: the emulator has no Google account, and the check uses a CDP virtual authenticator in desktop Chrome. The S22's Samsung Pass and Google Password Manager are untested. Since PLE-312 a passkey sign-in happens in the same browser tab as a password one and returns through the same Finish sign-in action, which the driver does exercise; the driver itself never performs a passkey ceremony.
+3. **Passkeys.** On the mock, the relying party is the mock host. On Sony it is Sony's domain, whose assetlinks list only Sony's apps. Credential Manager in the app's WebView can never use a Sony passkey. The mock deliberately does not delegate (`handle_all_urls` only). Still, no Android passkey provider was exercised here: the emulator has no Google account, and the check uses a CDP virtual authenticator in desktop Chrome. On the S25, PLE-324 did run both of its providers against the mock from the app's own WebView (see below), and both refused the app. Since PLE-312 a passkey sign-in happens in the same browser tab as a password one and returns through the same Finish sign-in action, which the driver does exercise; the driver itself never performs a passkey ceremony.
 4. **The nolink build still carries one verified link.** The mock app declares both hosts, so Android's link settings show "1 verified link". Production has none. What the app does is the same, but the Settings screen text differs.
 5. **A network drop is only a stall.** Through Caddy and the forwarder, the app sees a 20 s stall and a closed connection or a `502`. It does not see a TCP reset, DNS failure, airplane mode, captive portal or a network switch mid-exchange.
 6. **Error bodies, code lifetime and cancel are guesses.** The `invalid_grant` body and `error_code` numbers are unverified against Sony. Sony's real code lifetime is unknown; the mock uses 300 s. What Sony sends back on cancel is also unknown; the mock uses OAuth's `error=access_denied`.
