@@ -79,6 +79,9 @@ class Preferences(context: Context)
 		val videoPresenterLeadDefault = VideoPresenterLead.TWO_MS
 		val videoPresenterLeadAll = VideoPresenterLead.values()
 		const val videoPacingMaxFrameAgePeriodsDefault = 2
+		const val videoDejitterFloorMsDefault = 12
+		const val videoDejitterCapMsDefault = 32
+		const val videoDejitterQueueAgeFramesDefault = 2
 		val videoRecoveryStrategyDefault = VideoRecoveryStrategy.FLUSH
 		val videoRecoveryStrategyAll = VideoRecoveryStrategy.values()
 		val codecDefault = Codec.CODEC_H265
@@ -240,6 +243,11 @@ class Preferences(context: Context)
 	var videoPacingHighRefreshEnabled
 		get() = sharedPreferences.getBoolean(videoPacingHighRefreshEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoPacingHighRefreshEnabledKey, value).apply() }
+
+	val videoDejitterEnabledKey get() = resources.getString(R.string.preferences_video_dejitter_enabled_key)
+	var videoDejitterEnabled
+		get() = sharedPreferences.getBoolean(videoDejitterEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoDejitterEnabledKey, value).apply() }
 
 	val videoPacingBoundedAgeEnabledKey get() = resources.getString(R.string.preferences_video_pacing_bounded_age_enabled_key)
 	var videoPacingBoundedAgeEnabled
@@ -403,7 +411,34 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(videoPacingMaxFrameAgePeriodsKey,
 			validateVideoPacingMaxFrameAgePeriods(value)).apply() }
 
-	val videoPresenterConfig get() = AndroidChiakiVideoPresenterConfig(
+	fun validateVideoDejitterDepthMs(depthMs: Int) = max(1, min(256, depthMs))
+	val videoDejitterFloorMsKey get() = resources.getString(R.string.preferences_video_dejitter_floor_ms_key)
+	var videoDejitterFloorMs
+		get() = validateVideoDejitterDepthMs(sharedPreferences.getInt(
+			videoDejitterFloorMsKey, videoDejitterFloorMsDefault))
+		set(value) { sharedPreferences.edit().putInt(videoDejitterFloorMsKey,
+			validateVideoDejitterDepthMs(value)).apply() }
+
+	val videoDejitterCapMsKey get() = resources.getString(R.string.preferences_video_dejitter_cap_ms_key)
+	var videoDejitterCapMs
+		get() = validateVideoDejitterDepthMs(sharedPreferences.getInt(
+			videoDejitterCapMsKey, videoDejitterCapMsDefault))
+		set(value) { sharedPreferences.edit().putInt(videoDejitterCapMsKey,
+			validateVideoDejitterDepthMs(value)).apply() }
+
+	fun validateVideoDejitterQueueAgeFrames(frames: Int) = max(0, min(10, frames))
+	val videoDejitterQueueAgeFramesKey get() = resources.getString(R.string.preferences_video_dejitter_queue_age_frames_key)
+	var videoDejitterQueueAgeFrames
+		get() = validateVideoDejitterQueueAgeFrames(sharedPreferences.getInt(
+			videoDejitterQueueAgeFramesKey, videoDejitterQueueAgeFramesDefault))
+		set(value) { sharedPreferences.edit().putInt(videoDejitterQueueAgeFramesKey,
+			validateVideoDejitterQueueAgeFrames(value)).apply() }
+
+	val videoPresenterConfig get(): AndroidChiakiVideoPresenterConfig
+	{
+		val capMs = videoDejitterCapMs
+		val floorMs = min(videoDejitterFloorMs, capMs)
+		return AndroidChiakiVideoPresenterConfig(
 		pacingEnabled = videoPacingEnabled,
 		pacingHighRefreshEnabled = videoPacingHighRefreshEnabled,
 		pacingMode = videoPacingMode.nativeValue,
@@ -411,8 +446,13 @@ class Preferences(context: Context)
 		boundedAgeEnabled = videoPacingBoundedAgeEnabled,
 		maxFrameAgePeriods = videoPacingMaxFrameAgePeriods,
 		nonblockingProducer = videoPresenterNonblockingProducer,
-		recoveryStrategy = videoRecoveryStrategy.nativeValue
-	)
+		recoveryStrategy = videoRecoveryStrategy.nativeValue,
+		dejitterEnabled = videoDejitterEnabled,
+		dejitterFloorMs = floorMs,
+		dejitterCapMs = capMs,
+		dejitterQueueAgeFrames = videoDejitterQueueAgeFrames
+		)
+	}
 
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)

@@ -5,6 +5,7 @@
 #include "../android/app/src/main/cpp/video-presenter-age.h"
 #include "../android/app/src/main/cpp/video-presenter-recovery.h"
 #include "../android/app/src/main/cpp/video-presenter-cadence.h"
+#include "../android/app/src/main/cpp/video-presenter-dejitter.h"
 #include "../android/app/src/main/cpp/video-presenter-histogram.h"
 #include "../android/app/src/main/cpp/video-presenter-timing.h"
 
@@ -29,6 +30,7 @@ static uint64_t sorted_percentile(uint64_t *samples, uint32_t count,
 
 static void assert_cadence_persistent_phase_step_relocks(void);
 static void assert_cadence_clock_drift_stays_in_range(void);
+static void assert_dejitter_release_time(void);
 
 static MunitResult test_histogram_matches_sorted_percentile(const MunitParameter params[], void *user)
 {
@@ -95,7 +97,7 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	(void)user;
 
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence);
+	android_chiaki_video_cadence_reset(&cadence, 12000000ULL, 32000000ULL);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -110,10 +112,11 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	munit_assert_uint64(cadence.jitter_p95_ns, ==, 0);
 	munit_assert_uint32(cadence.gaps, ==, 0);
 	munit_assert_uint64(cadence.decode_ewma_ns, ==, 8000000);
-	munit_assert_uint64(cadence.target_ns, ==, 4000000);
-	munit_assert_uint64(cadence.depth_ns, ==, 4000000);
+	munit_assert_uint64(cadence.target_ns, ==, 12000000);
+	munit_assert_uint64(cadence.depth_ns, ==, 12000000);
 	assert_cadence_persistent_phase_step_relocks();
 	assert_cadence_clock_drift_stays_in_range();
+	assert_dejitter_release_time();
 	return MUNIT_OK;
 }
 
@@ -123,7 +126,7 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 	(void)user;
 
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -145,7 +148,7 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 static void assert_cadence_persistent_phase_step_relocks(void)
 {
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -164,7 +167,7 @@ static void assert_cadence_persistent_phase_step_relocks(void)
 static void assert_cadence_clock_drift_stays_in_range(void)
 {
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
 	// Deliberately exaggerate source/nominal clock drift to 8,000 ppm. The
 	// recovered error must remain a measured low tail rather than run into the
 	// histogram ceiling or the depth cap over successive windows.
@@ -179,6 +182,34 @@ static void assert_cadence_clock_drift_stays_in_range(void)
 	munit_assert_uint64(cadence.err_p99_ns, <=, 4000000);
 	munit_assert_uint64(cadence.target_ns, <, 8000000);
 	munit_assert_uint64(cadence.depth_ns, <, 8000000);
+}
+
+static void assert_dejitter_release_time(void)
+{
+	const int64_t next_vsync_ns = 1000000000LL;
+	const int64_t period_ns = 16666667LL;
+	const int64_t lead_ns = 2000000LL;
+
+	// A target at or before the next vsync is released lead_ns ahead of it.
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			980000, 12000000ULL, next_vsync_ns, period_ns, lead_ns), ==,
+			998000000LL);
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			988000, 12000000ULL, next_vsync_ns, period_ns, lead_ns), ==,
+			998000000LL);
+
+	// A target after the next vsync rounds forward, never backward.
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			990000, 12000000ULL, next_vsync_ns, period_ns, lead_ns), ==,
+			1014666667LL);
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			990000, 12000000ULL, next_vsync_ns, 8333333LL, lead_ns), ==,
+			1006333333LL);
+
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			990000, 12000000ULL, next_vsync_ns, 0, lead_ns), ==, 0);
+	munit_assert_int64(android_chiaki_video_dejitter_release_time_ns(
+			UINT64_MAX, 12000000ULL, next_vsync_ns, period_ns, lead_ns), ==, 0);
 }
 
 static MunitResult test_period_observation(const MunitParameter params[], void *user)

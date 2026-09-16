@@ -21,5 +21,9 @@ class AndroidChiakiVideoPresenterConfigTest
 		assertEquals(2, config.maxFrameAgePeriods)
 		assertFalse(config.nonblockingProducer)
 		assertEquals(0, config.recoveryStrategy)
+		assertFalse(config.dejitterEnabled)
+		assertEquals(12, config.dejitterFloorMs)
+		assertEquals(32, config.dejitterCapMs)
+		assertEquals(2, config.dejitterQueueAgeFrames)
 	}
 }

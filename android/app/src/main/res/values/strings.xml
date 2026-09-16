@@ -101,6 +101,13 @@
 	<string name="preferences_video_pacing_enabled_summary">Pace decoded frames to display vsync with a dynamic de-jitter buffer (reconnect required)</string>
 	<string name="preferences_video_pacing_high_refresh_enabled_title">Pace on high-refresh displays</string>
 	<string name="preferences_video_pacing_high_refresh_enabled_summary">Allow timestamped frame release at 119 Hz and above (experimental; reconnect required)</string>
+	<string name="preferences_video_dejitter_enabled_title">Arrival-based de-jitter policy</string>
+	<string name="preferences_video_dejitter_enabled_summary">Schedule paced frames from receiver-ready time and measured arrival depth instead of the PTS timeline (experimental; reconnect required)</string>
+	<string name="preferences_video_dejitter_floor_ms_title">De-jitter depth floor</string>
+	<string name="preferences_video_dejitter_cap_ms_title">De-jitter depth cap</string>
+	<string name="preferences_video_dejitter_depth_ms_value">%d ms (1–256)</string>
+	<string name="preferences_video_dejitter_queue_age_frames_title">De-jitter queue age</string>
+	<string name="preferences_video_dejitter_queue_age_frames_value">%d frame periods (0 disables, max 10)</string>
 	<string name="preferences_video_pacing_mode_title">Video pacing mode</string>
 	<string name="preferences_video_pacing_mode_title_lowest_latency">Lowest latency</string>
 	<string name="preferences_video_pacing_mode_title_balanced">Balanced</string>
@@ -229,6 +236,10 @@
     <string name="preferences_decoder_late_frame_recovery_enabled_key">stream_decoder_late_frame_recovery</string>
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_high_refresh_enabled_key">stream_video_pacing_high_refresh</string>
+	<string name="preferences_video_dejitter_enabled_key">stream_video_dejitter_enabled</string>
+	<string name="preferences_video_dejitter_floor_ms_key">stream_video_dejitter_floor_ms</string>
+	<string name="preferences_video_dejitter_cap_ms_key">stream_video_dejitter_cap_ms</string>
+	<string name="preferences_video_dejitter_queue_age_frames_key">stream_video_dejitter_queue_age_frames</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>
 	<string name="preferences_video_presenter_lead_key">stream_video_presenter_lead</string>
 	<string name="preferences_video_recovery_strategy_key">stream_video_recovery_strategy</string>
