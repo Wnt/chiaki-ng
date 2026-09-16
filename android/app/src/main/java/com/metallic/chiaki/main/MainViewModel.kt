@@ -126,7 +126,11 @@ class MainViewModel(
 		feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 		feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
 		autoRegister = autoRegister,
-		performanceModeEnabled = preferences.performanceModeEnabled
+		performanceModeEnabled = preferences.performanceModeEnabled,
+		decoderOperatingRate = preferences.decoderOperatingRate,
+		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
+		decoderRealtimePriority = preferences.decoderRealtimePriority,
+		videoTimestampRateHz = preferences.videoTimestampRateHz
 	)
 
 	fun registerPsnConsole(console: PsnConsole)

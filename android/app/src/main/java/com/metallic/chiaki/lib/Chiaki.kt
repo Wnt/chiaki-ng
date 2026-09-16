@@ -79,7 +79,11 @@ data class ConnectInfo(
 	val feedbackStateMinIntervalMs: Int = 0,
 	val feedbackStatsLogIntervalMs: Int = 0,
 	val autoRegister: Boolean = false,
-	val performanceModeEnabled: Boolean = false
+	val performanceModeEnabled: Boolean = false,
+	val decoderOperatingRate: Int = 0,
+	val decoderOperatingRateAuto: Boolean = true,
+	val decoderRealtimePriority: Boolean = false,
+	val videoTimestampRateHz: Int = 0
 ): Parcelable
 
 data class NativeRemoteConnection(

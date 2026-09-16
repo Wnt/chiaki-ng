@@ -245,7 +245,11 @@ class MainActivity : AppCompatActivity()
 					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 					feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
-					performanceModeEnabled = preferences.performanceModeEnabled
+					performanceModeEnabled = preferences.performanceModeEnabled,
+					decoderOperatingRate = preferences.decoderOperatingRate,
+					decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
+					decoderRealtimePriority = preferences.decoderRealtimePriority,
+					videoTimestampRateHz = preferences.videoTimestampRateHz
 				)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)

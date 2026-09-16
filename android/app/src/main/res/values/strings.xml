@@ -104,6 +104,16 @@
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
     <string name="preferences_packet_loss_max_percent_summary">Cap the packet loss reported to the console every 200ms (0-100). Lower values trade occasional artifacts for a steadier bitrate on lossy Wi-Fi.</string>
     <string name="preferences_packet_loss_max_percent_value">%d%%</string>
+    <string name="preferences_decoder_operating_rate_title">Decoder operating rate</string>
+    <string name="preferences_decoder_operating_rate_summary">Explicit MediaCodec operating-rate (frames/s) plus frame-rate = stream fps; 0 leaves the codec defaults (experiment; reconnect required)</string>
+    <string name="preferences_decoder_operating_rate_value">%d (0 = codec default)</string>
+    <string name="preferences_decoder_operating_rate_auto_title">Auto decoder operating rate for frame-index timestamps</string>
+    <string name="preferences_decoder_operating_rate_auto_summary">With frame-index timestamps or the vsync-paced presenter on, request operating-rate 480 so the Exynos decoder keeps its 8 ms latency (off reproduces the 14 ms of A/B round 2; ignored when an explicit operating rate is set; reconnect required)</string>
+    <string name="preferences_decoder_realtime_priority_title">Decoder realtime priority</string>
+    <string name="preferences_decoder_realtime_priority_summary">Configure the decoder with priority = 0 (realtime) instead of leaving it unset (experiment; reconnect required)</string>
+    <string name="preferences_video_timestamp_rate_hz_title">Frame-index timestamp rate</string>
+    <string name="preferences_video_timestamp_rate_hz_summary">Timeline rate (Hz) used for frame-index video timestamps; 0 = stream fps (experiment; reconnect required)</string>
+    <string name="preferences_video_timestamp_rate_hz_value">%d Hz (0 = stream fps)</string>
     <string name="preferences_takion_video_packet_reordering_disabled_title">Immediate video packet delivery</string>
     <string name="preferences_takion_video_packet_reordering_disabled_summary">Bypass the 16 ms network reorder queue and let frame FEC handle missing packets (re-connect required)</string>
     <string name="preferences_controller_input_coalescing_enabled_title">Vsync-paced controller input</string>
@@ -185,6 +195,10 @@
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
+    <string name="preferences_decoder_operating_rate_key">stream_decoder_operating_rate</string>
+    <string name="preferences_decoder_operating_rate_auto_key">stream_decoder_operating_rate_auto</string>
+    <string name="preferences_decoder_realtime_priority_key">stream_decoder_realtime_priority</string>
+    <string name="preferences_video_timestamp_rate_hz_key">stream_video_timestamp_rate_hz</string>
     <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>
     <string name="preferences_controller_input_coalescing_enabled_key">stream_controller_input_coalescing</string>
     <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>

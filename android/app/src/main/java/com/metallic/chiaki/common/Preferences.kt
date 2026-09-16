@@ -330,6 +330,31 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
 	val packetLossMax get() = packetLossMaxPercent / 100.0
 
+	// PLE-75 decoder experiments; 0 / false = the codec's own defaults (today's behaviour).
+	fun validateDecoderOperatingRate(rate: Int) = max(0, min(1000, rate))
+	val decoderOperatingRateKey get() = resources.getString(R.string.preferences_decoder_operating_rate_key)
+	var decoderOperatingRate
+		get() = validateDecoderOperatingRate(sharedPreferences.getInt(decoderOperatingRateKey, 0))
+		set(value) { sharedPreferences.edit().putInt(decoderOperatingRateKey, validateDecoderOperatingRate(value)).apply() }
+
+	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 480 (default on;
+	// off reproduces the 14 ms decode latency of AB round 2).
+	val decoderOperatingRateAutoKey get() = resources.getString(R.string.preferences_decoder_operating_rate_auto_key)
+	var decoderOperatingRateAuto
+		get() = sharedPreferences.getBoolean(decoderOperatingRateAutoKey, true)
+		set(value) { sharedPreferences.edit().putBoolean(decoderOperatingRateAutoKey, value).apply() }
+
+	val decoderRealtimePriorityKey get() = resources.getString(R.string.preferences_decoder_realtime_priority_key)
+	var decoderRealtimePriority
+		get() = sharedPreferences.getBoolean(decoderRealtimePriorityKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(decoderRealtimePriorityKey, value).apply() }
+
+	fun validateVideoTimestampRateHz(rate: Int) = max(0, min(100000, rate))
+	val videoTimestampRateHzKey get() = resources.getString(R.string.preferences_video_timestamp_rate_hz_key)
+	var videoTimestampRateHz
+		get() = validateVideoTimestampRateHz(sharedPreferences.getInt(videoTimestampRateHzKey, 0))
+		set(value) { sharedPreferences.edit().putInt(videoTimestampRateHzKey, validateVideoTimestampRateHz(value)).apply() }
+
 	val codecKey get() = resources.getString(R.string.preferences_codec_key)
 	var codec
 		get() = sharedPreferences.getString(codecKey, codecDefault.value)?.let { value ->

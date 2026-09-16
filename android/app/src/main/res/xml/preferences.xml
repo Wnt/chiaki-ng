@@ -119,6 +119,33 @@
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
 
+        <EditTextPreference
+            app:key="@string/preferences_video_timestamp_rate_hz_key"
+            app:title="@string/preferences_video_timestamp_rate_hz_title"
+            app:summary="@string/preferences_video_timestamp_rate_hz_summary"
+            app:dependency="@string/preferences_real_video_timestamps_key"
+            app:icon="@drawable/ic_fps"/>
+
+        <SwitchPreference
+            app:key="@string/preferences_decoder_operating_rate_auto_key"
+            app:title="@string/preferences_decoder_operating_rate_auto_title"
+            app:summary="@string/preferences_decoder_operating_rate_auto_summary"
+            app:defaultValue="true"
+            app:icon="@drawable/ic_fps" />
+
+        <EditTextPreference
+            app:key="@string/preferences_decoder_operating_rate_key"
+            app:title="@string/preferences_decoder_operating_rate_title"
+            app:summary="@string/preferences_decoder_operating_rate_summary"
+            app:icon="@drawable/ic_fps"/>
+
+        <SwitchPreference
+            app:key="@string/preferences_decoder_realtime_priority_key"
+            app:title="@string/preferences_decoder_realtime_priority_title"
+            app:summary="@string/preferences_decoder_realtime_priority_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
+
         <SwitchPreference
             app:key="@string/preferences_decoder_low_latency_enabled_key"
             app:title="@string/preferences_decoder_low_latency_enabled_title"

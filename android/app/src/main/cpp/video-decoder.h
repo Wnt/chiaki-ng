@@ -35,6 +35,7 @@ typedef struct android_chiaki_video_decoder_t
 	ANativeWindow *window;
 	uint64_t timestamp_cur;
 	unsigned int fps;
+	unsigned int pts_rate_hz;
 	bool real_pts_enabled;
 	ChiakiSeqNum16Unwrapper frame_index_unwrapper;
 	AndroidChiakiVideoPresenter presenter;
@@ -53,6 +54,9 @@ typedef struct android_chiaki_video_decoder_t
 	ChiakiCodec target_codec;
 	bool low_latency_enabled;
 	bool performance_mode_enabled;
+	int32_t operating_rate;
+	bool operating_rate_auto;
+	bool realtime_priority;
 	bool late_frame_recovery_enabled;
 	bool last_queued_frame_index_valid;
 	ChiakiSeqNum16 last_queued_frame_index;
@@ -66,7 +70,8 @@ typedef struct android_chiaki_video_decoder_t
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
-		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled);
+		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
+		int32_t operating_rate, bool operating_rate_auto, bool realtime_priority, unsigned int pts_rate_hz);
 void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
