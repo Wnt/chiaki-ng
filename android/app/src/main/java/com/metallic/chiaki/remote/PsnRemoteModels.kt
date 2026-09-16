@@ -92,5 +92,16 @@ sealed interface PsnRemoteState
 }
 
 class PsnRemoteProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)
-class PsnRemoteAuthenticationException(message: String) : Exception(message)
+class PsnRemoteAuthenticationException(
+	message: String,
+	val httpCode: Int? = null,
+	val detail: String? = null
+) : Exception(message)
+class PsnRemoteHttpException(message: String, val httpCode: Int, val detail: String?) : java.io.IOException(message)
+
+data class PsnDeviceListing(
+	/** Clients PSN returned for the account, before dropping ones without the remotePlay feature. */
+	val clientCount: Int,
+	val devices: List<PsnDevice>
+)
 class PsnUnsupportedNatException(message: String) : Exception(message)

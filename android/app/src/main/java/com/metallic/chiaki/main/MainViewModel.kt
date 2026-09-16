@@ -2,6 +2,7 @@
 
 package com.metallic.chiaki.main
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -16,6 +17,7 @@ import com.metallic.chiaki.remote.AndroidPsnRemoteNativeBridge
 import com.metallic.chiaki.remote.PsnDevice
 import com.metallic.chiaki.remote.PsnRemoteAuthenticationException
 import com.metallic.chiaki.remote.PsnRemoteController
+import com.metallic.chiaki.remote.PsnRemoteHttpException
 import com.metallic.chiaki.remote.PsnRemoteState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -107,7 +109,10 @@ class MainViewModel(
 			_psnListState.value = PsnConsoleListState.Loading
 			try
 			{
-				psnDevices.value = psnClient.listDevices()
+				val listing = psnClient.listDeviceListing()
+				Log.i(PSN_LIST_TAG, "PSN console list: ${listing.clientCount} PS5 client(s) on the account, " +
+					"${listing.devices.size} with Remote Play enabled")
+				psnDevices.value = listing.devices
 				_psnListState.value = PsnConsoleListState.Ready
 			}
 			catch(cancelled: CancellationException)
@@ -116,6 +121,7 @@ class MainViewModel(
 			}
 			catch(error: Throwable)
 			{
+				Log.w(PSN_LIST_TAG, "PSN console list failed: ${describePsnFailure(error)}", error)
 				_psnListState.value = PsnConsoleListState.Error(
 					error.message ?: "Unable to list consoles on your PSN account"
 				)
@@ -218,6 +224,7 @@ class MainViewModel(
 			}
 			catch(error: Throwable)
 			{
+				Log.w(PSN_LIST_TAG, "PSN ${action.name.lowercase()} failed: ${describePsnFailure(error)}", error)
 				lastFailedPsnConsole = console
 				_psnError.value = PsnActionError(
 					error.message ?: "Could not start Remote Play",
@@ -260,4 +267,20 @@ class MainViewModel(
 		actionController?.close()
 		discoveryManager.dispose()
 	}
+}
+
+private const val PSN_LIST_TAG = "PsnConsoles"
+
+/** One support-readable line: exception type, message, HTTP status and PSN's error excerpt. Never tokens. */
+internal fun describePsnFailure(error: Throwable): String = buildString {
+	append(error.javaClass.simpleName)
+	error.message?.let { append(": ").append(it) }
+	val detail = when(error)
+	{
+		is PsnRemoteHttpException -> error.detail
+		is PsnRemoteAuthenticationException -> error.detail
+		else -> null
+	}
+	detail?.let { append(" | PSN said: ").append(it) }
+	error.cause?.let { append(" | cause ").append(it.javaClass.simpleName).append(": ").append(it.message) }
 }
