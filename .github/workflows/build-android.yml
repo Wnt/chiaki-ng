@@ -35,13 +35,14 @@ jobs:
           validate-wrappers: false
 
       - name: Install Android SDK packages
-        run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager \
-            "ndk;28.2.13676358" \
-            "cmake;3.22.1" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            ndk;28.2.13676358
+            cmake;3.22.1
+            platforms;android-35
+            build-tools;35.0.0
+          accept-android-sdk-licenses: true
 
       - name: Install native build host tools
         run: |
