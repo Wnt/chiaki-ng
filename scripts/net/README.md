@@ -1,10 +1,66 @@
-# PS5 network impairment
+# Network impairment tools
+
+## UniFi phone VLAN switch
+
+`unifi-vlan.py` applies a per-client network override to the one phone whose
+MAC is configured as `PHONE_MAC`. It refuses every other MAC. A successful move
+keeps the previous override in a mode-0600 state file so `revert` can restore
+it. If the confirmation command does not succeed before the deadline, the tool
+restores the previous override automatically and exits non-zero.
+
+The tool first reads `~/.config/pleikkari/unifi.env`. Until that per-project
+file exists, it falls back to the PLE-189 verified
+`~/.config/unifi/config.env`. The UniFi file needs:
+
+```text
+UNIFI_HOST=https://controller.example
+UNIFI_SITE_NAME=default
+UNIFI_TOKEN_FILE=/path/to/mode-0600-api-key
+UNIFI_CURL_INSECURE=1
+```
+
+`~/.config/pleikkari/impair.env` must contain the real `PHONE_MAC`; start from
+[`impair.env.example`](impair.env.example). Neither populated file nor the API
+key belongs in git.
+
+Show the connected network/VLAN, IP, and access point:
+
+```bash
+scripts/net/unifi-vlan.py status <phone-mac>
+```
+
+Move the phone and retry Wi-Fi ADB discovery for up to two minutes:
+
+```bash
+scripts/net/unifi-vlan.py move <phone-mac> Impair \
+  --revert-after 2m \
+  --confirm-cmd "scripts/dev/phone.sh connect"
+```
+
+After the impairment run, restore the exact saved override (including no
+override, which returns control to the SSID):
+
+```bash
+scripts/net/unifi-vlan.py revert <phone-mac>
+```
+
+Add `--dry-run` to `move` or `revert` to print each controller write without
+sending it. Reads still occur so names can be resolved and safety checks can be
+performed. Dry runs do not create or remove saved state.
+
+Run the state-machine unit tests without controller access:
+
+```bash
+python3 -m unittest scripts/net/test_unifi_vlan.py
+```
+
+## PS5 network impairment
 
 `impair.sh` runs as root on the Debian/Ubuntu netem guest. `impairctl.py` runs
 on CT950 and invokes it over SSH. The controller requires a TTL on every apply,
 so an abandoned test cannot leave the PS5 path impaired indefinitely.
 
-## Traffic layout
+### Traffic layout
 
 The script discovers the interfaces used to reach the PS5 (`--peer`) and phone
 (`--phone`). On the normal two-NIC routed guest, ingress from each interface is
@@ -25,7 +81,7 @@ Install the script somewhere on root's PATH, for example:
 sudo install -m 0755 scripts/net/impair.sh /usr/local/sbin/impair.sh
 ```
 
-## Profiles
+### Profiles
 
 | Profile | Netem parameters in each direction |
 | --- | --- |
@@ -42,7 +98,7 @@ jitter evenly between directions. Loss and reorder remain per-direction packet
 probabilities. Rate caps use TBF above netem rather than netem's approximate
 rate option.
 
-## CT950 setup and use
+### CT950 setup and use
 
 Create `~/.config/pleikkari/impair.env` (shell export syntax is also accepted):
 
@@ -71,7 +127,7 @@ apply and clear idempotent. Runtime state is under `/run/pleikkari-impair`.
 trees (including counters). The controller uses batch-mode SSH with a ten
 second connection timeout and returns SSH's non-zero status unchanged.
 
-## Tests
+### Tests
 
 The command-generation suite is rootless and asserts the complete `tc` command
 list for every built-in profile and for custom impairment:
