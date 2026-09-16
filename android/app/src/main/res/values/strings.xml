@@ -87,6 +87,8 @@
     <string name="preferences_real_video_timestamps_summary">Use the PS5 frame index for decoder presentation timestamps (reconnect required)</string>
     <string name="preferences_decoder_low_latency_enabled_title">Low-latency decoder</string>
     <string name="preferences_decoder_low_latency_enabled_summary">Request reduced decoder buffering and fall back automatically if unsupported (re-connect required)</string>
+    <string name="preferences_thread_priority_boost_enabled_title">Boost network/decoder thread priority</string>
+    <string name="preferences_thread_priority_boost_enabled_summary">Raise the scheduling priority of the network receive and decoder output threads to reduce contention with UI/sensor threads (re-connect required)</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_title">Decoder late-frame recovery</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_summary">Drop stale ready frames and request an IDR when five frames are backlogged (reconnect required)</string>
     <string name="preferences_packet_loss_max_percent_title">Packet loss reported max</string>
@@ -155,6 +157,7 @@
     <string name="preferences_codec_key">stream_codec</string>
     <string name="preferences_real_video_timestamps_key">stream_real_video_timestamps</string>
     <string name="preferences_decoder_low_latency_enabled_key">stream_decoder_low_latency</string>
+    <string name="preferences_thread_priority_boost_enabled_key">stream_thread_priority_boost</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_key">stream_decoder_late_frame_recovery</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_takion_video_packet_reordering_disabled_key">stream_takion_video_packet_reordering_disabled</string>

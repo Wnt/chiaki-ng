@@ -182,7 +182,8 @@ class MainActivity : AppCompatActivity()
 			fun connect() {
 				val preferences = Preferences(this)
 				val connectInfo = ConnectInfo(host.isPS5, host.host, registeredHost.rpRegistKey, registeredHost.rpKey,
-					preferences.videoProfile, preferences.decoderLowLatencyEnabled, preferences.decoderLateFrameRecoveryEnabled,
+					preferences.videoProfile, preferences.decoderLowLatencyEnabled,
+					preferences.threadPriorityBoostEnabled, preferences.decoderLateFrameRecoveryEnabled,
 					preferences.packetLossMax,
 					preferences.takionVideoPacketReorderingDisabled,
 					if(preferences.feedbackReducedIntervalEnabled) 4 else 0)

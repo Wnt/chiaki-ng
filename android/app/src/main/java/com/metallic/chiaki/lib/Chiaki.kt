@@ -71,6 +71,7 @@ data class ConnectInfo(
 	val morning: ByteArray,
 	val videoProfile: ConnectVideoProfile,
 	val decoderLowLatencyEnabled: Boolean,
+	val threadPriorityBoostEnabled: Boolean,
 	val decoderLateFrameRecoveryEnabled: Boolean,
 	val packetLossMax: Double,
 	val takionVideoPacketReorderingDisabled: Boolean,
