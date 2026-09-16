@@ -57,6 +57,7 @@ HOSTS = {"verified": "pleikkari-psn.lab.madekivi.fi", "nolink": "pleikkari-psn-n
 BROWSERS = {"com.android.chrome", "com.chrome.beta", "com.chrome.dev", "org.mozilla.firefox", "com.sec.android.app.sbrowser"}
 FAULTS = ("redirect-dead-end", "settings-redirect", "instruction-paragraph", "exit-loses-code")  # PsnMockFault.kt
 EXITS = ("x", "back", "open-in-browser", "idle")
+REDIRECT_PATH_TEXT = "/remoteplay/redirect"
 RECOVERY_LOG = "reopening the sign-in tab"  # PsnLoginActivity.recoverBrowserSignIn
 CLOSE_TAB = re.compile(r"^(close tab|close|return to previous app|navigate up)$", re.I)
 MENU = re.compile(r"^(more options|main menu|menu|customize and control .*)$", re.I)
@@ -275,7 +276,8 @@ def main(argv: list[str] | None = None) -> int:
     # The app reads the fault when its process starts, and reset_app has stopped it.
     device.shell(f"setprop {FAULT_PROPERTY} {args.fault or 'none'}")
     device.shell("logcat -b all -c", check=False)
-    device.shell(f"am start -W -n {PKG}/com.metallic.chiaki.main.MainActivity")
+    # As the launcher does, so a later tap on the icon brings this task back instead of stacking a new screen.
+    device.shell(f"am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n {PKG}/com.metallic.chiaki.main.MainActivity")
     started = last_change = time.monotonic()
     last_signature = ""
     signed_in_tapped = submitted = False
@@ -451,14 +453,34 @@ def main(argv: list[str] | None = None) -> int:
                 if menu is None:
                     return finish("ERROR", "exit open-in-browser: no menu button on the tab")
                 device.tap(menu)
-                time.sleep(1.5)
-                snapshot = device.dump()
-                item = next((n for n in (snapshot[1] if snapshot else []) if n.package in BROWSERS and OPEN_IN_BROWSER.match(n.text)), None)
-                if item is None:
-                    return finish("ERROR", "exit open-in-browser: no \"Open in <browser>\" item in the tab's menu")
-                summary["open_in_browser_item"] = item.text
-                device.tap(item)
-                summary["taps"] += 2
+                item = None
+                for _ in range(4):  # the menu animates in; a dump taken too early has only the toolbar
+                    time.sleep(1.5)
+                    snapshot = device.dump()
+                    item = next((n for n in (snapshot[1] if snapshot else []) if n.package in BROWSERS and OPEN_IN_BROWSER.match(n.text or n.desc)), None)
+                    if item is not None:
+                        break
+                if snapshot:
+                    (out / "open-in-browser-menu.xml").write_text(snapshot[0])
+                if item is not None:
+                    summary["open_in_browser_item"] = item.text or item.desc
+                    device.tap(item)
+                    summary["taps"] += 2
+                else:
+                    # Chrome 133 on the emulator has no "Open in Chrome" item (only a "Running in Chrome"
+                    # footer, which does nothing). Do what that item does: the tab closes and the page
+                    # moves to the full browser, where no Finish button exists.
+                    url = next((n.text for n in nodes if n.package in BROWSERS and REDIRECT_PATH_TEXT in n.text), "")
+                    close = next((n for n in nodes if n.package in BROWSERS and CLOSE_TAB.match(n.desc)), None)
+                    if close is None or not url:
+                        return finish("ERROR", "exit open-in-browser: no \"Open in <browser>\" item, and no close button or address to emulate it")
+                    summary["open_in_browser_item"] = "emulated: no item in this browser's tab menu"
+                    log("exit open-in-browser: the tab's menu has no \"Open in <browser>\" item; emulating it")
+                    device.shell("input keyevent KEYCODE_BACK")  # dismiss the menu
+                    time.sleep(1)
+                    device.tap(close)
+                    device.shell(f"am start -a android.intent.action.VIEW -d 'https://{url.split('://')[-1]}' -p {foreground}", check=False)
+                    summary["taps"] += 3
                 time.sleep(3)
                 # The user comes back to the app the ordinary way: its launcher icon.
                 device.shell(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1", check=False)

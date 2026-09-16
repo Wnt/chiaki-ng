@@ -144,7 +144,7 @@ host with the app's link selection explicitly disabled, as production is for a u
 | `instruction-paragraph` | FAIL `instruction paragraph: …` on the sign-in screen |
 | `exit-x` | PASS: on the redirect page the user presses the tab's close button instead of Finish; the app reopens the tab, which the mock's session cookie takes straight back to a fresh redirect (PLE-323) |
 | `exit-back` | PASS: the same with the back key, pressed until the tab closes |
-| `exit-open-in-browser` | PASS: the tab menu's "Open in <browser>", then the app from its launcher icon |
+| `exit-open-in-browser` | PASS: the tab menu's "Open in <browser>", then the app from its launcher icon. Chrome 133 on the emulator has no such item (only a "Running in Chrome" footer that does nothing), so there the driver emulates it: close the tab, open the redirect page in the full browser, return by the launcher icon (`open_in_browser_item` in summary.json says which ran) |
 | `exit-idle` | PASS: the redirect page left alone for 60 s, then Finish sign-in |
 | `exit-loses-code` | FAIL `dead end: … in com.metallic.chiaki.psnmock`: leaving the tab strands the user on Continue signing in, as before PLE-323 |
 | `clean-after-faults` | PASS again, so no fault leaks into the next run |
