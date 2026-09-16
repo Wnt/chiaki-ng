@@ -176,14 +176,55 @@
                 android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
 
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/psnConsolesInfoTextView"
+        <LinearLayout
+            android:id="@+id/psnListErrorLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
             android:paddingHorizontal="20dp"
             android:paddingVertical="8dp"
-            android:textColor="?attr/colorError"
-            android:visibility="gone" />
+            android:visibility="gone">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/psnConsolesInfoTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="?attr/colorError" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/retryPsnListButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_retry" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/psnActionErrorLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="8dp"
+            android:visibility="gone">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/psnActionErrorTextView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="?attr/colorError" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/retryPsnActionButton"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/action_retry" />
+        </LinearLayout>
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -225,6 +266,47 @@
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
         </FrameLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/onboardingLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="176dp"
+            android:layout_height="112dp"
+            android:contentDescription="@null"
+            android:tint="?attr/colorPrimary"
+            app:srcCompat="@drawable/ic_console_simple" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:text="@string/onboarding_title"
+            android:textAppearance="?attr/textAppearanceHeadlineMedium" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/onboardingSignInButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:maxWidth="480dp"
+            android:text="@string/action_psn_sign_in" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/onboardingAddAddressButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/action_add_by_address" />
     </LinearLayout>
 
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
