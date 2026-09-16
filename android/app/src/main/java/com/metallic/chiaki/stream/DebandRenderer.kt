@@ -6,11 +6,14 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.random.Random
@@ -22,7 +25,8 @@ import kotlin.random.Random
  */
 class DebandRenderer(
     private val onSurfaceReady: (Surface) -> Unit,
-    private val onRequestRender: () -> Unit = {}
+    private val onRequestRender: () -> Unit = {},
+    private val renderWhenDirty: Boolean = false
 ) : GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
     companion object {
@@ -221,6 +225,8 @@ class DebandRenderer(
     @Volatile
     private var frameAvailable = false
     private var frameCount = 0f
+    private val firstFrameCallbackLogged = AtomicBoolean(false)
+    private val firstFrameDrawLogged = AtomicBoolean(false)
 
     init {
         android.opengl.Matrix.setIdentityM(stMatrix, 0)
@@ -260,7 +266,13 @@ class DebandRenderer(
 
         // 5. Create SurfaceTexture
         surfaceTexture = SurfaceTexture(oesTextureId).also {
-            it.setOnFrameAvailableListener(this)
+            if (renderWhenDirty) {
+                // SurfaceTexture's single-argument overload may dispatch on an arbitrary thread.
+                // Use a known Looper for the callback that wakes GLSurfaceView's GLThread.
+                it.setOnFrameAvailableListener(this, Handler(Looper.getMainLooper()))
+            } else {
+                it.setOnFrameAvailableListener(this)
+            }
             surface = Surface(it)
             onSurfaceReady(surface!!)
         }
@@ -299,6 +311,9 @@ class DebandRenderer(
             surfaceTexture?.updateTexImage()
             surfaceTexture?.getTransformMatrix(stMatrix)
             frameAvailable = false
+            if (renderWhenDirty && firstFrameDrawLogged.compareAndSet(false, true)) {
+                Log.i(TAG, "First decoder frame drawn on ${Thread.currentThread().name}")
+            }
         }
 
         // --- PASS 1: OES to FBO ---
@@ -350,6 +365,9 @@ class DebandRenderer(
 
     override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
         frameAvailable = true
+        if (renderWhenDirty && firstFrameCallbackLogged.compareAndSet(false, true)) {
+            Log.i(TAG, "First decoder frame available on ${Thread.currentThread().name}; requesting render")
+        }
         onRequestRender()
     }
 

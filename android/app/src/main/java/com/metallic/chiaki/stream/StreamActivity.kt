@@ -213,6 +213,7 @@ class StreamActivity : AppCompatActivity()
 
 	private fun setupGlSurfaceViewDebandOutput(prefs: Preferences)
 	{
+		val renderWhenDirty = prefs.debandRenderWhenDirtyEnabled
 		// Decode into a SurfaceTexture consumed by the established deband/RCAS renderer.
 		binding.surfaceView.visibility = View.GONE
 		binding.debandSurfaceView.visibility = View.VISIBLE
@@ -224,14 +225,17 @@ class StreamActivity : AppCompatActivity()
 					null
 				viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
 			},
-			onRequestRender = { binding.debandSurfaceView.requestRender() }
+			onRequestRender = { binding.debandSurfaceView.requestRender() },
+			renderWhenDirty = renderWhenDirty
 		)
 		binding.debandSurfaceView.setEGLContextClientVersion(3)
 		binding.debandSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
 		binding.debandSurfaceView.holder.setFormat(PixelFormat.RGBA_8888)
 		binding.debandSurfaceView.setRenderer(debandRenderer)
 		debandRenderer?.sharpness = prefs.sharpnessIntensity
-		binding.debandSurfaceView.renderMode = if(prefs.debandRenderWhenDirtyEnabled)
+		// Default (flag off) keeps continuous rendering; the flag lets an A/B test measure
+		// GPU/power savings from rendering only when the decoder delivers a new frame.
+		binding.debandSurfaceView.renderMode = if(renderWhenDirty)
 			GLSurfaceView.RENDERMODE_WHEN_DIRTY
 		else
 			GLSurfaceView.RENDERMODE_CONTINUOUSLY
