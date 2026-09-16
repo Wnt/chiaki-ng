@@ -33,6 +33,7 @@ interface PsnRemoteNativeBridge
 	/** The implementation duplicates/detaches the socket FD and only takes ownership after native success. */
 	suspend fun start(control: PsnPunchedSocket, registration: PsnRegistrationMaterial): PsnNativeStartResult
 	suspend fun setDataSocket(data: PsnPunchedSocket)
+	fun stop() = Unit
 }
 
 fun interface PsnRandomBytes
@@ -243,6 +244,7 @@ class PsnRemoteController(
 
 	private suspend fun cleanup() = withContext(NonCancellable) {
 		_state.value = PsnRemoteState.DeletingSession
+		nativeBridge.stop()
 		val current = session
 		if(current != null) runCatching { withTimeout(3_000) { api.deleteSession(current.sessionId) } }
 		push?.close()
@@ -259,6 +261,7 @@ class PsnRemoteController(
 
 	override fun close()
 	{
+		nativeBridge.stop()
 		push?.close()
 		openSockets.forEach { it.socket.close() }
 		openSockets.clear()

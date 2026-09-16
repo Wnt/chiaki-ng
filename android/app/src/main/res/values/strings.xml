@@ -128,6 +128,8 @@
     <string name="preferences_debanding_render_when_dirty_summary">Redraw the debanding shader only when a new decoded frame arrives instead of every display refresh, reducing GPU load and power use.</string>
     <string name="preferences_psn_sign_in_enabled_title">PSN Sign-In Registration</string>
     <string name="preferences_psn_sign_in_enabled_summary">Use the in-app PSN sign-in and prefill discovered console details</string>
+    <string name="preferences_psn_remote_play_enabled_title">PSN remote consoles (experimental)</string>
+    <string name="preferences_psn_remote_play_enabled_summary">Enable the Kotlin PSN remote-play control plane; reconnect required</string>
     <string name="preferences_swap_cross_moon_title">Swap Cross/Moon and Box/Pyramid Buttons</string>
     <string name="preferences_swap_cross_moon_summary">Swap face buttons if default mapping is incorrect (e.g. for 8BitDo controllers)</string>
     <string name="preferences_rumble_enabled_title">Rumble</string>
@@ -177,5 +179,6 @@
     <string name="preferences_debanding_key">stream_debanding</string>
     <string name="preferences_debanding_render_when_dirty_key">stream_debanding_render_when_dirty</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
+    <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
 </resources>

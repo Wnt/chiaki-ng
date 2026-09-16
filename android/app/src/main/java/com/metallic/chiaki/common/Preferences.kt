@@ -88,6 +88,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(psnSignInEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(psnSignInEnabledKey, value).apply() }
 
+	val psnRemotePlayEnabledKey get() = resources.getString(R.string.preferences_psn_remote_play_enabled_key)
+	var psnRemotePlayEnabled
+		get() = sharedPreferences.getBoolean(psnRemotePlayEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(psnRemotePlayEnabledKey, value).apply() }
+
 	private val psnAccountIdKey get() = resources.getString(R.string.preferences_psn_account_id_key)
 	var psnAccountId: String?
 		get() = sharedPreferences.getString(psnAccountIdKey, null)

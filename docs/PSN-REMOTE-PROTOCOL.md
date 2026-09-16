@@ -1,7 +1,8 @@
 # PSN remote registration and connection protocol
 
-Status: proposed Step 1 design for PLE-26; Kotlin implementation must wait for
-review and agreement on the JNI boundary below. The map is based on
+Status: Step 1 design approved on 2026-09-16. The Kotlin control plane and the
+two-stage Android JNI socket boundary described below are implemented on the
+PLE-26 branch; UI and real-console validation remain. The map is based on
 `lib/src/remote/holepunch.c`, `lib/src/remote/stun.h`,
 `gui/src/qmlbackend.cpp`, and `gui/src/streamsession.cpp` as of 2026-09-16.
 
