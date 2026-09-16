@@ -20,9 +20,50 @@
         android:layout_height="4dp"
         android:max="100" />
 
+    <LinearLayout
+        android:id="@+id/externalLoginContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/psn_login_external_instructions"
+            android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+        <EditText
+            android:id="@+id/redirectUrl"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:hint="@string/psn_login_redirect_hint"
+            android:importantForAutofill="no"
+            android:inputType="textUri"
+            android:maxLines="4" />
+
+        <Button
+            android:id="@+id/pasteAddressButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/action_paste_address" />
+
+        <Button
+            android:id="@+id/openSignInButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/action_open_psn_sign_in" />
+    </LinearLayout>
+
     <WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:visibility="gone" />
 </LinearLayout>

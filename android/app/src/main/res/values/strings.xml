@@ -48,6 +48,11 @@
     <string name="psn_account_id_saved">PSN account ID saved</string>
     <string name="psn_login_failed">PSN sign-in failed</string>
     <string name="psn_login_redirect_invalid">Sony returned an invalid sign-in redirect</string>
+    <string name="psn_login_external_instructions">Complete sign-in in the browser. On the Sony page you land on, copy the full page address, return here, then paste it below.</string>
+    <string name="psn_login_redirect_hint">https://remoteplay.dl.playstation.net/remoteplay/redirect?code=…</string>
+    <string name="action_paste_address">Paste address</string>
+    <string name="action_open_psn_sign_in">Open PSN sign-in</string>
+    <string name="psn_login_no_clipboard_address">The clipboard does not contain a page address</string>
     <string name="action_retry">Retry</string>
     <string name="regist_pin_invalid">Please enter a valid %d-digit PIN</string>
     <string name="action_share_log">Share Log</string>
@@ -176,6 +181,8 @@
     <string name="preferences_debanding_render_when_dirty_summary">Redraw the debanding shader only when a new decoded frame arrives instead of every display refresh, reducing GPU load and power use.</string>
     <string name="preferences_psn_sign_in_enabled_title">PSN Sign-In Registration</string>
     <string name="preferences_psn_sign_in_enabled_summary">Use the in-app PSN sign-in and prefill discovered console details</string>
+    <string name="preferences_psn_login_in_app_browser_title">Use embedded PSN browser</string>
+    <string name="preferences_psn_login_in_app_browser_summary">Use the legacy WebView login instead of the passkey-capable system browser</string>
     <string name="preferences_psn_remote_play_enabled_title">PSN remote consoles (experimental)</string>
     <string name="preferences_psn_remote_play_enabled_summary">Enable the Kotlin PSN remote-play control plane; reconnect required</string>
     <string name="preferences_swap_cross_moon_title">Swap Cross/Moon and Box/Pyramid Buttons</string>
@@ -254,6 +261,7 @@
     <string name="preferences_debanding_key">stream_debanding</string>
     <string name="preferences_debanding_render_when_dirty_key">stream_debanding_render_when_dirty</string>
     <string name="preferences_psn_sign_in_enabled_key">psn_sign_in_registration_enabled</string>
+    <string name="preferences_psn_login_in_app_browser_key">psn_login_in_app_browser</string>
     <string name="preferences_psn_remote_play_enabled_key">psn_remote_play_enabled</string>
     <string name="preferences_psn_account_id_key">psn_account_id</string>
 </resources>

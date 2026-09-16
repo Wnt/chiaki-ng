@@ -9,7 +9,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
@@ -112,6 +114,33 @@ internal object PsnAuth
 		val random = ByteArray(16).also { SecureRandom().nextBytes(it) }
 		return DUID_PREFIX + random.joinToString("") { "%02x".format(it.toInt() and 0xff) }
 	}
+}
+
+internal sealed interface PsnRedirect
+{
+	data object NotRedirect : PsnRedirect
+	data object Invalid : PsnRedirect
+	data class Code(val value: String) : PsnRedirect
+}
+
+internal fun parsePsnRedirect(url: String): PsnRedirect
+{
+	val uri = try { URI(url.trim()) } catch(_: Exception) { return PsnRedirect.NotRedirect }
+	if(!uri.scheme.equals("https", ignoreCase = true) ||
+		!uri.host.equals("remoteplay.dl.playstation.net", ignoreCase = true) ||
+		uri.path != "/remoteplay/redirect")
+		return PsnRedirect.NotRedirect
+
+	val code = try {
+		uri.rawQuery.orEmpty().split('&').asSequence()
+			.map { field -> field.split('=', limit = 2) }
+			.firstOrNull { parts -> URLDecoder.decode(parts[0], StandardCharsets.UTF_8.name()) == "code" }
+			?.getOrNull(1)
+			?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+	} catch(_: IllegalArgumentException) {
+		return PsnRedirect.Invalid
+	}
+	return if(code.isNullOrBlank()) PsnRedirect.Invalid else PsnRedirect.Code(code)
 }
 
 @OptIn(ExperimentalUnsignedTypes::class, ExperimentalEncodingApi::class)

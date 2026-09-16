@@ -3,6 +3,9 @@
 package com.metallic.chiaki.regist
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -15,6 +18,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.browser.customtabs.CustomTabsIntent
+import androidx.browser.customtabs.CustomTabsService
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.R
@@ -27,10 +32,12 @@ class PsnLoginActivity : AppCompatActivity()
 	companion object
 	{
 		const val EXTRA_ACCOUNT_ID = "psn_account_id"
+		private const val STATE_EMBEDDED_BROWSER = "embedded_browser"
 	}
 
 	private lateinit var binding: ActivityPsnLoginBinding
 	private var handlingRedirect = false
+	private var embeddedBrowser = false
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -39,16 +46,41 @@ class PsnLoginActivity : AppCompatActivity()
 		setContentView(binding.root)
 		binding.toolbar.setNavigationOnClickListener { finish() }
 		configureWebView()
+		binding.pasteAddressButton.setOnClickListener { pasteRedirectAddress() }
+		binding.openSignInButton.setOnClickListener { launchExternalLogin() }
 		onBackPressedDispatcher.addCallback(this) {
-			if(binding.webView.canGoBack() && !handlingRedirect)
+			if(embeddedBrowser && binding.webView.canGoBack() && !handlingRedirect)
 				binding.webView.goBack()
 			else
 				finish()
 		}
-		if(savedInstanceState == null)
-			binding.webView.loadUrl(PsnAuth.loginUrl())
+
+		if(intent.dataString?.let(::handleRedirect) == true)
+			return
+
+		embeddedBrowser = savedInstanceState?.getBoolean(STATE_EMBEDDED_BROWSER)
+			?: Preferences(this).psnLoginInAppBrowser
+		if(embeddedBrowser)
+		{
+			showEmbeddedBrowser()
+			if(savedInstanceState == null)
+				binding.webView.loadUrl(PsnAuth.loginUrl())
+			else
+				binding.webView.restoreState(savedInstanceState)
+		}
 		else
-			binding.webView.restoreState(savedInstanceState)
+		{
+			showExternalInstructions()
+			if(savedInstanceState == null)
+				launchExternalLogin()
+		}
+	}
+
+	override fun onNewIntent(intent: Intent)
+	{
+		super.onNewIntent(intent)
+		setIntent(intent)
+		intent.dataString?.let(::handleRedirect)
 	}
 
 	private fun configureWebView()
@@ -68,7 +100,7 @@ class PsnLoginActivity : AppCompatActivity()
 		{
 			override fun onProgressChanged(view: WebView?, newProgress: Int)
 			{
-				if(!handlingRedirect)
+				if(embeddedBrowser && !handlingRedirect)
 				{
 					binding.progressBar.isIndeterminate = false
 					binding.progressBar.progress = newProgress
@@ -79,38 +111,115 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.webViewClient = object : WebViewClient()
 		{
 			override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean =
-				handleRedirect(request.url)
+				handleRedirect(request.url.toString())
 
 			@Suppress("DEPRECATION")
 			override fun shouldOverrideUrlLoading(view: WebView?, url: String): Boolean =
-				handleRedirect(Uri.parse(url))
+				handleRedirect(url)
 
 			override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?)
 			{
 				super.onPageStarted(view, url, favicon)
-				if(url != null)
-					handleRedirect(Uri.parse(url))
+				url?.let(::handleRedirect)
 			}
 		}
 	}
 
-	private fun handleRedirect(uri: Uri): Boolean
+	private fun launchExternalLogin()
 	{
-		if(uri.scheme != "https" || uri.host != "remoteplay.dl.playstation.net" || uri.path != "/remoteplay/redirect")
-			return false
-		if(handlingRedirect)
-			return true
-
-		val code = uri.getQueryParameter("code")
-		if(code.isNullOrBlank())
+		val uri = Uri.parse(PsnAuth.loginUrl())
+		val customTabsPackage = findCustomTabsPackage(uri)
+		if(customTabsPackage != null)
 		{
-			showError(getString(R.string.psn_login_redirect_invalid))
-			return true
+			try
+			{
+				CustomTabsIntent.Builder()
+					.setShowTitle(true)
+					.build()
+					.apply { intent.setPackage(customTabsPackage) }
+					.launchUrl(this, uri)
+				return
+			}
+			catch(_: ActivityNotFoundException)
+			{
+				// The provider disappeared between discovery and launch; try a browser next.
+			}
 		}
 
+		try
+		{
+			startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+		}
+		catch(_: ActivityNotFoundException)
+		{
+			embeddedBrowser = true
+			showEmbeddedBrowser()
+			binding.webView.loadUrl(PsnAuth.loginUrl())
+		}
+	}
+
+	private fun findCustomTabsPackage(uri: Uri): String?
+	{
+		val viewIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+		val defaultPackage = packageManager.resolveActivity(viewIntent, 0)?.activityInfo?.packageName
+		val candidates = packageManager.queryIntentActivities(viewIntent, 0)
+			.map { it.activityInfo.packageName }
+			.distinct()
+			.sortedByDescending { it == defaultPackage }
+		return candidates.firstOrNull { packageName ->
+			packageManager.resolveService(
+				Intent(CustomTabsService.ACTION_CUSTOM_TABS_CONNECTION).setPackage(packageName),
+				0
+			) != null
+		}
+	}
+
+	private fun pasteRedirectAddress()
+	{
+		val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+		val address = clipboard.primaryClip
+			?.takeIf { it.itemCount > 0 }
+			?.getItemAt(0)
+			?.coerceToText(this)
+			?.toString()
+			.orEmpty()
+		if(address.isBlank())
+		{
+			binding.redirectUrl.error = getString(R.string.psn_login_no_clipboard_address)
+			return
+		}
+		binding.redirectUrl.setText(address)
+		if(!handleRedirect(address))
+			binding.redirectUrl.error = getString(R.string.psn_login_redirect_invalid)
+	}
+
+	private fun handleRedirect(url: String): Boolean
+	{
+		val redirect = parsePsnRedirect(url)
+		if(handlingRedirect && redirect != PsnRedirect.NotRedirect)
+			return true
+		return when(redirect)
+		{
+			PsnRedirect.NotRedirect -> false
+			PsnRedirect.Invalid -> {
+				showError(getString(R.string.psn_login_redirect_invalid))
+				true
+			}
+			is PsnRedirect.Code -> {
+				exchangeCode(redirect.value)
+				true
+			}
+		}
+	}
+
+	private fun exchangeCode(code: String)
+	{
+		if(handlingRedirect)
+			return
 		handlingRedirect = true
 		binding.webView.stopLoading()
-		binding.webView.visibility = View.INVISIBLE
+		binding.webView.visibility = View.GONE
+		binding.externalLoginContainer.visibility = View.GONE
 		binding.progressBar.visibility = View.VISIBLE
 		binding.progressBar.isIndeterminate = true
 		lifecycleScope.launch {
@@ -126,14 +235,14 @@ class PsnLoginActivity : AppCompatActivity()
 				}
 				.onFailure { error -> showError(error.message ?: getString(R.string.psn_login_failed)) }
 		}
-		return true
 	}
 
 	private fun showError(message: String)
 	{
 		handlingRedirect = true
 		binding.webView.stopLoading()
-		binding.webView.visibility = View.INVISIBLE
+		binding.webView.visibility = View.GONE
+		binding.externalLoginContainer.visibility = View.GONE
 		binding.progressBar.visibility = View.GONE
 		MaterialAlertDialogBuilder(this)
 			.setTitle(R.string.psn_login_failed)
@@ -147,14 +256,41 @@ class PsnLoginActivity : AppCompatActivity()
 	private fun restartLogin()
 	{
 		handlingRedirect = false
+		if(Preferences(this).psnLoginInAppBrowser)
+		{
+			embeddedBrowser = true
+			showEmbeddedBrowser()
+			binding.webView.clearHistory()
+			binding.webView.loadUrl(PsnAuth.loginUrl())
+		}
+		else
+		{
+			embeddedBrowser = false
+			showExternalInstructions()
+			launchExternalLogin()
+		}
+	}
+
+	private fun showExternalInstructions()
+	{
+		binding.progressBar.visibility = View.GONE
+		binding.webView.visibility = View.GONE
+		binding.externalLoginContainer.visibility = View.VISIBLE
+	}
+
+	private fun showEmbeddedBrowser()
+	{
+		binding.externalLoginContainer.visibility = View.GONE
 		binding.webView.visibility = View.VISIBLE
-		binding.webView.clearHistory()
-		binding.webView.loadUrl(PsnAuth.loginUrl())
+		binding.progressBar.visibility = View.VISIBLE
+		binding.progressBar.isIndeterminate = true
 	}
 
 	override fun onSaveInstanceState(outState: Bundle)
 	{
-		binding.webView.saveState(outState)
+		outState.putBoolean(STATE_EMBEDDED_BROWSER, embeddedBrowser)
+		if(embeddedBrowser)
+			binding.webView.saveState(outState)
 		super.onSaveInstanceState(outState)
 	}
 
