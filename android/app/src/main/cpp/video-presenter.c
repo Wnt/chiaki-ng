@@ -246,6 +246,8 @@ static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 	presenter->arrival_offset_next = (presenter->arrival_offset_next + 1) % ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW;
 	if(presenter->arrival_offset_count < ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW)
 		presenter->arrival_offset_count++;
+	if(!presenter->timestamped_release_enabled)
+		return;
 	presenter->samples_since_adjustment++;
 	if(presenter->samples_since_adjustment >= VIDEO_PRESENTER_DJB_ADJUST_INTERVAL)
 	{
@@ -466,6 +468,8 @@ static bool handle_direct_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 	bool eos = (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0;
 	chiaki_mutex_lock(&presenter->mutex);
 	drop_stale = direct_drop_stale(presenter);
+	if(current.info.size != 0)
+		record_arrival_locked(presenter, &current);
 	chiaki_mutex_unlock(&presenter->mutex);
 
 	while(drop_stale && current.info.size != 0)
@@ -493,6 +497,8 @@ static bool handle_direct_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 			return eos;
 		}
 		release_frame_locked(presenter, &current, !newer_is_frame, 0);
+		if(newer_is_frame)
+			record_arrival_locked(presenter, &newer);
 		chiaki_mutex_unlock(&presenter->mutex);
 		if(!newer_is_frame)
 		{
