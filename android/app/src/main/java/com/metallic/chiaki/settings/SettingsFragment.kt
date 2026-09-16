@@ -31,6 +31,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled
 		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
+		preferences.decoderOperatingRateDefaultKey -> preferences.decoderOperatingRateDefault
 		preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto
 		preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority
 		preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled
@@ -63,6 +64,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled = value
 			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
+			preferences.decoderOperatingRateDefaultKey -> preferences.decoderOperatingRateDefault = value
 			preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto = value
 			preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority = value
 			preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled = value

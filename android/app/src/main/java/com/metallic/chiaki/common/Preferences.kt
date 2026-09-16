@@ -398,7 +398,7 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
 	val packetLossMax get() = packetLossMaxPercent / 100.0
 
-	// PLE-75 decoder experiments; 0 / false = the codec's own defaults (today's behaviour).
+	// PLE-75 / PLE-167 decoder experiments; 0 / false = the codec's own defaults.
 	// PLE-116: ceiling 4000 so the 960 / 1920 sweep is reachable (1000 silently clamped 1920 before).
 	fun validateDecoderOperatingRate(rate: Int) = max(0, min(4000, rate))
 	val decoderOperatingRateKey get() = resources.getString(R.string.preferences_decoder_operating_rate_key)
@@ -406,7 +406,12 @@ class Preferences(context: Context)
 		get() = validateDecoderOperatingRate(sharedPreferences.getInt(decoderOperatingRateKey, 0))
 		set(value) { sharedPreferences.edit().putInt(decoderOperatingRateKey, validateDecoderOperatingRate(value)).apply() }
 
-	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 480 (default on;
+	val decoderOperatingRateDefaultKey get() = resources.getString(R.string.preferences_decoder_operating_rate_default_key)
+	var decoderOperatingRateDefault
+		get() = sharedPreferences.getBoolean(decoderOperatingRateDefaultKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(decoderOperatingRateDefaultKey, value).apply() }
+
+	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 960 (default on;
 	// off reproduces the 14 ms decode latency of AB round 2).
 	val decoderOperatingRateAutoKey get() = resources.getString(R.string.preferences_decoder_operating_rate_auto_key)
 	var decoderOperatingRateAuto

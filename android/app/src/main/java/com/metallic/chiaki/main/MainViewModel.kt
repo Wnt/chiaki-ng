@@ -130,6 +130,7 @@ class MainViewModel(
 		autoRegister = autoRegister,
 		performanceModeEnabled = preferences.performanceModeEnabled,
 		decoderOperatingRate = preferences.decoderOperatingRate,
+		decoderOperatingRateDefault = preferences.decoderOperatingRateDefault,
 		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 		decoderRealtimePriority = preferences.decoderRealtimePriority,
 		videoTimestampRateHz = preferences.videoTimestampRateHz,

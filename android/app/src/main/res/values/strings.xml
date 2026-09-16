@@ -116,10 +116,12 @@
     <string name="preferences_packet_loss_max_percent_summary">Cap the packet loss reported to the console every 200ms (0-100). Lower values trade occasional artifacts for a steadier bitrate on lossy Wi-Fi.</string>
     <string name="preferences_packet_loss_max_percent_value">%d%%</string>
     <string name="preferences_decoder_operating_rate_title">Decoder operating rate</string>
-    <string name="preferences_decoder_operating_rate_summary">Explicit MediaCodec operating-rate (frames/s) plus frame-rate = stream fps; 0 leaves the codec defaults (experiment; reconnect required)</string>
+    <string name="preferences_decoder_operating_rate_summary">Explicit MediaCodec operating-rate from 0–4000 frames/s plus frame-rate = stream fps; 0 leaves the codec defaults (experiment; reconnect required)</string>
     <string name="preferences_decoder_operating_rate_value">%d (0 = codec default)</string>
+    <string name="preferences_decoder_operating_rate_default_title">Decoder operating rate on default path</string>
+    <string name="preferences_decoder_operating_rate_default_summary">Request operating-rate 960 and frame-rate = stream fps without requiring frame-index timestamps or pacing (ignored when an explicit operating rate is set; experiment; reconnect required)</string>
     <string name="preferences_decoder_operating_rate_auto_title">Auto decoder operating rate for frame-index timestamps</string>
-    <string name="preferences_decoder_operating_rate_auto_summary">With frame-index timestamps or the vsync-paced presenter on, request operating-rate 480 so the Exynos decoder keeps its 8 ms latency (off reproduces the 14 ms of A/B round 2; ignored when an explicit operating rate is set; reconnect required)</string>
+    <string name="preferences_decoder_operating_rate_auto_summary">With frame-index timestamps or the vsync-paced presenter on, request operating-rate 960 for the fastest measured Exynos decoder level (ignored when an explicit or default-path operating rate is set; reconnect required)</string>
     <string name="preferences_decoder_realtime_priority_title">Decoder realtime priority</string>
     <string name="preferences_decoder_realtime_priority_summary">Configure the decoder with priority = 0 (realtime) instead of leaving it unset (experiment; reconnect required)</string>
     <string name="preferences_video_timestamp_rate_hz_title">Frame-index timestamp rate</string>
@@ -225,6 +227,7 @@
 	<string name="preferences_video_pacing_max_frame_age_periods_key">stream_video_pacing_max_frame_age_periods</string>
     <string name="preferences_packet_loss_max_percent_key">stream_packet_loss_max_percent</string>
     <string name="preferences_decoder_operating_rate_key">stream_decoder_operating_rate</string>
+    <string name="preferences_decoder_operating_rate_default_key">stream_decoder_operating_rate_default</string>
     <string name="preferences_decoder_operating_rate_auto_key">stream_decoder_operating_rate_auto</string>
     <string name="preferences_decoder_realtime_priority_key">stream_decoder_realtime_priority</string>
     <string name="preferences_video_timestamp_rate_hz_key">stream_video_timestamp_rate_hz</string>

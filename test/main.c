@@ -17,6 +17,7 @@ extern MunitTest tests_aia[];
 #endif
 extern MunitTest tests_bitstream[];
 extern MunitTest tests_video_presenter[];
+extern MunitTest tests_video_decoder_operating_rate[];
 #if CHIAKI_LIB_ENABLE_FFMPEG_DECODER
 extern MunitTest tests_ffmpegdecoder[];
 #endif
@@ -104,6 +105,13 @@ static MunitSuite suites[] = {
 	{
 		"/video_presenter",
 		tests_video_presenter,
+		NULL,
+		1,
+		MUNIT_SUITE_OPTION_NONE
+	},
+	{
+		"/video_decoder_operating_rate",
+		tests_video_decoder_operating_rate,
 		NULL,
 		1,
 		MUNIT_SUITE_OPTION_NONE

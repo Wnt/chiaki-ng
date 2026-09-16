@@ -21,9 +21,10 @@
 #define DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER 4
 // PLE-75: with real 60 fps timestamps the Exynos MFC decoder clocks itself for 60 fps and takes
 // 14 ms per frame (p95 30 ms) instead of the 8 ms it takes when the timestamps are 1 us apart.
-// An explicit operating-rate of 480 restores 8 ms (120 and 240 only get part of the way back);
-// see docs/verification/PTS-decode-latency.md.
-#define DECODER_REAL_PTS_OPERATING_RATE 480
+// An explicit operating-rate of 960 reaches the fastest measured decoder level (480 leaves about
+// 1 ms on the table, while 1920 adds nothing); see docs/verification/PLE-116.md.
+#define DECODER_REAL_PTS_OPERATING_RATE 960
+#define DECODER_DEFAULT_PATH_OPERATING_RATE 960
 #define DECODER_LOW_LATENCY_OPERATING_RATE 480
 
 extern media_status_t AMediaCodec_getName_weak(AMediaCodec *codec, char **out_name)
@@ -40,7 +41,8 @@ static void android_chiaki_video_decoder_presenter_release(void *user, bool drop
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
 		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
-		int32_t operating_rate, bool operating_rate_auto, bool realtime_priority, unsigned int pts_rate_hz,
+		int32_t operating_rate, bool operating_rate_default, bool operating_rate_auto,
+		bool realtime_priority, unsigned int pts_rate_hz,
 		bool diagnostics_enabled, bool stats_log_enabled)
 {
 	decoder->log = log;
@@ -60,15 +62,13 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->target_codec = codec;
 	decoder->low_latency_enabled = low_latency_enabled;
 	decoder->performance_mode_enabled = performance_mode_enabled;
-	// PLE-75: explicit operating-rate (0 = unset) and realtime priority (false = unset). With real PTS
-	// and no explicit value, the auto switch (default on) requests DECODER_REAL_PTS_OPERATING_RATE.
-	decoder->operating_rate = operating_rate > 0 ? operating_rate : 0;
-	decoder->operating_rate_auto = false;
-	if(decoder->operating_rate == 0 && real_pts_enabled && operating_rate_auto)
-	{
-		decoder->operating_rate = DECODER_REAL_PTS_OPERATING_RATE;
-		decoder->operating_rate_auto = true;
-	}
+	// Explicit rate > default-path experiment > real-PTS auto switch > codec default.
+	AndroidChiakiDecoderOperatingRate selected_operating_rate =
+			android_chiaki_video_decoder_select_operating_rate(operating_rate,
+					operating_rate_default, DECODER_DEFAULT_PATH_OPERATING_RATE,
+					real_pts_enabled, operating_rate_auto, DECODER_REAL_PTS_OPERATING_RATE);
+	decoder->operating_rate = selected_operating_rate.rate;
+	decoder->operating_rate_source = selected_operating_rate.source;
 	decoder->realtime_priority = realtime_priority;
 	decoder->diagnostics_enabled = diagnostics_enabled;
 	decoder->late_frame_recovery_enabled = late_frame_recovery_enabled;
@@ -344,9 +344,16 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		CHIAKI_LOGI(decoder->log, "Stream performance mode requesting MediaCodec operating-rate=%d",
 				decoder->target_fps * 4);
 	if(decoder->operating_rate > 0)
+	{
+		const char *source = "";
+		if(decoder->operating_rate_source == ANDROID_CHIAKI_DECODER_OPERATING_RATE_DEFAULT_PATH)
+			source = " (default-path setting)";
+		else if(decoder->operating_rate_source == ANDROID_CHIAKI_DECODER_OPERATING_RATE_AUTO)
+			source = " (auto for frame-index timestamps)";
 		CHIAKI_LOGI(decoder->log, "Decoder operating-rate override: operating-rate=%d frame-rate=%d%s",
 				decoder->operating_rate, decoder->target_fps,
-				decoder->operating_rate_auto ? " (auto for frame-index timestamps)" : "");
+				source);
+	}
 	if(decoder->realtime_priority)
 		CHIAKI_LOGI(decoder->log, "Decoder realtime priority override: priority=0");
 	int first_tier = decoder->low_latency_enabled ? 0 : DECODER_CONFIGURE_BASELINE_TIER;

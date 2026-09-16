@@ -83,6 +83,7 @@ data class ConnectInfo(
 	val autoRegister: Boolean = false,
 	val performanceModeEnabled: Boolean = false,
 	val decoderOperatingRate: Int = 0,
+	val decoderOperatingRateDefault: Boolean = false,
 	val decoderOperatingRateAuto: Boolean = true,
 	val decoderRealtimePriority: Boolean = false,
 	val videoTimestampRateHz: Int = 0,
