@@ -146,6 +146,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(decoderLowLatencyEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(decoderLowLatencyEnabledKey, value).apply() }
 
+	val feedbackReducedIntervalEnabledKey get() = resources.getString(R.string.preferences_feedback_reduced_interval_enabled_key)
+	var feedbackReducedIntervalEnabled
+		get() = sharedPreferences.getBoolean(feedbackReducedIntervalEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(feedbackReducedIntervalEnabledKey, value).apply() }
+
 	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
 	var decoderInputThreadEnabled
 		get() = sharedPreferences.getBoolean(decoderInputThreadEnabledKey, false)

@@ -90,6 +90,7 @@ typedef struct chiaki_connect_info_t
 	double packet_loss_max;
 	bool enable_idr_on_fec_failure;
 	bool disable_video_packet_reordering;
+	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
 } ChiakiConnectInfo;
 
 
@@ -230,6 +231,7 @@ typedef struct chiaki_session_t
 		uint8_t psn_account_id[CHIAKI_PSN_ACCOUNT_ID_SIZE];
 		bool enable_idr_on_fec_failure;
 		bool disable_video_packet_reordering;
+		uint32_t feedback_state_min_interval_ms;
 	} connect_info;
 
 	ChiakiTarget target;
