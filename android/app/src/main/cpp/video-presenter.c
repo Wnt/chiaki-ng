@@ -3,6 +3,7 @@
 #include "video-presenter.h"
 #include "video-presenter-age.h"
 #include "video-presenter-histogram.h"
+#include "video-presenter-timing.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -315,7 +316,11 @@ static void on_vsync(AndroidChiakiVideoPresenter *presenter, int64_t app_vsync_n
 	if(presenter->last_vsync_ns > 0)
 	{
 		int64_t observed_period_ns = physical_vsync_ns - presenter->last_vsync_ns;
-		if(observed_period_ns > presenter->vsync_period_ns / 2 && observed_period_ns < presenter->vsync_period_ns * 3 / 2)
+		AndroidChiakiVideoPresenterPeriodObservation observation =
+				android_chiaki_video_presenter_classify_period(presenter->vsync_period_ns, observed_period_ns);
+		if(observation == ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK)
+			presenter->vsync_period_ns = observed_period_ns;
+		else if(observation == ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_SMOOTH)
 			presenter->vsync_period_ns = (presenter->vsync_period_ns * 7 + observed_period_ns) / 8;
 		else if(observed_period_ns >= presenter->vsync_period_ns * 3 / 2)
 		{
