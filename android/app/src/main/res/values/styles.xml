@@ -1,5 +1,5 @@
 <resources>
-    <style name="AppTheme" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="AppTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
@@ -18,14 +18,7 @@
         <item name="android:textColorSecondary">#fff</item>
     </style>
 
-    <style name="AppTheme.FloatingActionButtonSpeedDial">
-        <item name="tint">@color/floating_action_button_speed_dial_tint</item>
-        <item name="android:backgroundTint">@color/floating_action_button_speed_dial_background</item>
-        <item name="android:textColor">@color/floating_action_button_speed_dial_tint</item>
-    </style>
-
-    <style name="AppTheme.AlertDialog" parent="Theme.MaterialComponents.Dialog.Alert">
-        <item name="android:textColorPrimary">@android:color/primary_text_dark</item>
+    <style name="AppTheme.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="materialButtonStyle">@style/AppTheme.AlertDialog.Button</item>
     </style>
 
@@ -35,11 +28,11 @@
         <item name="colorControlActivated">@color/accent</item>
     </style>
 
-    <style name="AppTheme.AlertDialog.Button" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
-        <item name="android:textColor">@color/accent</item>
+    <style name="AppTheme.AlertDialog.Button" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">?attr/colorPrimary</item>
     </style>
 
-    <style name="MageTheme" parent="Theme.MaterialComponents.NoActionBar">
+    <style name="MageTheme" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
@@ -72,11 +65,11 @@
         <item name="android:windowIsTranslucent">true</item>
     </style>
 
-    <style name="MageTheme.TextAppearanceHeadline1" parent="TextAppearance.MaterialComponents.Headline1">
+    <style name="MageTheme.TextAppearanceHeadline1" parent="TextAppearance.Material3.DisplayLarge">
         <item name="fontFamily">sans-serif-condensed-light</item>
     </style>
 
-    <style name="MageTheme.TextInputStyle" parent="Widget.MaterialComponents.TextInputLayout.FilledBox">
+    <style name="MageTheme.TextInputStyle" parent="Widget.Material3.TextInputLayout.FilledBox">
         <item name="hintTextColor">?attr/colorAccent</item>
         <item name="boxCornerRadiusTopStart">16dp</item>
         <item name="boxCornerRadiusTopEnd">16dp</item>
@@ -84,7 +77,7 @@
         <item name="boxBackgroundColor">?attr/colorPrimaryDark</item>
     </style>
 
-    <style name="MageTheme.TextInputStyle.ExposedDropdownMenu" parent="Widget.MaterialComponents.TextInputLayout.FilledBox.ExposedDropdownMenu">
+    <style name="MageTheme.TextInputStyle.ExposedDropdownMenu" parent="Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu">
         <item name="hintTextColor">?attr/colorAccent</item>
         <item name="boxCornerRadiusTopStart">16dp</item>
         <item name="boxCornerRadiusTopEnd">16dp</item>
@@ -92,18 +85,18 @@
         <item name="boxBackgroundColor">?attr/colorPrimaryDark</item>
     </style>
 
-    <style name="MageTheme.Button" parent="Widget.MaterialComponents.Button">
+    <style name="MageTheme.Button" parent="Widget.Material3.Button">
         <item name="tint">?attr/colorOnSecondary</item>
         <item name="android:backgroundTint">?attr/colorSecondary</item>
         <item name="android:textColor">?attr/colorOnSecondary</item>
         <item name="iconTint">?attr/colorOnSecondary</item>
     </style>
 
-    <style name="MageTheme.TextAppearanceButton" parent="TextAppearance.MaterialComponents.Button">
+    <style name="MageTheme.TextAppearanceButton" parent="TextAppearance.Material3.LabelLarge">
         <item name="android:textColor">?attr/colorOnSecondary</item>
     </style>
 
-    <style name="StreamTheme" parent="Theme.MaterialComponents.Light.NoActionBar">
+    <style name="StreamTheme" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>

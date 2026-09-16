@@ -8,10 +8,11 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.PopupMenu
 import android.widget.Toast
-import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Observer
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -24,19 +25,31 @@ import com.metallic.chiaki.common.ext.putRevealExtra
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.databinding.ActivityMainBinding
 import com.metallic.chiaki.lib.ConnectInfo
-import com.metallic.chiaki.lib.DiscoveryHost
 import com.metallic.chiaki.manualconsole.EditManualConsoleActivity
 import com.metallic.chiaki.regist.RegistActivity
 import com.metallic.chiaki.remote.AndroidPsnRemoteClient
 import com.metallic.chiaki.settings.SettingsActivity
 import com.metallic.chiaki.stream.StreamActivity
+import com.metallic.chiaki.stream.StreamSummary
+import com.metallic.chiaki.stream.StreamSummaryFormatter
+import com.metallic.chiaki.stream.StreamSummaryQuality
 
 class MainActivity : AppCompatActivity()
 {
 	private lateinit var viewModel: MainViewModel
-
 	private lateinit var binding: ActivityMainBinding
+	private lateinit var consoleAdapter: DisplayHostRecyclerViewAdapter
 	private var discoveryMenuItem: MenuItem? = null
+	private var localHosts: List<DisplayHost> = emptyList()
+	private var psnConsoles: List<PsnConsole> = emptyList()
+
+	private val streamLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+		val summary = result.data?.let {
+			IntentCompat.getParcelableExtra(it, StreamActivity.EXTRA_STREAM_SUMMARY, StreamSummary::class.java)
+		}
+		if(summary != null)
+			showStreamSummary(summary)
+	}
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -54,24 +67,16 @@ class MainActivity : AppCompatActivity()
 		setContentView(binding.root)
 		binding.root.applySystemBarInsets(top = false)
 		binding.appBarLayout.applySystemBarInsets(left = false, right = false, bottom = false)
-
-		title = ""
 		setSupportActionBar(binding.toolbar)
 
-		binding.floatingActionButton.setOnClickListener {
-			expandFloatingActionButton(!binding.floatingActionButton.isExpanded)
+		binding.addConsoleButton.setOnClickListener { showAddConsoleMenu() }
+		binding.summaryDismissButton.setOnClickListener {
+			binding.streamSummaryCard.visibility = View.GONE
 		}
-		binding.floatingActionButtonDialBackground.setOnClickListener {
-			expandFloatingActionButton(false)
-		}
-
-		binding.addManualButton.setOnClickListener { addManualConsole() }
-		binding.addManualLabelButton.setOnClickListener { addManualConsole() }
-
-		binding.registerButton.setOnClickListener { showRegistration() }
-		binding.registerLabelButton.setOnClickListener { showRegistration() }
-
-		setupBackNavigation()
+		binding.summaryDuration.labelTextView.setText(R.string.stream_summary_duration)
+		binding.summaryLatency.labelTextView.setText(R.string.stream_summary_latency)
+		binding.summaryDrops.labelTextView.setText(R.string.stream_summary_drops)
+		binding.summaryQuality.labelTextView.setText(R.string.stream_summary_quality)
 
 		viewModel = ViewModelProvider(this, viewModelFactory {
 			MainViewModel(
@@ -80,42 +85,29 @@ class MainActivity : AppCompatActivity()
 				LogManager(this),
 				AndroidPsnRemoteClient(this)
 			)
-		})
-			.get(MainViewModel::class.java)
+		})[MainViewModel::class.java]
 
-		val recyclerViewAdapter = DisplayHostRecyclerViewAdapter(this::hostTriggered, this::wakeupHost, this::editHost, this::deleteHost)
-		binding.hostsRecyclerView.adapter = recyclerViewAdapter
-		binding.hostsRecyclerView.layoutManager = LinearLayoutManager(this)
-		viewModel.displayHosts.observe(this, Observer {
-			val top = binding.hostsRecyclerView.computeVerticalScrollOffset() == 0
-			recyclerViewAdapter.hosts = it
-			if(top)
-				binding.hostsRecyclerView.scrollToPosition(0)
-			updateEmptyInfo()
-		})
-
-		viewModel.discoveryActive.observe(this, Observer { active ->
-			discoveryMenuItem?.let { updateDiscoveryMenuItem(it, active) }
-			updateEmptyInfo()
-		})
-
-		val psnAdapter = PsnConsoleRecyclerViewAdapter(
-			viewModel::registerPsnConsole,
-			this::connectPsnConsole,
-			viewModel::wakePsnConsole
+		consoleAdapter = DisplayHostRecyclerViewAdapter(
+			this::playConsole,
+			this::wakeConsole,
+			this::editConsole,
+			this::deleteConsole
 		)
-		binding.psnConsolesRecyclerView.adapter = psnAdapter
-		binding.psnConsolesRecyclerView.layoutManager = LinearLayoutManager(this)
-		binding.refreshPsnConsolesButton.setOnClickListener { viewModel.loadPsnConsoles() }
-		viewModel.psnConsoles.observe(this) { consoles ->
-			psnAdapter.consoles = consoles
-			updatePsnListState(viewModel.psnListState.value, consoles.isEmpty())
+		binding.hostsRecyclerView.adapter = consoleAdapter
+		binding.hostsRecyclerView.layoutManager = LinearLayoutManager(this)
+		viewModel.displayHosts.observe(this) {
+			localHosts = it
+			updateConsoleList()
 		}
-		viewModel.psnListState.observe(this) { state ->
-			updatePsnListState(state, viewModel.psnConsoles.value.isNullOrEmpty())
-			updateEmptyInfo()
+		viewModel.discoveryActive.observe(this) { active ->
+			discoveryMenuItem?.let { updateDiscoveryMenuItem(it, active) }
 		}
-		viewModel.psnAction.observe(this) { psnAdapter.action = it }
+		viewModel.psnConsoles.observe(this) {
+			psnConsoles = it
+			updateConsoleList()
+		}
+		viewModel.psnListState.observe(this, this::updatePsnListState)
+		viewModel.psnAction.observe(this) { consoleAdapter.action = it }
 		viewModel.psnMessage.observe(this) { message ->
 			if(message != null)
 			{
@@ -125,39 +117,55 @@ class MainActivity : AppCompatActivity()
 		}
 	}
 
-	private fun updatePsnListState(state: PsnConsoleListState?, empty: Boolean)
+	private fun updateConsoleList()
 	{
-		binding.psnConsolesLayout.visibility = if(state == null || state == PsnConsoleListState.Hidden) View.GONE else View.VISIBLE
-		binding.psnConsolesProgressBar.visibility = if(state == PsnConsoleListState.Loading) View.VISIBLE else View.GONE
-		binding.refreshPsnConsolesButton.isEnabled = state != PsnConsoleListState.Loading
-		val info = when
-		{
-			state is PsnConsoleListState.Error -> state.message
-			state == PsnConsoleListState.Ready && empty -> getString(R.string.psn_consoles_empty)
-			else -> null
-		}
-		binding.psnConsolesInfoTextView.text = info
-		binding.psnConsolesInfoTextView.visibility = if(info == null) View.GONE else View.VISIBLE
-		binding.psnConsolesRecyclerView.visibility = if(state == PsnConsoleListState.Ready && !empty) View.VISIBLE else View.GONE
+		val atTop = binding.hostsRecyclerView.computeVerticalScrollOffset() == 0
+		consoleAdapter.consoles = mergeHomeConsoles(localHosts, psnConsoles)
+		if(atTop)
+			binding.hostsRecyclerView.scrollToPosition(0)
+		binding.emptyInfoLayout.visibility =
+			if(consoleAdapter.itemCount == 0) View.VISIBLE else View.GONE
 	}
 
-	private fun updateEmptyInfo()
+	private fun updatePsnListState(state: PsnConsoleListState?)
 	{
-		if((viewModel.displayHosts.value?.isEmpty() ?: true) && viewModel.psnListState.value == PsnConsoleListState.Hidden)
-		{
-			binding.emptyInfoLayout.visibility = View.VISIBLE
-			val discoveryActive = viewModel.discoveryActive.value ?: false
-			binding.emptyInfoImageView.setImageResource(if(discoveryActive) R.drawable.ic_discover_on else R.drawable.ic_discover_off)
-			binding.emptyInfoTextView.setText(if(discoveryActive) R.string.display_hosts_empty_discovery_on_info else R.string.display_hosts_empty_discovery_off_info)
-		}
-		else
-			binding.emptyInfoLayout.visibility = View.GONE
+		binding.psnProgressLayout.visibility =
+			if(state == PsnConsoleListState.Loading) View.VISIBLE else View.GONE
+		val error = (state as? PsnConsoleListState.Error)?.message
+		binding.psnConsolesInfoTextView.text = error
+		binding.psnConsolesInfoTextView.visibility = if(error == null) View.GONE else View.VISIBLE
 	}
 
-	private fun expandFloatingActionButton(expand: Boolean)
+	private fun showStreamSummary(summary: StreamSummary)
 	{
-		binding.floatingActionButton.isExpanded = expand
-		binding.floatingActionButton.isActivated = binding.floatingActionButton.isExpanded
+		binding.summaryDuration.valueTextView.text = StreamSummaryFormatter.duration(summary.durationMillis)
+		binding.summaryLatency.valueTextView.text = StreamSummaryFormatter.latency(summary.averageLatencyMillis)
+		binding.summaryDrops.valueTextView.text = summary.droppedFrames.toString()
+		binding.summaryQuality.valueTextView.setText(when(summary.quality)
+		{
+			StreamSummaryQuality.GOOD -> R.string.network_quality_good
+			StreamSummaryQuality.FAIR -> R.string.network_quality_fair
+			StreamSummaryQuality.POOR -> R.string.network_quality_poor
+			StreamSummaryQuality.UNKNOWN -> R.string.network_quality_unknown
+		})
+		binding.streamSummaryCard.visibility = View.VISIBLE
+	}
+
+	private fun showAddConsoleMenu()
+	{
+		PopupMenu(this, binding.addConsoleButton).also { menu ->
+			menu.menuInflater.inflate(R.menu.add_console, menu.menu)
+			menu.setOnMenuItemClickListener {
+				when(it.itemId)
+				{
+					R.id.action_register -> showRegistration()
+					R.id.action_add_manual -> addManualConsole()
+					else -> return@setOnMenuItemClickListener false
+				}
+				true
+			}
+			menu.show()
+		}
 	}
 
 	override fun onStart()
@@ -173,28 +181,12 @@ class MainActivity : AppCompatActivity()
 		viewModel.discoveryManager.pause()
 	}
 
-	private fun setupBackNavigation()
-	{
-		onBackPressedDispatcher.addCallback(this) {
-			if(binding.floatingActionButton.isExpanded)
-			{
-				expandFloatingActionButton(false)
-			}
-			else
-			{
-				isEnabled = false
-				onBackPressedDispatcher.onBackPressed()
-			}
-		}
-	}
-
 	override fun onCreateOptionsMenu(menu: Menu): Boolean
 	{
 		menuInflater.inflate(R.menu.main, menu)
-		val discoveryItem = menu.findItem(R.id.action_discover)
-		discoveryMenuItem = discoveryItem
-		val discoveryActive = viewModel.discoveryActive.value ?: false
-		updateDiscoveryMenuItem(discoveryItem, discoveryActive)
+		discoveryMenuItem = menu.findItem(R.id.action_discover).also {
+			updateDiscoveryMenuItem(it, viewModel.discoveryActive.value ?: false)
+		}
 		return true
 	}
 
@@ -211,22 +203,18 @@ class MainActivity : AppCompatActivity()
 			viewModel.discoveryManager.active = !(viewModel.discoveryActive.value ?: false)
 			true
 		}
-
 		R.id.action_settings ->
 		{
-			Intent(this, SettingsActivity::class.java).also {
-				startActivity(it)
-			}
+			startActivity(Intent(this, SettingsActivity::class.java))
 			true
 		}
-
 		else -> super.onOptionsItemSelected(item)
 	}
 
 	private fun addManualConsole()
 	{
 		Intent(this, EditManualConsoleActivity::class.java).also {
-			it.putRevealExtra(binding.addManualButton, binding.rootLayout)
+			it.putRevealExtra(binding.addConsoleButton, binding.rootLayout)
 			startActivity(it, ActivityOptions.makeSceneTransitionAnimation(this).toBundle())
 		}
 	}
@@ -234,67 +222,38 @@ class MainActivity : AppCompatActivity()
 	private fun showRegistration()
 	{
 		Intent(this, RegistActivity::class.java).also {
-			it.putRevealExtra(binding.registerButton, binding.rootLayout)
+			it.putRevealExtra(binding.addConsoleButton, binding.rootLayout)
 			startActivity(it, ActivityOptions.makeSceneTransitionAnimation(this).toBundle())
 		}
 	}
 
-	private fun hostTriggered(host: DisplayHost)
+	private fun playConsole(console: HomeConsole)
+	{
+		val psn = console.psnConsole
+		when
+		{
+			console.status == HomeConsoleStatus.REMOTE && psn?.registeredHost != null ->
+				connectPsnConsole(psn)
+			console.status == HomeConsoleStatus.REGISTRATION_REQUIRED && psn != null ->
+				viewModel.registerPsnConsole(psn)
+			console.displayHost != null -> playLocalConsole(console.displayHost)
+			psn?.registeredHost != null -> connectPsnConsole(psn)
+		}
+	}
+
+	private fun wakeConsole(console: HomeConsole)
+	{
+		console.displayHost?.let {
+			wakeupHost(it)
+			return
+		}
+		console.psnConsole?.let(viewModel::wakePsnConsole)
+	}
+
+	private fun playLocalConsole(host: DisplayHost)
 	{
 		val registeredHost = host.registeredHost
-		if(registeredHost != null)
-		{
-			fun connect() {
-				val preferences = Preferences(this)
-				val connectInfo = ConnectInfo(
-					ps5 = host.isPS5,
-					host = host.host,
-					registKey = registeredHost.rpRegistKey,
-					morning = registeredHost.rpKey,
-					videoProfile = preferences.videoProfile,
-					decoderLowLatencyEnabled = preferences.decoderLowLatencyEnabled,
-					threadPriorityBoostEnabled = preferences.threadPriorityBoostEnabled,
-					decoderLateFrameRecoveryEnabled = preferences.decoderLateFrameRecoveryEnabled,
-					packetLossMax = preferences.packetLossMax,
-					adaptiveLossReport = preferences.adaptiveLossReport,
-					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
-					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
-					feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
-					audioBufferBursts = preferences.audioBufferBursts,
-					audioFifoMs = preferences.audioFifoMs,
-					performanceModeEnabled = preferences.performanceModeEnabled,
-					decoderOperatingRate = preferences.decoderOperatingRate,
-					decoderOperatingRateDefault = preferences.decoderOperatingRateDefault,
-					decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
-					decoderRealtimePriority = preferences.decoderRealtimePriority,
-					videoTimestampRateHz = preferences.videoTimestampRateHz,
-					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled,
-					videoPresenterConfig = preferences.videoPresenterConfig
-				)
-				Intent(this, StreamActivity::class.java).let {
-					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
-					startActivity(it)
-				}
-			}
-
-			if(host is DiscoveredDisplayHost && host.discoveredHost.state == DiscoveryHost.State.STANDBY)
-			{
-				MaterialAlertDialogBuilder(this)
-					.setMessage(R.string.alert_message_standby_wakeup)
-					.setPositiveButton(R.string.action_wakeup) { _, _ ->
-						wakeupHost(host)
-					}
-					.setNeutralButton(R.string.action_connect_immediately) { _, _ ->
-						connect()
-					}
-					.setNegativeButton(R.string.action_connect_cancel_connect) { _, _ -> }
-					.create()
-					.show()
-			}
-			else
-				connect()
-		}
-		else
+		if(registeredHost == null)
 		{
 			Intent(this, RegistActivity::class.java).let {
 				it.putExtra(RegistActivity.EXTRA_HOST, host.host)
@@ -305,46 +264,75 @@ class MainActivity : AppCompatActivity()
 					it.putExtra(RegistActivity.EXTRA_ASSIGN_MANUAL_HOST_ID, host.manualHost.id)
 				startActivity(it)
 			}
+			return
 		}
+		val preferences = Preferences(this)
+		val connectInfo = ConnectInfo(
+			ps5 = host.isPS5,
+			host = host.host,
+			registKey = registeredHost.rpRegistKey,
+			morning = registeredHost.rpKey,
+			videoProfile = preferences.videoProfile,
+			decoderLowLatencyEnabled = preferences.decoderLowLatencyEnabled,
+			threadPriorityBoostEnabled = preferences.threadPriorityBoostEnabled,
+			decoderLateFrameRecoveryEnabled = preferences.decoderLateFrameRecoveryEnabled,
+			packetLossMax = preferences.packetLossMax,
+			adaptiveLossReport = preferences.adaptiveLossReport,
+			takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
+			feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
+			feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
+			audioBufferBursts = preferences.audioBufferBursts,
+			audioFifoMs = preferences.audioFifoMs,
+			performanceModeEnabled = preferences.performanceModeEnabled,
+			decoderOperatingRate = preferences.decoderOperatingRate,
+			decoderOperatingRateDefault = preferences.decoderOperatingRateDefault,
+			decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
+			decoderRealtimePriority = preferences.decoderRealtimePriority,
+			videoTimestampRateHz = preferences.videoTimestampRateHz,
+			streamDiagnosticsEnabled = true,
+			videoPresenterConfig = preferences.videoPresenterConfig
+		)
+		streamLauncher.launch(Intent(this, StreamActivity::class.java).apply {
+			putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
+		})
 	}
 
 	private fun wakeupHost(host: DisplayHost)
 	{
 		val registeredHost = host.registeredHost ?: return
-		viewModel.discoveryManager.sendWakeup(host.host, registeredHost.rpRegistKey, registeredHost.target.isPS5)
+		viewModel.discoveryManager.sendWakeup(
+			host.host,
+			registeredHost.rpRegistKey,
+			registeredHost.target.isPS5
+		)
 	}
 
 	private fun connectPsnConsole(console: PsnConsole)
 	{
 		val registered = console.registeredHost ?: return
-		Intent(this, StreamActivity::class.java).also {
-			it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, viewModel.connectInfo(registered))
-			it.putExtra(StreamActivity.EXTRA_PSN_DEVICE, console.device)
-			startActivity(it)
-		}
+		streamLauncher.launch(Intent(this, StreamActivity::class.java).apply {
+			putExtra(StreamActivity.EXTRA_CONNECT_INFO, viewModel.connectInfo(registered))
+			putExtra(StreamActivity.EXTRA_PSN_DEVICE, console.device)
+		})
 	}
 
-	private fun editHost(host: DisplayHost)
+	private fun editConsole(console: HomeConsole)
 	{
-		if(host !is ManualDisplayHost)
-			return
-		Intent(this, EditManualConsoleActivity::class.java).also {
-			it.putExtra(EditManualConsoleActivity.EXTRA_MANUAL_HOST_ID, host.manualHost.id)
-			startActivity(it)
-		}
+		val host = console.displayHost as? ManualDisplayHost ?: return
+		startActivity(Intent(this, EditManualConsoleActivity::class.java).apply {
+			putExtra(EditManualConsoleActivity.EXTRA_MANUAL_HOST_ID, host.manualHost.id)
+		})
 	}
 
-	private fun deleteHost(host: DisplayHost)
+	private fun deleteConsole(console: HomeConsole)
 	{
-		if(host !is ManualDisplayHost)
-			return
+		val host = console.displayHost as? ManualDisplayHost ?: return
 		MaterialAlertDialogBuilder(this)
 			.setMessage(getString(R.string.alert_message_delete_manual_host, host.manualHost.host))
 			.setPositiveButton(R.string.action_delete) { _, _ ->
 				viewModel.deleteManualHost(host.manualHost)
 			}
 			.setNegativeButton(R.string.action_keep) { _, _ -> }
-			.create()
 			.show()
 	}
 }

@@ -5,6 +5,7 @@ package com.metallic.chiaki.stream
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.app.AlertDialog
+import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.graphics.Matrix
@@ -69,6 +70,7 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_CONNECT_INFO = "connect_info"
 		const val EXTRA_PSN_DEVICE = "psn_device"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
+		const val EXTRA_STREAM_SUMMARY = "stream_summary"
 		private const val HIDE_UI_TIMEOUT_MS = 2000L
 
 		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
@@ -97,6 +99,8 @@ class StreamActivity : AppCompatActivity()
 	private var diagnosticsOverlay: StreamDiagnosticsOverlay? = null
 	private var displayManager: DisplayManager? = null
 	private var displayListener: DisplayManager.DisplayListener? = null
+	private val summaryAccumulator = StreamSummaryAccumulator()
+	private var summaryResultSet = false
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -173,19 +177,20 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
-		if(connectInfo.streamDiagnosticsEnabled)
+		if(diagnosticsPreview || preferences.streamDiagnosticsOverlayEnabled)
 		{
 			val overlay = StreamDiagnosticsOverlay(this) {
 				diagnosticsUiState(preferences, connectInfo)
 			}
 			diagnosticsOverlay = overlay
-			viewModel.session.streamStats.observe(this, Observer(overlay::update))
 			binding.root.post { overlay.show(binding.root) }
 			Log.i("StreamActivity", "Stream diagnostics overlay enabled; redraw interval 1000 ms")
 		}
 		else
-		{
-			Log.i("StreamActivity", "Stream diagnostics overlay disabled; no stats observer")
+			Log.i("StreamActivity", "Stream diagnostics overlay disabled")
+		viewModel.session.streamStats.observe(this) { stats ->
+			summaryAccumulator.add(stats, diagnosticsNetworkLink())
+			diagnosticsOverlay?.update(stats)
 		}
 		adjustStreamViewAspect()
 
@@ -674,11 +679,14 @@ class StreamActivity : AppCompatActivity()
 	private fun stateChanged(state: StreamState)
 	{
 		binding.progressBar.visibility = if(state == StreamStateConnecting) View.VISIBLE else View.GONE
+		if(state == StreamStateConnected)
+			summaryAccumulator.connected(SystemClock.elapsedRealtime())
 
 		when(state)
 		{
 			is StreamStateQuit ->
 			{
+				summaryAccumulator.ended(SystemClock.elapsedRealtime())
 				if(dialogContents != StreamQuitDialog)
 				{
 					if(state.reason.isError)
@@ -780,6 +788,18 @@ class StreamActivity : AppCompatActivity()
 			}
 			else ->{}
 		}
+	}
+
+	override fun finish()
+	{
+		if(!summaryResultSet)
+		{
+			summaryAccumulator.build(SystemClock.elapsedRealtime())?.let { summary ->
+				setResult(RESULT_OK, Intent().putExtra(EXTRA_STREAM_SUMMARY, summary))
+				summaryResultSet = true
+			}
+		}
+		super.finish()
 	}
 
 	private fun adjustTextureViewAspect(textureView: TextureView)

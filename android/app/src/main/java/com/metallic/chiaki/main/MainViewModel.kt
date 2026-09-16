@@ -135,7 +135,8 @@ class MainViewModel(
 		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 		decoderRealtimePriority = preferences.decoderRealtimePriority,
 		videoTimestampRateHz = preferences.videoTimestampRateHz,
-		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled,
+		// The Home session summary consumes the same 1 Hz counters as the optional overlay.
+		streamDiagnosticsEnabled = true,
 		videoPresenterConfig = preferences.videoPresenterConfig
 	)
 
