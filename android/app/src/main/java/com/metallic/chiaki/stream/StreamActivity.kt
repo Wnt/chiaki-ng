@@ -25,6 +25,7 @@ import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.viewModelFactory
@@ -145,6 +146,7 @@ class StreamActivity : AppCompatActivity()
 
 	private var controlsJob: Job? = null
 	private var debandRenderer: DebandRenderer? = null
+	private var eglRenderer: EglRenderer? = null
 	private val streamTouchpadState = MutableStateFlow(com.metallic.chiaki.lib.ControllerState())
 
 	private fun setupVideoOutput()
@@ -154,32 +156,10 @@ class StreamActivity : AppCompatActivity()
 
 		if(prefs.debandingEnabled)
 		{
-			// Decode into a SurfaceTexture consumed by the deband/RCAS GL renderer
-			binding.surfaceView.visibility = View.GONE
-			binding.debandSurfaceView.visibility = View.VISIBLE
-
-			debandRenderer = DebandRenderer(
-				onSurfaceReady = { surface ->
-					val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
-						viewModel.connectInfo.videoProfile.maxFPS.toDouble()
-					else
-						null
-					viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
-				},
-				onRequestRender = { binding.debandSurfaceView.requestRender() }
-			)
-
-			binding.debandSurfaceView.setEGLContextClientVersion(3)
-			binding.debandSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
-			binding.debandSurfaceView.holder.setFormat(PixelFormat.RGBA_8888)
-			binding.debandSurfaceView.setRenderer(debandRenderer)
-			debandRenderer?.sharpness = prefs.sharpnessIntensity
-			// Default (flag off) keeps continuous rendering; the flag lets an A/B test measure
-			// GPU/power savings from rendering only when the decoder delivers a new frame.
-			binding.debandSurfaceView.renderMode = if(prefs.debandRenderWhenDirtyEnabled)
-				GLSurfaceView.RENDERMODE_WHEN_DIRTY
+			if(BuildConfig.CHIAKI_ANDROID_EGL_RENDERER && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+				setupEglDebandOutput(prefs)
 			else
-				GLSurfaceView.RENDERMODE_CONTINUOUSLY
+				setupGlSurfaceViewDebandOutput(prefs)
 		}
 		else
 		{
@@ -192,6 +172,63 @@ class StreamActivity : AppCompatActivity()
 				null
 			viewModel.session.attachToSurfaceView(binding.surfaceView, frameRate)
 		}
+	}
+
+	private fun setupEglDebandOutput(prefs: Preferences)
+	{
+		binding.surfaceView.visibility = View.VISIBLE
+		binding.debandSurfaceView.visibility = View.GONE
+		binding.surfaceView.holder.setFormat(PixelFormat.RGBA_8888)
+		val renderer = EglRenderer(
+			binding.surfaceView,
+			viewModel.connectInfo.videoProfile.width,
+			viewModel.connectInfo.videoProfile.height,
+			prefs.sharpnessIntensity,
+			onDecoderSurfaceReady = { surface ->
+				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
+				else
+					null
+				viewModel.session.attachToSurface(surface, binding.surfaceView.display, refreshHz)
+			},
+			onDecoderSurfaceDestroyed = { viewModel.session.detachSurface() },
+			onUnavailable = { failedRenderer ->
+				if(eglRenderer === failedRenderer)
+				{
+					failedRenderer.release()
+					eglRenderer = null
+					setupGlSurfaceViewDebandOutput(prefs)
+				}
+			}
+		)
+		eglRenderer = renderer
+		renderer.start()
+	}
+
+	private fun setupGlSurfaceViewDebandOutput(prefs: Preferences)
+	{
+		// Decode into a SurfaceTexture consumed by the established deband/RCAS renderer.
+		binding.surfaceView.visibility = View.GONE
+		binding.debandSurfaceView.visibility = View.VISIBLE
+		debandRenderer = DebandRenderer(
+			onSurfaceReady = { surface ->
+				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
+					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
+				else
+					null
+				viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
+			},
+			onRequestRender = { binding.debandSurfaceView.requestRender() }
+		)
+		binding.debandSurfaceView.setEGLContextClientVersion(3)
+		binding.debandSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+		binding.debandSurfaceView.holder.setFormat(PixelFormat.RGBA_8888)
+		binding.debandSurfaceView.setRenderer(debandRenderer)
+		debandRenderer?.sharpness = prefs.sharpnessIntensity
+		binding.debandSurfaceView.renderMode = if(prefs.debandRenderWhenDirtyEnabled)
+			GLSurfaceView.RENDERMODE_WHEN_DIRTY
+		else
+			GLSurfaceView.RENDERMODE_CONTINUOUSLY
 	}
 
 	@Suppress("DEPRECATION")
@@ -262,7 +299,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onResume()
 		hideSystemUI()
-		if (Preferences(this).debandingEnabled) {
+		if(debandRenderer != null) {
 			binding.debandSurfaceView.onResume()
 			// In RENDERMODE_WHEN_DIRTY, onResume() alone won't redraw the last frame; force one
 			// so the surface isn't left blank until the next decoded frame arrives.
@@ -274,7 +311,7 @@ class StreamActivity : AppCompatActivity()
 	override fun onPause()
 	{
 		super.onPause()
-		if (Preferences(this).debandingEnabled) {
+		if(debandRenderer != null) {
 			binding.debandSurfaceView.onPause()
 		}
 		viewModel.session.pause()
@@ -297,6 +334,8 @@ class StreamActivity : AppCompatActivity()
 			renderer.release()
 		}
 		debandRenderer = null
+		eglRenderer?.release()
+		eglRenderer = null
 	}
 
 	private fun reconnect()
