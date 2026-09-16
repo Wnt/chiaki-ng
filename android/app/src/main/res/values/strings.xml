@@ -51,6 +51,7 @@
     <string name="psn_login_redirect_invalid">Sony returned an invalid sign-in redirect</string>
     <string name="action_psn_finish_sign_in">Finish sign-in</string>
     <string name="action_psn_continue_sign_in">Continue signing in</string>
+    <string name="action_psn_link_with_pin">Link with PIN instead</string>
     <string name="psn_login_link_expired">That sign-in link expired or was already used. Sign in again.</string>
     <string name="action_retry">Retry</string>
     <string name="regist_pin_invalid">Please enter a valid %d-digit PIN</string>

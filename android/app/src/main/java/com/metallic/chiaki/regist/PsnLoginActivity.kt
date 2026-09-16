@@ -12,6 +12,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -41,16 +42,25 @@ import kotlinx.coroutines.launch
  * (PLE-312: starting in the WebView and moving to the tab on the passkey prompt asked for it twice,
  * because the two have separate cookie jars). The tab carries a Finish sign-in button handing the
  * page address back to the app. The WebView remains only for a device with no Custom Tabs browser.
+ *
+ * Leaving the tab any other way (its X, back, "Open in browser") loses nothing: the app reopens the
+ * sign-in, which the browser's session cookie takes straight to a fresh redirect (PLE-323).
  */
 class PsnLoginActivity : AppCompatActivity()
 {
 	companion object
 	{
 		const val EXTRA_ACCOUNT_ID = "psn_account_id"
+		/** The caller can link a console on this network with its PIN, so offer that if sign-in does not finish. */
+		const val EXTRA_OFFER_PIN_LINK = "offer_pin_link"
+		/** Result code: the user chose the PIN link instead of signing in. */
+		const val RESULT_LINK_WITH_PIN = Activity.RESULT_FIRST_USER + 1
+		private const val TAG = "PsnLogin"
 		private const val STATE_BROWSER_SIGN_IN = "browser_sign_in"
 		private const val STATE_BROWSER_LAUNCHED = "browser_launched"
 		private const val STATE_BROWSER_PAUSE_OBSERVED = "browser_pause_observed"
 		private const val STATE_BROWSER_OPENED_AT = "browser_opened_at"
+		private const val STATE_BROWSER_RECOVERIES = "browser_recoveries"
 	}
 
 	private lateinit var binding: ActivityPsnLoginBinding
@@ -59,17 +69,29 @@ class PsnLoginActivity : AppCompatActivity()
 	private var browserLaunched = false
 	private var browserPauseObserved = false
 	private var browserOpenedAtMs = 0L
+	/** Tabs reopened in a row after the user left one without a code. */
+	private var browserRecoveries = 0
+	/** Read once: a redirect arriving through onNewIntent replaces the intent without this extra. */
+	private var offerPinLink = false
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
 		enableAppEdgeToEdge()
+		offerPinLink = intent.getBooleanExtra(EXTRA_OFFER_PIN_LINK, false)
 		binding = ActivityPsnLoginBinding.inflate(layoutInflater)
 		setContentView(binding.root)
 		binding.root.applySystemBarInsets(top = false)
 		binding.toolbar.applySystemBarInsets(left = false, right = false, bottom = false)
 		binding.toolbar.setNavigationOnClickListener { finish() }
-		binding.continueButton.setOnClickListener { launchBrowserSignIn() }
+		binding.continueButton.setOnClickListener {
+			browserRecoveries = 0
+			launchBrowserSignIn()
+		}
+		binding.pinLinkButton.setOnClickListener {
+			setResult(RESULT_LINK_WITH_PIN)
+			finish()
+		}
 		configureWebView()
 		onBackPressedDispatcher.addCallback(this) {
 			if(!browserSignIn && binding.webView.canGoBack() && !handlingRedirect)
@@ -85,6 +107,7 @@ class PsnLoginActivity : AppCompatActivity()
 		browserLaunched = savedInstanceState?.getBoolean(STATE_BROWSER_LAUNCHED) ?: false
 		browserPauseObserved = savedInstanceState?.getBoolean(STATE_BROWSER_PAUSE_OBSERVED) ?: false
 		browserOpenedAtMs = savedInstanceState?.getLong(STATE_BROWSER_OPENED_AT) ?: 0L
+		browserRecoveries = savedInstanceState?.getInt(STATE_BROWSER_RECOVERIES) ?: 0
 		when
 		{
 			browserSignIn -> showBrowserWaiting()
@@ -123,7 +146,21 @@ class PsnLoginActivity : AppCompatActivity()
 		browserLaunched = false
 		browserPauseObserved = false
 		if(PsnPendingRedirect.take()?.let(::handleRedirect) != true && !consumeClipboardRedirect())
-			showBrowserReturnedWithoutCode()
+			recoverBrowserSignIn()
+	}
+
+	/** Back from the tab without a code, the usual case for a first-time user: reopen it, don't explain. */
+	private fun recoverBrowserSignIn()
+	{
+		if(PsnBrowserRecovery.enabled && psnBrowserReturnStep(browserRecoveries) == PsnBrowserReturnStep.REOPEN_TAB)
+		{
+			browserRecoveries++
+			Log.i(TAG, "browser returned without a code; reopening the sign-in tab (recovery $browserRecoveries of $PSN_SILENT_BROWSER_RECOVERIES)")
+			if(launchBrowserSignIn(tabOnly = true))
+				return
+		}
+		Log.i(TAG, "browser returned without a code; offering the choices")
+		showBrowserReturnedWithoutCode()
 	}
 
 	override fun onNewIntent(intent: Intent)
@@ -262,8 +299,14 @@ class PsnLoginActivity : AppCompatActivity()
 		)
 		val finishLabel = getString(R.string.action_psn_finish_sign_in)
 		val finishIcon = ContextCompat.getDrawable(this, R.drawable.ic_psn_finish_sign_in)!!.toBitmap()
+		// The Finish button is the one thing on the tab that returns the code, so it stays on a toolbar
+		// that never scrolls away, and the menu carries nothing else of ours to compete with it.
 		return CustomTabsIntent.Builder()
 			.setShowTitle(true)
+			.setUrlBarHidingEnabled(false)
+			.setShareState(CustomTabsIntent.SHARE_STATE_OFF)
+			.setBookmarksButtonEnabled(false)
+			.setDownloadButtonEnabled(false)
 			.setActionButton(finishIcon, finishLabel, finishIntent, true)
 			.addMenuItem(finishLabel, finishIntent)
 			.build()
@@ -332,6 +375,7 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.stopLoading()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
+		binding.pinLinkButton.visibility = View.GONE
 		binding.progressBar.visibility = View.VISIBLE
 		binding.progressBar.isIndeterminate = true
 		lifecycleScope.launch {
@@ -357,6 +401,7 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.stopLoading()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
+		binding.pinLinkButton.visibility = View.GONE
 		binding.progressBar.visibility = View.GONE
 		MaterialAlertDialogBuilder(this)
 			.setTitle(R.string.psn_login_failed)
@@ -383,6 +428,7 @@ class PsnLoginActivity : AppCompatActivity()
 	private fun showWebView()
 	{
 		binding.continueButton.visibility = View.GONE
+		binding.pinLinkButton.visibility = View.GONE
 		binding.webView.visibility = View.VISIBLE
 		binding.progressBar.visibility = View.VISIBLE
 		binding.progressBar.isIndeterminate = true
@@ -394,12 +440,16 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.visibility = View.GONE
 		binding.progressBar.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
+		binding.pinLinkButton.visibility = View.GONE
 	}
 
+	/** The tab came back without a code twice after reopening: sign in again, or link with the PIN (PLE-313). */
 	private fun showBrowserReturnedWithoutCode()
 	{
 		showBrowserWaiting()
 		binding.continueButton.visibility = View.VISIBLE
+		if(offerPinLink)
+			binding.pinLinkButton.visibility = View.VISIBLE
 	}
 
 	override fun onSaveInstanceState(outState: Bundle)
@@ -408,6 +458,7 @@ class PsnLoginActivity : AppCompatActivity()
 		outState.putBoolean(STATE_BROWSER_LAUNCHED, browserLaunched)
 		outState.putBoolean(STATE_BROWSER_PAUSE_OBSERVED, browserPauseObserved)
 		outState.putLong(STATE_BROWSER_OPENED_AT, browserOpenedAtMs)
+		outState.putInt(STATE_BROWSER_RECOVERIES, browserRecoveries)
 		if(!browserSignIn)
 			binding.webView.saveState(outState)
 		super.onSaveInstanceState(outState)

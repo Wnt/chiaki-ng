@@ -13,7 +13,7 @@ in the mock build (PsnMockFault.kt) and must FAIL for that defect's reason, not 
 guard that fails for the wrong reason would also pass the defect once the other problem is gone.
 
 Exit 0 only if every case behaves. Artifacts: build/psn-mock/suite-<time>/<case>/ and suite.json.
-Needs the mock up (serve.sh status) and the emulator booted; one full run takes about 5 minutes.
+Needs the mock up (serve.sh status) and the emulator booted; one full run takes about 12 minutes.
 """
 
 from __future__ import annotations
@@ -36,6 +36,12 @@ CASES = {
     "redirect-dead-end": (["--fault", "redirect-dead-end"], "FAIL", r"^dead end: nothing changed for \d+ s in the browser$"),
     "settings-redirect": (["--fault", "settings-redirect"], "FAIL", r"^left the app for \S*settings\S* \(Android Settings\)$"),
     "instruction-paragraph": (["--fault", "instruction-paragraph"], "FAIL", r"^instruction paragraph: "),
+    # PLE-323: a first-time user leaves the redirect page without Finish; each way must still sign in.
+    "exit-x": (["--exit", "x"], "PASS", r"^signed in; console list shows"),
+    "exit-back": (["--exit", "back"], "PASS", r"^signed in; console list shows"),
+    "exit-open-in-browser": (["--exit", "open-in-browser"], "PASS", r"^signed in; console list shows"),
+    "exit-idle": (["--exit", "idle", "--timeout", "240"], "PASS", r"^signed in; console list shows"),
+    "exit-loses-code": (["--exit", "x", "--fault", "exit-loses-code"], "FAIL", r"^dead end: nothing changed for \d+ s in com\.metallic\.chiaki\.psnmock$"),
     # The dead-end fault disables a component, which outlives the app process: a clean run after the
     # faults proves no fault leaks into the next run.
     "clean-after-faults": (["--play"], "PASS", r"link failed honestly and Retry re-ran it"),

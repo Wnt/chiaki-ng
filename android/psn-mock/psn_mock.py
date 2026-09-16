@@ -11,6 +11,11 @@ A scenario is chosen per sign-in by the account name, not by global state, so
 the emulator and a phone can test different failures at the same time. The part
 before `+` or `@` names the scenario: `token-refused+run7@mock` behaves as
 `token-refused`, and any other name behaves as `ok`. See README.md.
+
+Like Sony, a completed sign-in leaves a session cookie in the browser, so opening
+the authorize page again redirects with a fresh code and no form (PLE-323: the
+app reopens the sign-in when the user leaves the tab without its code).
+POST /__mock/sessions/clear forgets every session, so a driver run starts signed out.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -37,6 +43,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 CLIENT_ID = "ba495a24-818c-472b-b12d-ff231c1b5745"
 REDIRECT_PATH = "/remoteplay/redirect"
+SESSION_COOKIE = "mock_session"
 DEBUG_CERT_SHA256 = "52717a10c7dd74c22c7d1ce10fd0254da2f65a23621bb82aa72157b1c533a01c"
 DEFAULT_PACKAGES = ("com.metallic.chiaki.psnmock",)
 
@@ -216,6 +223,7 @@ class State:
     codes: dict[str, Code] = field(default_factory=dict)
     challenges: dict[str, tuple[str, str, float]] = field(default_factory=dict)  # challenge -> (kind, subject, time)
     credentials: dict[str, dict] = field(default_factory=dict)  # "rp_id/credential id" -> {account, key}
+    sessions: dict[str, str] = field(default_factory=dict)  # session cookie -> account
     events: list[dict] = field(default_factory=list)
     echo: bool = True
 
@@ -379,6 +387,10 @@ def make_handler(state: State):
             self.send_header("Cache-Control", "no-store")
             for key, value in (headers or {}).items():
                 self.send_header(key, value)
+            # One handler serves every request on a kept-alive connection: the cookie goes out once.
+            if getattr(self, "new_session", None):
+                self.send_header("Set-Cookie", f"{SESSION_COOKIE}={self.new_session}; Path=/; Secure; HttpOnly; SameSite=Lax")
+                self.new_session = None
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(data)
@@ -391,6 +403,12 @@ def make_handler(state: State):
 
         def redirect(self, location: str) -> None:
             self.send(HTTPStatus.FOUND, "", "text/plain", {"Location": location})
+
+        def session_account(self) -> str | None:
+            cookies = SimpleCookie(self.headers.get("Cookie", ""))
+            token = cookies[SESSION_COOKIE].value if SESSION_COOKIE in cookies else ""
+            with state.lock:
+                return state.sessions.get(token)
 
         def body(self) -> bytes:
             return self.rfile.read(int(self.headers.get("Content-Length") or 0))
@@ -463,6 +481,7 @@ def make_handler(state: State):
                 "/2.0/oauth/authorize/password": self.password_sign_in,
                 "/2.0/oauth/authorize/cancel": self.cancel,
                 "/2.0/oauth/token": self.token,
+                "/__mock/sessions/clear": self.clear_sessions,
                 "/webauthn/register/options": self.register_options,
                 "/webauthn/register": self.register,
                 "/webauthn/login/options": self.login_options,
@@ -503,6 +522,10 @@ def make_handler(state: State):
             txn = secrets.token_urlsafe(12)
             with state.lock:
                 state.authorizations[txn] = Authorization(one("redirect_uri"), one("scope"), time.time())
+            account = self.session_account()
+            if account is not None:
+                state.event("authorize_session", host=self.host, account=account)
+                return self.redirect(self.complete_sign_in(state.authorizations[txn], account, "session"))
             state.event("authorize_page", host=self.host, redirect_host=urlsplit(one("redirect_uri")).hostname)
             return self.send_html(HTTPStatus.OK, authorize_page(txn, self.host))
 
@@ -515,6 +538,9 @@ def make_handler(state: State):
                 state.event("sign_in_cancelled", account=account, method=method)
                 return auth.redirect_uri + "?" + urlencode({"error": "access_denied", "error_description": "User cancelled"})
             code = state.issue_code(account, auth.redirect_uri)
+            self.new_session = make_token("session", account)
+            with state.lock:
+                state.sessions[self.new_session] = account
             state.event("code_issued", account=account, scenario=scenario_of(account), method=method,
                         redirect_host=urlsplit(auth.redirect_uri).hostname)
             return auth.redirect_uri + "?" + urlencode({"code": code, "cid": secrets.token_hex(8)})
@@ -529,6 +555,13 @@ def make_handler(state: State):
                 state.event("password_rejected", account=account)
                 return self.send_html(HTTPStatus.OK, authorize_page(form["txn"], self.host, "The sign-in ID or password is incorrect."))
             return self.redirect(self.complete_sign_in(auth, account, "password"))
+
+        def clear_sessions(self):
+            with state.lock:
+                count = len(state.sessions)
+                state.sessions.clear()
+            state.event("sessions_cleared", count=count)
+            return self.send_json(HTTPStatus.OK, {"cleared": count})
 
         def cancel(self):
             auth = self.authorization(self.form().get("txn", ""))

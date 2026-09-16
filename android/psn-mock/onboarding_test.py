@@ -7,6 +7,7 @@
     android/psn-mock/onboarding_test.py --link nolink --select-domain   # user enabled the link
     android/psn-mock/onboarding_test.py --scenario expired-code  # any scenario from psn_mock.SCENARIOS
     android/psn-mock/onboarding_test.py --link nolink --fault settings-redirect   # must FAIL (PLE-302)
+    android/psn-mock/onboarding_test.py --link nolink --exit x   # leave the tab by its X instead of Finish (PLE-323)
 
 It starts from a first-run state of com.metallic.chiaki.psnmock (a separate app from the
 real one), taps Sign in, fills the mock's password form in the browser tab, taps the tab's
@@ -23,6 +24,11 @@ and for the `ok` scenario, if the console list never shows the mock's PS5.
 A failure scenario passes when the app ends on one of its own screens the user can act on.
 --fault puts back one of the onboarding defects users found (app/src/debug/.../PsnMockFault.kt),
 and a correct driver FAILS it; onboarding_suite.py runs every fault and checks the reason.
+--exit leaves the tab on the redirect page the way a first-time user does instead of pressing
+Finish: its close button (x), the back key (back), the menu's "Open in <browser>" and then the app
+from the launcher (open-in-browser), or doing nothing for --idle seconds (idle). Except for idle, the
+run FAILS unless the app reopens the sign-in on its own (logcat PsnLogin) and the user still ends
+signed in; the driver then finishes the reopened tab as before.
 Artifacts (a screenshot and UI dump per distinct screen, the mock's events, summary.json)
 go to build/psn-mock/onboarding-<time>-<link>-<scenario>/ in the workspace.
 
@@ -49,7 +55,13 @@ WORKSPACE = Path(os.environ.get("PLEIKKARI_WORKSPACE_ROOT", "/home/wnt/gta6"))
 PKG = "com.metallic.chiaki.psnmock"
 HOSTS = {"verified": "pleikkari-psn.lab.madekivi.fi", "nolink": "pleikkari-psn-nolink.lab.madekivi.fi"}
 BROWSERS = {"com.android.chrome", "com.chrome.beta", "com.chrome.dev", "org.mozilla.firefox", "com.sec.android.app.sbrowser"}
-FAULTS = ("redirect-dead-end", "settings-redirect", "instruction-paragraph")  # PsnMockFault.kt
+FAULTS = ("redirect-dead-end", "settings-redirect", "instruction-paragraph", "exit-loses-code")  # PsnMockFault.kt
+EXITS = ("x", "back", "open-in-browser", "idle")
+REDIRECT_PATH_TEXT = "/remoteplay/redirect"
+RECOVERY_LOG = "reopening the sign-in tab"  # PsnLoginActivity.recoverBrowserSignIn
+CLOSE_TAB = re.compile(r"^(close tab|close|return to previous app|navigate up)$", re.I)
+MENU = re.compile(r"^(more options|main menu|menu|customize and control .*)$", re.I)
+OPEN_IN_BROWSER = re.compile(r"^open in (chrome|firefox|samsung internet|browser)", re.I)
 FAULT_PROPERTY = "debug.pleikkari.psnmock.fault"
 INSTRUCTION_WORDS = 14  # a TextView of the app with this many words is an instruction paragraph
 
@@ -181,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--play", action="store_true", help="after the console list, tap the console and check Retry stays alive")
     parser.add_argument("--out", type=Path, help="artifact directory (default: a new one under build/psn-mock)")
     parser.add_argument("--fault", choices=FAULTS, help="make the mock build reintroduce this defect; the run must then FAIL")
+    parser.add_argument("--exit", choices=EXITS, help="leave the tab on the redirect page this way instead of pressing Finish")
+    parser.add_argument("--idle", type=float, default=60, help="seconds --exit idle leaves the redirect page alone")
     args = parser.parse_args(argv)
 
     host = HOSTS[args.link]
@@ -189,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or out
     out.mkdir(parents=True, exist_ok=True)
     account = f"{args.scenario}+{run_id.lower()}@mock"
-    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "play": args.play, "fault": args.fault, "account": account, "taps": 0, "screens": []}
+    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "play": args.play, "fault": args.fault, "exit": args.exit, "account": account, "taps": 0, "screens": []}
 
     def finish(result: str, reason: str) -> int:
         summary.update(result=result, reason=reason)
@@ -216,6 +230,11 @@ def main(argv: list[str] | None = None) -> int:
         log(f"the mock is not reachable at https://{host}; run android/psn-mock/serve.sh start")
         return 2
     since = max([e["seq"] for e in http_json(f"https://{host}/__mock/events")["events"]] or [0])
+    # The browser keeps the mock's session cookie between runs; a run starts signed out, as a new user is.
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"https://{host}/__mock/sessions/clear", data=b"", method="POST"), timeout=10).close()
+    except Exception as exc:  # a mock from before PLE-323 has no sessions to clear
+        log(f"could not clear mock sessions: {exc}")
 
     apk = build_apk(args.link) if args.build else (args.apk or WORKSPACE / "build/psn-mock" / f"psnmock-{args.link}.apk")
     if not apk.exists():
@@ -257,7 +276,8 @@ def main(argv: list[str] | None = None) -> int:
     # The app reads the fault when its process starts, and reset_app has stopped it.
     device.shell(f"setprop {FAULT_PROPERTY} {args.fault or 'none'}")
     device.shell("logcat -b all -c", check=False)
-    device.shell(f"am start -W -n {PKG}/com.metallic.chiaki.main.MainActivity")
+    # As the launcher does, so a later tap on the icon brings this task back instead of stacking a new screen.
+    device.shell(f"am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n {PKG}/com.metallic.chiaki.main.MainActivity")
     started = last_change = time.monotonic()
     last_signature = ""
     signed_in_tapped = submitted = False
@@ -265,6 +285,9 @@ def main(argv: list[str] | None = None) -> int:
     play_phase = ""  # "" until the console list shows; then "tapped", "retried"
     play_failures = 0
     seen_signatures: set[str] = set()
+    exit_done = False
+    recoveries = 0
+    back_presses = 0
 
     def row_play_button(name: str) -> Node | None:
         """The Play button of the console row named [name]: the first one below the row's name."""
@@ -324,8 +347,18 @@ def main(argv: list[str] | None = None) -> int:
 
         by_id = {n.rid.rsplit("/", 1)[-1]: n for n in nodes if n.rid}
         names = [n.text for n in mine if n.rid.endswith("nameTextView")]
+        if args.exit and exit_done:
+            seen = device.shell("logcat -d -s PsnLogin", check=False).count(RECOVERY_LOG)
+            if seen > recoveries:
+                log(f"exit {args.exit}: the app reopened the sign-in tab ({seen})")
+                recoveries = summary["recoveries"] = seen
+                submitted = False  # the reopened tab may ask again if the browser kept no session
         if foreground == PKG and "PS5 mock" in names and not play_phase:
             summary["seconds"] = round(now - started, 1)
+            if args.exit and not exit_done:
+                return finish("FAIL", f"exit {args.exit}: signed in before the driver could leave the tab")
+            if args.exit and args.exit != "idle" and not recoveries:
+                return finish("FAIL", f"exit {args.exit}: signed in without the app reopening the tab")
             if not args.play:
                 return finish("PASS", f"signed in; console list shows {names}")
             # PLE-312: the link runs the PSN play path. The mock answers the push lookup with 501, so the
@@ -395,6 +428,74 @@ def main(argv: list[str] | None = None) -> int:
         # On the blank redirect page the tab's action button hands the address back (PLE-279). A press
         # before the redirect does nothing, so the driver presses it until the app is in front again.
         finish_button = next((n for n in nodes if n.package in BROWSERS and n.desc == "Finish sign-in"), None)
+        on_redirect_page = foreground in BROWSERS and "sign-in" not in by_id and finish_button is not None
+        # PLE-323: a first-time user leaves the redirect page without Finish; the app must recover.
+        if args.exit and on_redirect_page and submitted and not exit_done:
+            exit_done = True
+            summary["taps"] += 1
+            if args.exit == "idle":
+                log(f"exit idle: leaving the redirect page alone for {args.idle:.0f} s")
+                time.sleep(args.idle)
+                summary["taps"] -= 1
+                last_change = time.monotonic()
+                started += args.idle  # the idle time is the user's, not the app's
+                continue
+            if args.exit == "x":
+                close = next((n for n in nodes if n.package in BROWSERS and CLOSE_TAB.match(n.desc)), None)
+                if close is None:
+                    return finish("ERROR", "exit x: no close button on the tab")
+                device.tap(close)
+            elif args.exit == "back":
+                device.shell("input keyevent KEYCODE_BACK")
+                back_presses = 1
+            else:
+                menu = next((n for n in nodes if n.package in BROWSERS and MENU.match(n.desc)), None)
+                if menu is None:
+                    return finish("ERROR", "exit open-in-browser: no menu button on the tab")
+                device.tap(menu)
+                item = None
+                for _ in range(4):  # the menu animates in; a dump taken too early has only the toolbar
+                    time.sleep(1.5)
+                    snapshot = device.dump()
+                    item = next((n for n in (snapshot[1] if snapshot else []) if n.package in BROWSERS and OPEN_IN_BROWSER.match(n.text or n.desc)), None)
+                    if item is not None:
+                        break
+                if snapshot:
+                    (out / "open-in-browser-menu.xml").write_text(snapshot[0])
+                if item is not None:
+                    summary["open_in_browser_item"] = item.text or item.desc
+                    device.tap(item)
+                    summary["taps"] += 2
+                else:
+                    # Chrome 133 on the emulator has no "Open in Chrome" item (only a "Running in Chrome"
+                    # footer, which does nothing). Do what that item does: the tab closes and the page
+                    # moves to the full browser, where no Finish button exists.
+                    url = next((n.text for n in nodes if n.package in BROWSERS and REDIRECT_PATH_TEXT in n.text), "")
+                    close = next((n for n in nodes if n.package in BROWSERS and CLOSE_TAB.match(n.desc)), None)
+                    if close is None or not url:
+                        return finish("ERROR", "exit open-in-browser: no \"Open in <browser>\" item, and no close button or address to emulate it")
+                    summary["open_in_browser_item"] = "emulated: no item in this browser's tab menu"
+                    log("exit open-in-browser: the tab's menu has no \"Open in <browser>\" item; emulating it")
+                    device.shell("input keyevent KEYCODE_BACK")  # dismiss the menu
+                    time.sleep(1)
+                    device.tap(close)
+                    device.shell(f"am start -a android.intent.action.VIEW -d 'https://{url.split('://')[-1]}' -p {foreground}", check=False)
+                    summary["taps"] += 3
+                time.sleep(3)
+                # The user comes back to the app the ordinary way: its launcher icon.
+                device.shell(f"monkey -p {PKG} -c android.intent.category.LAUNCHER 1", check=False)
+            log(f"exit {args.exit}: left the redirect page without Finish")
+            time.sleep(2)
+            continue
+        # Back walks the tab's history before it closes the tab, so a user keeps pressing it.
+        if args.exit == "back" and exit_done and not recoveries and foreground in BROWSERS and 0 < back_presses < 4:
+            device.shell("input keyevent KEYCODE_BACK")
+            back_presses += 1
+            summary["taps"] += 1
+            time.sleep(2)
+            continue
+        if args.exit and args.exit != "idle" and not recoveries and finish_button is not None:
+            finish_button = None  # Finish only on the tab the app reopened
         if foreground in BROWSERS and submitted and "sign-in" not in by_id and finish_button is not None and finish_taps < 5:
             device.tap(finish_button)
             finish_taps += 1
