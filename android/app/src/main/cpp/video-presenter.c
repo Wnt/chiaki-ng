@@ -345,6 +345,7 @@ static void frame_callback_legacy(long frame_time_ns, void *user)
 static void *vsync_thread_func(void *user)
 {
 	AndroidChiakiVideoPresenter *presenter = user;
+	chiaki_thread_set_affinity(CHIAKI_THREAD_NAME_VIDEO_PRESENTER);
 	ALooper *looper = ALooper_prepare(ALOOPER_PREPARE_ALLOW_NON_CALLBACKS);
 	AChoreographer *choreographer = AChoreographer_getInstance();
 	chiaki_mutex_lock(&presenter->mutex);

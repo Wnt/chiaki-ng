@@ -89,8 +89,8 @@
     <string name="preferences_decoder_low_latency_enabled_summary">Request reduced decoder buffering and fall back automatically if unsupported (re-connect required)</string>
 	<string name="preferences_decoder_input_thread_enabled_title">Decoder input thread</string>
 	<string name="preferences_decoder_input_thread_enabled_summary">Keep network receive independent from decoder input stalls; replaces an unconsumed frame with the latest one (re-connect required)</string>
-    <string name="preferences_thread_priority_boost_enabled_title">Boost network/decoder thread priority</string>
-    <string name="preferences_thread_priority_boost_enabled_summary">Raise the scheduling priority of the network receive and decoder output threads to reduce contention with UI/sensor threads (re-connect required)</string>
+    <string name="preferences_thread_priority_boost_enabled_title">Boost stream thread priority and affinity</string>
+    <string name="preferences_thread_priority_boost_enabled_summary">Raise the priority and pin the network receive, decoder output, and video presenter threads to CPUs 4–7 (re-connect required)</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_title">Decoder late-frame recovery</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_summary">Drop stale ready frames and request an IDR when five frames are backlogged (reconnect required)</string>
 	<string name="preferences_video_pacing_enabled_title">Vsync-paced video presenter</string>
