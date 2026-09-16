@@ -29,6 +29,10 @@ jobs:
 
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v4
+        with:
+          # The oboe submodule ships an OboeTester wrapper jar the validator
+          # does not know; only android/gradlew is ever run here.
+          validate-wrappers: false
 
       - name: Install Android SDK packages
         run: |
