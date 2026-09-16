@@ -33,7 +33,7 @@ class StreamViewModel(
 	val session = StreamSession(application, connectInfo, logManager, preferences.logVerbose, preferences.realVideoTimestamps,
 		preferences.decoderInputThreadEnabled, preferences.videoPacingEnabled,
 		preferences.videoPacingMode.nativeValue, preferences.videoPresenterLead.nativeValue,
-		preferences.videoPacingBoundedAgeEnabled,
+		preferences.videoPacingBoundedAgeEnabled, preferences.videoPresenterNonblockingProducer,
 		preferences.videoPacingMaxFrameAgePeriods, input,
 		externallyManaged = psnDevice != null || diagnosticsPreview)
 

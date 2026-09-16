@@ -24,7 +24,8 @@ data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 class StreamSession(private val context: Context, val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
 		val videoPresenterLead: Int,
-		val videoPacingBoundedAgeEnabled: Boolean, val videoPacingMaxFrameAgePeriods: Int,
+		val videoPacingBoundedAgeEnabled: Boolean, val videoPresenterNonblockingProducer: Boolean,
+		val videoPacingMaxFrameAgePeriods: Int,
 		val input: StreamInput, private val externallyManaged: Boolean = false)
 {
 	var session: Session? = null
@@ -84,7 +85,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			if(surface != null)
 				session.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-					nativeMaxQueueAgePeriods)
+					nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer)
 			this.session = session
 		}
 		catch(e: CreateError)
@@ -101,7 +102,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-				nativeMaxQueueAgePeriods)
+				nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer)
 	}
 
 	fun detachRemoteSession()
@@ -159,7 +160,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 				this@StreamSession.surface = null
 				session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 					surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
-					nativeMaxQueueAgePeriods)
+					nativeMaxQueueAgePeriods, videoPresenterNonblockingProducer)
 			}
 		})
 		
@@ -226,14 +227,16 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		surfaceRefreshHz = refreshHz ?: display?.refreshRate?.toDouble() ?: connectInfo.videoProfile.maxFPS.toDouble()
 		surfaceVsyncOffsetNanos = display?.appVsyncOffsetNanos ?: 0L
 		session?.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods,
+			videoPresenterNonblockingProducer)
 	}
 
 	fun detachSurface()
 	{
 		this.surface = null
 		session?.setSurface(null, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
-			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods)
+			surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead, nativeMaxQueueAgePeriods,
+			videoPresenterNonblockingProducer)
 	}
 
 	fun attachToTextureView(textureView: TextureView)

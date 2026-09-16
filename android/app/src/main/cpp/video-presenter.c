@@ -536,6 +536,7 @@ static void enqueue_paced_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 	chiaki_mutex_lock(&presenter->mutex);
 	while(presenter->queue_size == ANDROID_CHIAKI_VIDEO_PRESENTER_QUEUE_CAPACITY
 			&& presenter->mode == ANDROID_CHIAKI_VIDEO_PACING_SMOOTHEST
+			&& !presenter->nonblocking_producer
 			&& presenter->max_queue_age_periods == 0 && !presenter->shutdown)
 		chiaki_cond_wait(&presenter->queue_cond, &presenter->mutex);
 	if(presenter->shutdown)
@@ -680,7 +681,7 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
@@ -693,6 +694,7 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
+	presenter->nonblocking_producer = nonblocking_producer;
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->shutdown = false;
 	presenter->queue_head = 0;
@@ -721,12 +723,12 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 		CHIAKI_LOGI(presenter->log, "Video presenter %s mode using immediate release: %.2f Hz display (timestamped release disabled at 120 Hz)",
 				mode_name(mode), presenter->refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods",
+		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s",
 				mode_name(mode), presenter->stream_fps, presenter->refresh_hz,
 				presenter->timestamped_release_enabled ? "enabled" : "disabled",
 				(double)presenter->app_vsync_offset_ns / 1000000.0,
 				(double)presenter_lead_ns(presenter) / 1000000.0,
-				presenter->max_queue_age_periods);
+				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled");
 
 	start_vsync_thread_if_needed(presenter);
 	ChiakiErrorCode err = chiaki_thread_create(&presenter->output_thread, output_thread_func, presenter);
@@ -804,7 +806,7 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
@@ -816,6 +818,7 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
+	presenter->nonblocking_producer = nonblocking_producer;
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->timeline_valid = false;
 	presenter->last_vsync_ns = 0;
@@ -832,10 +835,10 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	if(mode != ANDROID_CHIAKI_VIDEO_PACING_DISABLED && refresh_hz >= 119.0)
 		CHIAKI_LOGI(presenter->log, "Video presenter using immediate release at %.2f Hz; timestamped release is disabled at 120 Hz", refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods",
+		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s",
 				mode_name(mode), presenter->stream_fps, presenter->refresh_hz, timestamped ? "enabled" : "disabled",
 				(double)presenter_lead_ns(presenter) / 1000000.0,
-				presenter->max_queue_age_periods);
+				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled");
 	start_vsync_thread_if_needed(presenter);
 }
 
