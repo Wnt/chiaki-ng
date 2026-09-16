@@ -130,7 +130,7 @@
             app:key="@string/preferences_decoder_operating_rate_default_key"
             app:title="@string/preferences_decoder_operating_rate_default_title"
             app:summary="@string/preferences_decoder_operating_rate_default_summary"
-            app:defaultValue="false"
+            app:defaultValue="true"
             app:icon="@drawable/ic_fps" />
 
         <SwitchPreference
