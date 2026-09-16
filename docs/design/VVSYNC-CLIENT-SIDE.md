@@ -422,3 +422,74 @@ capture round.
 * What the GFN server actually sends for `maxQueuedFrames` and `frameDropThreshold`
   remains unknown (`GFN-VVSYNC.md` §8), so "depth 2, age 2T" is not matched against
   NVIDIA's own choice.
+
+---
+
+## 10. Addendum: the combined native-vsync init/query slot
+
+**Ticket:** PLE-117. **Method:** static disassembly of
+`libmediacodecdecoder.so`; no runtime observation.
+
+PLE-109 identified `ADAPTOR_DEC_PARAMS` index 24 as unusual. It is not a setter. In
+`MediaCodecDecoderInterface::setDecoderParam(ADAPTOR_DEC_PARAMS, void*, void*)`, the
+handler at `0x1ae08` interprets its two opaque arguments as an output pointer and an
+operation selector:
+
+```text
+setDecoderParam(24, out_bool, non_null):
+    if decoder.initializeNdkVsyncHandler(): return 0
+    // initialization failure deliberately falls through
+
+setDecoderParam(24, out_bool, null):
+    *out_bool = decoder.needVsyncEvents()
+    return 1
+```
+
+The exact branches are `cbz x3,0x1b0e8` at `0x1ae0c`, the init call at
+`0x1ae1c`, and the query call plus byte store at `0x1b0ec`-`0x1b0fc`. This also
+explains the otherwise surprising return values: zero means that native-handler
+initialization succeeded; one means that the caller received the current demand bit.
+An init failure is therefore a supported fallback negotiation, not a fatal decoder
+error.
+
+### What initialization owns
+
+`MediaCodecDecoder::initializeNdkVsyncHandler()` at `0x23968`:
+
+1. calls `createVsyncHandler()` and stores the result at decoder `+0x9e0`;
+2. calls the handler's virtual `initialize()` method;
+3. registers the decoder callback immediately only when `needVsyncEvents()` is already
+   true; and
+4. on failure, destroys the handler, clears `+0x9e0`, and returns false.
+
+`createVsyncHandler()` at `0x3671c` returns null below SDK 29. On SDK 29+,
+`MediaCodecVsyncHandler::initialize()` dynamically opens `libandroid.so`, resolves
+`AChoreographer_getInstance`, `AChoreographer_postFrameCallback64`, and
+`AChoreographer_postFrameCallbackDelayed64`, gets the thread's Choreographer, and posts
+the first delayed callback. Each callback records the timestamp, notifies the decoder
+when a callback is registered, and reposts itself. `registerCallback()` at `0x36ae0`
+stores the decoder/user callback once; later mode enablement can call it again safely.
+
+The query is demand, not capability. `needVsyncEvents()` at `0x23174` is true when any
+of dynamic DJB, committed vvsync, cinematic pacing, or EGL renderer mode 2 needs the
+clock. It says nothing about whether native initialization succeeded. This distinction
+is why the combined slot needs both operations: libgrid first attempts to install the
+SDK-29 native source, then queries whether it must supply events through the older
+`setVsyncMethods` fallback.
+
+### Consequence for chiaki-ng
+
+There is no missing implementation to port into the PLE-23 presenter. Chiaki-ng owns
+its `AChoreographer` loop directly in `video-presenter.c`, starts it only when
+`timestamped_release_enabled` is true, and falls back to immediate release if its
+vsync thread cannot start. Its minSdk-24 path uses the API-24
+`AChoreographer_postFrameCallback`; the API-29 `...Callback64` symbol is weak and used
+when present. GFN's index 24 exists at a plugin boundary so an external owner can
+negotiate between a native source and callback-function fallback; chiaki-ng has no
+equivalent boundary and gains nothing from reproducing the combined return-code
+protocol.
+
+The reusable design point is narrower: keep **capability/init success** separate from
+**current demand**. If the presenter is later split behind an interface, expose those
+as two typed operations rather than copying index 24's overloaded null-argument ABI.
+No runtime change follows from this addendum.
