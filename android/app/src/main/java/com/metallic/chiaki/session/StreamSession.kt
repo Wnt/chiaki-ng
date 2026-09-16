@@ -41,6 +41,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	private var surface: Surface? = null
 	private var surfaceRefreshHz = connectInfo.videoProfile.maxFPS.toDouble()
 	private var surfaceVsyncOffsetNanos = 0L
+	private var sustainedPerformanceModeLive = false
 	private val nativePacingMode get() = if(videoPacingEnabled) videoPacingMode else 0
 	private val nativeMaxQueueAgePeriods get() =
 		if(videoPacingEnabled && videoPacingBoundedAgeEnabled) videoPacingMaxFrameAgePeriods else 0
@@ -77,6 +78,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		{
 			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose,
 				realVideoTimestamps || videoPacingEnabled, decoderInputThread, context = context)
+			session.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 			_state.value = StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
@@ -96,12 +98,19 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	fun attachRemoteSession(remoteSession: Session)
 	{
 		session = remoteSession
+		remoteSession.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 		_state.value = StreamStateConnecting
 		val currentSurface = surface
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 				surfaceVsyncOffsetNanos, nativePacingMode, videoPresenterLead,
 				nativeMaxQueueAgePeriods)
+	}
+
+	fun setSustainedPerformanceModeLive(live: Boolean)
+	{
+		sustainedPerformanceModeLive = live
+		session?.setSustainedPerformanceModeLive(live)
 	}
 
 	fun detachRemoteSession()

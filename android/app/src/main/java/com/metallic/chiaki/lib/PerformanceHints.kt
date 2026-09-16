@@ -17,8 +17,18 @@ internal class PerformanceHints private constructor(private val implementation: 
 
 		fun create(context: Context?, enabled: Boolean, framesPerSecond: Int): PerformanceHints
 		{
-			if(!enabled || context == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+			if(!enabled)
 				return PerformanceHints(null)
+			if(context == null)
+			{
+				Log.i(TAG, "ADPF performance hints refused: application context is unavailable")
+				return PerformanceHints(null)
+			}
+			if(Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+			{
+				Log.i(TAG, "ADPF performance hints refused: requires Android 12 (API 31)")
+				return PerformanceHints(null)
+			}
 			val targetNanos = 1_000_000_000L / framesPerSecond.coerceAtLeast(1)
 			return PerformanceHints(Api31Implementation.create(context, targetNanos))
 		}
@@ -26,6 +36,7 @@ internal class PerformanceHints private constructor(private val implementation: 
 
 	private interface Implementation : Closeable
 	{
+		val isActive: Boolean
 		fun threadStarted(role: Int, tid: Int)
 		fun reportActualWorkDuration(role: Int, durationNanos: Long)
 		fun threadStopped(role: Int)
@@ -37,6 +48,8 @@ internal class PerformanceHints private constructor(private val implementation: 
 		implementation?.reportActualWorkDuration(role, durationNanos) ?: Unit
 
 	fun threadStopped(role: Int) = implementation?.threadStopped(role) ?: Unit
+
+	val isActive get() = implementation?.isActive ?: false
 
 	override fun close()
 	{
@@ -58,7 +71,7 @@ internal class PerformanceHints private constructor(private val implementation: 
 					val manager = context.getSystemService(PerformanceHintManager::class.java)
 					if(manager == null)
 					{
-						Log.w(TAG, "ADPF PerformanceHintManager is unavailable")
+						Log.i(TAG, "ADPF performance hints refused: PerformanceHintManager is unavailable")
 						null
 					}
 					else
@@ -66,7 +79,7 @@ internal class PerformanceHints private constructor(private val implementation: 
 				}
 				catch(error: RuntimeException)
 				{
-					Log.w(TAG, "Unable to obtain ADPF PerformanceHintManager", error)
+					Log.i(TAG, "ADPF performance hints refused: unable to obtain PerformanceHintManager: ${error.message ?: error.javaClass.simpleName}")
 					null
 				}
 			}
@@ -74,6 +87,10 @@ internal class PerformanceHints private constructor(private val implementation: 
 
 		private val threadIds = mutableMapOf<Int, Int>()
 		private var session: PerformanceHintManager.Session? = null
+		private var refusalLogged = false
+
+		@get:Synchronized
+		override val isActive get() = session != null
 
 		@Synchronized
 		override fun threadStarted(role: Int, tid: Int)
@@ -85,7 +102,7 @@ internal class PerformanceHints private constructor(private val implementation: 
 				val created = manager.createHintSession(threadIds.values.toIntArray(), targetNanos)
 				if(created == null)
 				{
-					Log.w(TAG, "ADPF rejected hint session for roles=${threadIds.keys}")
+					logRefusalOnce("createHintSession returned null for roles=${threadIds.keys}")
 					return
 				}
 				session = created
@@ -93,7 +110,7 @@ internal class PerformanceHints private constructor(private val implementation: 
 			}
 			catch(error: RuntimeException)
 			{
-				Log.w(TAG, "Unable to start ADPF hint session for roles=${threadIds.keys}", error)
+				logRefusalOnce("createHintSession failed for roles=${threadIds.keys}: ${error.message ?: error.javaClass.simpleName}")
 			}
 		}
 
@@ -141,6 +158,15 @@ internal class PerformanceHints private constructor(private val implementation: 
 			finally
 			{
 				session = null
+			}
+		}
+
+		private fun logRefusalOnce(reason: String)
+		{
+			if(!refusalLogged)
+			{
+				refusalLogged = true
+				Log.i(TAG, "ADPF performance hints refused: $reason")
 			}
 		}
 	}

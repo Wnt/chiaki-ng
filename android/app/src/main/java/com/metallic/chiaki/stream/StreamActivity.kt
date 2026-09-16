@@ -74,6 +74,13 @@ class StreamActivity : AppCompatActivity()
 				return false
 			return source and InputDevice.SOURCE_CLASS_JOYSTICK == InputDevice.SOURCE_CLASS_JOYSTICK
 		}
+
+		internal fun performanceModeDiagnosticFlags(requested: Boolean, sustainedLive: Boolean, adpfLive: Boolean) =
+			buildList {
+				if(requested) add("perf-oprate")
+				if(sustainedLive) add("perf-sustained")
+				if(adpfLive) add("perf-adpf")
+			}
 	}
 
 	private lateinit var viewModel: StreamViewModel
@@ -82,6 +89,7 @@ class StreamActivity : AppCompatActivity()
 	private var originalPreferredDisplayModeId: Int? = null
 	private var performanceModeRequested = false
 	private var sustainedPerformanceModeEnabled = false
+	private var sustainedPerformanceModeRefusalLogged = false
 	private var wifiLock: WifiManager.WifiLock? = null
 	private var diagnosticsOverlay: StreamDiagnosticsOverlay? = null
 
@@ -315,6 +323,7 @@ class StreamActivity : AppCompatActivity()
 			if(sustainedPerformanceModeEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N)
 				window.setSustainedPerformanceMode(false)
 			sustainedPerformanceModeEnabled = false
+			viewModel.session.setSustainedPerformanceModeLive(false)
 			return
 		}
 		if(sustainedPerformanceModeEnabled)
@@ -324,11 +333,20 @@ class StreamActivity : AppCompatActivity()
 		{
 			window.setSustainedPerformanceMode(true)
 			sustainedPerformanceModeEnabled = true
+			viewModel.session.setSustainedPerformanceModeLive(true)
 			Log.i("StreamActivity", "Sustained performance mode enabled")
 		}
 		else
 		{
-			Log.w("StreamActivity", "Sustained performance mode is unavailable")
+			val reason = if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N)
+				"requires Android 7 (API 24)"
+			else
+				"PowerManager reports unsupported"
+			if(!sustainedPerformanceModeRefusalLogged)
+			{
+				sustainedPerformanceModeRefusalLogged = true
+				Log.i("StreamActivity", "Sustained performance mode refused: $reason")
+			}
 		}
 	}
 
@@ -485,7 +503,11 @@ class StreamActivity : AppCompatActivity()
 			if(preferences.feedbackReducedIntervalEnabled) add("fb4ms")
 			if(preferences.feedbackStatsLogEnabled) add("fb-log")
 			if(connectInfo.threadPriorityBoostEnabled) add("prio")
-			if(connectInfo.performanceModeEnabled) add("perf")
+			addAll(performanceModeDiagnosticFlags(
+				connectInfo.performanceModeEnabled,
+				sustainedPerformanceModeEnabled,
+				viewModel.session.session?.adpfPerformanceModeLive == true
+			))
 			if(preferences.debandingEnabled) add("deband")
 			if(preferences.debandRenderWhenDirtyEnabled) add("dirty")
 			if(preferences.streamWindowOptimizationsEnabled) add("window")
