@@ -3,6 +3,7 @@
 #ifndef CHIAKI_JNI_VIDEO_PRESENTER_TIMING_H
 #define CHIAKI_JNI_VIDEO_PRESENTER_TIMING_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum android_chiaki_video_presenter_period_observation_t
@@ -20,5 +21,8 @@ int64_t android_chiaki_video_presenter_seed_period(double panel_refresh_hz,
 
 int64_t android_chiaki_video_presenter_update_period(int64_t current_period_ns,
 		int64_t observed_period_ns);
+
+bool android_chiaki_video_presenter_timestamped_release_eligible(int pacing_mode,
+		double refresh_hz, unsigned int stream_fps, bool high_refresh_enabled);
 
 #endif

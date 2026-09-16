@@ -10,6 +10,27 @@ static bool within_five_percent(int64_t value, int64_t target)
 	return difference <= target / 20;
 }
 
+static bool refresh_matches(double refresh_hz, unsigned int stream_fps)
+{
+	double difference = refresh_hz - (double)stream_fps;
+	return difference >= -0.5 && difference <= 0.5;
+}
+
+bool android_chiaki_video_presenter_timestamped_release_eligible(int pacing_mode,
+		double refresh_hz, unsigned int stream_fps, bool high_refresh_enabled)
+{
+	// Balanced and smoothest are the timestamped pacing modes. Keep the legacy
+	// 119 Hz gate unless the experimental high-refresh setting explicitly bypasses it.
+	if(pacing_mode != 2 && pacing_mode != 3)
+		return false;
+	if(high_refresh_enabled)
+		return true;
+	if(refresh_hz >= 119.0)
+		return false;
+	return (refresh_hz >= 59.0 && refresh_hz <= 61.0)
+			|| refresh_matches(refresh_hz, stream_fps);
+}
+
 AndroidChiakiVideoPresenterPeriodObservation android_chiaki_video_presenter_classify_period(
 		int64_t current_period_ns, int64_t observed_period_ns)
 {

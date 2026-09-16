@@ -14,6 +14,7 @@ class AndroidChiakiVideoPresenterConfigTest
 		val config = AndroidChiakiVideoPresenterConfig()
 
 		assertFalse(config.pacingEnabled)
+		assertFalse(config.pacingHighRefreshEnabled)
 		assertEquals(2, config.pacingMode)
 		assertEquals(0, config.presenterLead)
 		assertFalse(config.boundedAgeEnabled)

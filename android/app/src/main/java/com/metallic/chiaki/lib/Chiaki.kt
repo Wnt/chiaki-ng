@@ -67,6 +67,7 @@ data class ConnectVideoProfile(
 @Parcelize
 data class AndroidChiakiVideoPresenterConfig(
 	val pacingEnabled: Boolean = false,
+	val pacingHighRefreshEnabled: Boolean = false,
 	val pacingMode: Int = 2,
 	val presenterLead: Int = 0,
 	val boundedAgeEnabled: Boolean = false,

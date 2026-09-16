@@ -202,6 +202,14 @@
 			app:defaultValue="false"
 			app:icon="@drawable/ic_fps" />
 
+		<SwitchPreference
+			app:key="@string/preferences_video_pacing_high_refresh_enabled_key"
+			app:title="@string/preferences_video_pacing_high_refresh_enabled_title"
+			app:summary="@string/preferences_video_pacing_high_refresh_enabled_summary"
+			app:defaultValue="false"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
+			app:icon="@drawable/ic_fps" />
+
 		<ListPreference
 			app:key="@string/preferences_video_pacing_mode_key"
 			app:title="@string/preferences_video_pacing_mode_title"

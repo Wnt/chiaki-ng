@@ -41,6 +41,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
+		preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled
 		preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled
 		preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
@@ -74,6 +75,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
+			preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled = value
 			preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled = value
 			preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value

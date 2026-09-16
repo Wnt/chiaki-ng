@@ -40,6 +40,7 @@ typedef enum android_chiaki_video_presenter_lead_t
 typedef struct android_chiaki_video_presenter_config_t
 {
 	bool pacing_enabled;
+	bool pacing_high_refresh_enabled;
 	AndroidChiakiVideoPacingMode pacing_mode;
 	AndroidChiakiVideoPresenterLead presenter_lead;
 	bool bounded_age_enabled;
@@ -50,6 +51,7 @@ typedef struct android_chiaki_video_presenter_config_t
 
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT { \
 	.pacing_enabled = false, \
+	.pacing_high_refresh_enabled = false, \
 	.pacing_mode = ANDROID_CHIAKI_VIDEO_PACING_BALANCED, \
 	.presenter_lead = ANDROID_CHIAKI_VIDEO_PRESENTER_LEAD_2MS, \
 	.bounded_age_enabled = false, \
