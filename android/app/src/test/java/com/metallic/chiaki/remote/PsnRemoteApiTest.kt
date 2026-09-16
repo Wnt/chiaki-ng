@@ -152,6 +152,47 @@ class PsnRemoteApiTest
 		)
 	}
 
+	/**
+	 * PLE-327: upstream's `session_connrequest_fmt` is a printf format, so an OFFER always carries
+	 * `natType`, `defaultRouteMacAddr`, `localPeerAddr.platform` and `mappedAddr`/`mappedPort` on every
+	 * candidate (`holepunch.c:160-176`). kotlinx.serialization drops a field that equals its default,
+	 * which cost us all five and left the console with no natType to read: it re-offered and then
+	 * TERMINATEd (proven on the S25, build/captures/ple326/run3-logcat.txt). Every field stays on the
+	 * wire, in upstream's order.
+	 */
+	@Test fun offerCarriesEveryFieldUpstreamAlwaysSends() = runBlocking {
+		val session = PsnSession("11111111-2222-4333-8444-555555555555", "12345678901234567")
+		val device = PsnDevice("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF", "Fixture PS5")
+		val request = PsnConnectionRequest(
+			sid = 33990,
+			peerSid = 12976,
+			skey = "AAAAAAAAAAAAAAAAAAAAAA==",
+			candidate = listOf(
+				PsnCandidate("STATIC", "88.192.35.229", port = 37589),
+				PsnCandidate("LOCAL", "192.168.1.221", port = 37589)
+			),
+			localPeerAddr = PsnPeerAddress("12345678901234567", "REMOTE_PLAY"),
+			localHashedId = "RMvOiOW1BMAlMn3BJBW5Jzp8zJ8="
+		)
+
+		val envelope = api.signalEnvelope(session, device, PsnSignalMessage("OFFER", 2, connRequest = request))
+
+		val body = envelope.substringAfter("body=").substringBefore("\",\"to\"")
+		for(field in listOf("natType", "defaultRouteMacAddr", "mappedAddr", "mappedPort", "platform"))
+			assertTrue("$field missing from $body", body.contains(field))
+		assertEquals(
+			"""{\"action\":\"OFFER\",\"reqId\":2,\"error\":0,\"connRequest\":""" +
+				"""{\"sid\":33990,\"peerSid\":12976,\"skey\":\"AAAAAAAAAAAAAAAAAAAAAA==\",\"natType\":2,""" +
+				"""\"candidate\":[""" +
+				"""{\"type\":\"STATIC\",\"addr\":\"88.192.35.229\",\"mappedAddr\":\"0.0.0.0\",\"port\":37589,\"mappedPort\":0},""" +
+				"""{\"type\":\"LOCAL\",\"addr\":\"192.168.1.221\",\"mappedAddr\":\"0.0.0.0\",\"port\":37589,\"mappedPort\":0}],""" +
+				"""\"defaultRouteMacAddr\":\"\",""" +
+				"""\"localPeerAddr\":{\"accountId\":\"12345678901234567\",\"platform\":\"REMOTE_PLAY\"},""" +
+				"""\"localHashedId\":\"RMvOiOW1BMAlMn3BJBW5Jzp8zJ8=\"}}""",
+			body
+		)
+	}
+
 	@Test fun httpFailureCarriesStatusAndErrorExcerpt() = runBlocking {
 		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")))
 		server.enqueue(MockResponse().setResponseCode(500).setBody("{\"error\":{\"code\":2285,\n\"message\":\"server\"}}"))

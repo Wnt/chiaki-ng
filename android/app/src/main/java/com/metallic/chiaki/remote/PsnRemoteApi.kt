@@ -261,9 +261,20 @@ class PsnRemoteApi(
 		put("reqId", message.reqId)
 		put("error", message.error)
 		put("connRequest", message.connRequest?.let {
-			json.encodeToJsonElement(PsnConnectionRequest.serializer(), it)
+			signalFormat.encodeToJsonElement(PsnConnectionRequest.serializer(), it)
 		} ?: JsonObject(emptyMap()))
 	}
+
+	/**
+	 * Upstream's `session_connrequest_fmt` is a printf format, so every field is always on the wire:
+	 * `natType`, `defaultRouteMacAddr`, `platform` inside `localPeerAddr`, and `mappedAddr`/`mappedPort`
+	 * on every candidate (holepunch.c:160-176). kotlinx.serialization omits a field that equals its
+	 * default, which silently dropped all five from our OFFER while our own trace still printed them from
+	 * the object -- the console read the bytes, found no natType, and never answered (PLE-327, proven by
+	 * the raw-JSON capture in build/captures/ple326/run3-logcat.txt). Encoding defaults is what keeps the
+	 * payload shaped like the console's own.
+	 */
+	private val signalFormat = Json { encodeDefaults = true; explicitNulls = false }
 
 	private fun jsonRequest(path: String, body: JsonObject, userAgent: String? = null): Request.Builder =
 		Request.Builder().url(apiUrl(path)).apply {
