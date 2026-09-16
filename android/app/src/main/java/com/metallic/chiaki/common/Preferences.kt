@@ -430,6 +430,11 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
 	val packetLossMax get() = packetLossMaxPercent / 100.0
 
+	val adaptiveLossReportKey get() = resources.getString(R.string.preferences_adaptive_loss_report_key)
+	var adaptiveLossReport
+		get() = sharedPreferences.getBoolean(adaptiveLossReportKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(adaptiveLossReportKey, value).apply() }
+
 	// PLE-75 / PLE-167 decoder experiments; 0 / false = the codec's own defaults.
 	// PLE-116: ceiling 4000 so the 960 / 1920 sweep is reachable (1000 silently clamped 1920 before).
 	fun validateDecoderOperatingRate(rate: Int) = max(0, min(4000, rate))

@@ -480,6 +480,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jboolean decoder_realtime_priority = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderRealtimePriority", "Z"));
 	jint video_timestamp_rate_hz = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "videoTimestampRateHz", "I"));
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
+	jboolean adaptive_loss_report = E->GetBooleanField(env, connect_info_obj,
+			E->GetFieldID(env, connect_info_class, "adaptiveLossReport", "Z"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
 			E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
 	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
@@ -604,7 +606,10 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 
 	connect_info.video_profile_auto_downgrade = true;
 	connect_info.packet_loss_max = (double)packet_loss_max;
+	connect_info.adaptive_loss_report = adaptive_loss_report;
 	CHIAKI_LOGI(log, "Configured packet loss reported max: %.1f%%", connect_info.packet_loss_max * 100.0);
+	if(connect_info.adaptive_loss_report)
+		CHIAKI_LOGI(log, "Adaptive loss-report experiment enabled");
 
 	session = CHIAKI_NEW(AndroidChiakiSession);
 	if(!session)

@@ -271,6 +271,13 @@
             app:icon="@drawable/ic_bitrate"/>
 
         <SwitchPreference
+            app:key="@string/preferences_adaptive_loss_report_key"
+            app:title="@string/preferences_adaptive_loss_report_title"
+            app:summary="@string/preferences_adaptive_loss_report_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_bitrate" />
+
+        <SwitchPreference
             app:key="@string/preferences_takion_video_packet_reordering_disabled_key"
             app:title="@string/preferences_takion_video_packet_reordering_disabled_title"
             app:summary="@string/preferences_takion_video_packet_reordering_disabled_summary"

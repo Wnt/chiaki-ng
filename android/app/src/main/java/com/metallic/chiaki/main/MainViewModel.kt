@@ -122,6 +122,7 @@ class MainViewModel(
 		threadPriorityBoostEnabled = preferences.threadPriorityBoostEnabled,
 		decoderLateFrameRecoveryEnabled = preferences.decoderLateFrameRecoveryEnabled,
 		packetLossMax = preferences.packetLossMax,
+		adaptiveLossReport = preferences.adaptiveLossReport,
 		takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 		feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 		feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,

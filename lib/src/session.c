@@ -271,6 +271,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, Chiaki
 	session->connect_info.feedback_state_min_interval_ms = connect_info->feedback_state_min_interval_ms;
 	session->connect_info.feedback_stats_log_interval_ms = connect_info->feedback_stats_log_interval_ms;
 	session->connect_info.stream_diagnostics_enabled = connect_info->stream_diagnostics_enabled;
+	session->connect_info.adaptive_loss_report = connect_info->adaptive_loss_report;
 
 	return CHIAKI_ERR_SUCCESS;
 

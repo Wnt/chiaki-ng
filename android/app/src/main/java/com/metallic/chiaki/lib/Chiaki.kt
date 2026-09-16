@@ -87,6 +87,7 @@ data class ConnectInfo(
 	val threadPriorityBoostEnabled: Boolean,
 	val decoderLateFrameRecoveryEnabled: Boolean,
 	val packetLossMax: Double,
+	val adaptiveLossReport: Boolean = false,
 	val takionVideoPacketReorderingDisabled: Boolean,
 	val feedbackStateMinIntervalMs: Int = 0,
 	val feedbackStatsLogIntervalMs: Int = 0,

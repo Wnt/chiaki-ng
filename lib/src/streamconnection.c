@@ -178,7 +178,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	takion_info.disable_video_packet_reordering = session->connect_info.disable_video_packet_reordering;
 	bool stream_stats_enabled = session->connect_info.stream_diagnostics_enabled
 		|| session->connect_info.feedback_stats_log_interval_ms > 0;
-	takion_info.diagnostics_enabled = stream_stats_enabled;
+	takion_info.diagnostics_enabled = stream_stats_enabled
+		|| session->connect_info.adaptive_loss_report;
 	takion_info.video_fps = session->connect_info.video_profile.max_fps;
 
 	takion_info.cb = stream_connection_takion_cb;
@@ -235,6 +236,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 
 	err = chiaki_congestion_control_start(&stream_connection->congestion_control, &stream_connection->takion,
 		&stream_connection->packet_stats, stream_connection->packet_loss_max,
+		session->connect_info.adaptive_loss_report,
 		stream_stats_enabled ? &stream_connection->network_stats : NULL);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
@@ -768,17 +770,28 @@ static void stream_connection_takion_data_idle(ChiakiStreamConnection *stream_co
 	case tkproto_TakionMessage_PayloadType_CONNECTIONQUALITY:
 	{
 		tkproto_ConnectionQualityPayload q = msg.connection_quality_payload;
-		CHIAKI_LOGV(
-			stream_connection->log,
-			"StreamConnection received connection quality: target_bitrate=%d, "
-			"upstream_bitrate=%d, upstream_loss=%.4f, "
-			"disable_upstream_audio=%d, rtt=%.4f, loss=%lld",
-			 q.target_bitrate, q.upstream_bitrate,
-			 q.upstream_loss,
-			 q.disable_upstream_audio, q.rtt, q.loss);
 		uint64_t measured_bitrate_bps = chiaki_stream_stats_bitrate(
 			&stream_connection->video_receiver->frame_processor.stream_stats,
 			stream_connection->session->connect_info.video_profile.max_fps);
+		if(stream_connection->session->connect_info.adaptive_loss_report)
+		{
+			CHIAKI_LOGI(stream_connection->log,
+				"Adaptive loss report CONNECTIONQUALITY: target_bitrate_bps=%d measured_throughput_bps=%llu upstream_bitrate=%d upstream_loss=%.4f disable_upstream_audio=%d rtt_ms=%.4f server_loss=%lld",
+				q.target_bitrate, (unsigned long long)measured_bitrate_bps,
+				q.upstream_bitrate, q.upstream_loss, q.disable_upstream_audio,
+				q.rtt, q.loss);
+		}
+		else
+		{
+			CHIAKI_LOGV(
+				stream_connection->log,
+				"StreamConnection received connection quality: target_bitrate=%d, "
+				"upstream_bitrate=%d, upstream_loss=%.4f, "
+				"disable_upstream_audio=%d, rtt=%.4f, loss=%lld",
+				 q.target_bitrate, q.upstream_bitrate,
+				 q.upstream_loss,
+				 q.disable_upstream_audio, q.rtt, q.loss);
+		}
 		stream_connection->measured_bitrate = measured_bitrate_bps / 1000000.0;
 		if(stream_connection->session->connect_info.stream_diagnostics_enabled
 				|| stream_connection->session->connect_info.feedback_stats_log_interval_ms > 0)

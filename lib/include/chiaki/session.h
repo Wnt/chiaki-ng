@@ -102,6 +102,7 @@ typedef struct chiaki_connect_info_t
 	chiaki_socket_t *rudp_sock;
 	uint8_t psn_account_id[CHIAKI_PSN_ACCOUNT_ID_SIZE];
 	double packet_loss_max;
+	bool adaptive_loss_report; // false by default; uncap measured loss only during sustained poor conditions
 	bool enable_idr_on_fec_failure;
 	bool disable_video_packet_reordering;
 	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
@@ -276,6 +277,7 @@ typedef struct chiaki_session_t
 		uint32_t feedback_state_min_interval_ms;
 		uint32_t feedback_stats_log_interval_ms;
 		bool stream_diagnostics_enabled;
+		bool adaptive_loss_report;
 	} connect_info;
 
 	ChiakiTarget target;
