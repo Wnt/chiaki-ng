@@ -129,6 +129,14 @@
                         app:iconTint="?attr/colorOnSecondaryContainer" />
                 </LinearLayout>
 
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/summaryEndCause"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

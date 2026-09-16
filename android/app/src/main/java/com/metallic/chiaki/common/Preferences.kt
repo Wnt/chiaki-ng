@@ -217,6 +217,12 @@ class Preferences(context: Context)
 	/** Window of the general per-stream stats line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
 
+	val streamEndCauseProbeEnabledKey get() = resources.getString(R.string.preferences_stream_end_cause_probe_enabled_key)
+	/** PLE-262: probe the console after it ends a stream, to name a takeover on the TV. Runs only after the stream ended. */
+	var streamEndCauseProbeEnabled
+		get() = sharedPreferences.getBoolean(streamEndCauseProbeEnabledKey, true)
+		set(value) { sharedPreferences.edit().putBoolean(streamEndCauseProbeEnabledKey, value).apply() }
+
 	val streamDiagnosticsOverlayEnabledKey get() = resources.getString(R.string.preferences_stream_diagnostics_overlay_enabled_key)
 	var streamDiagnosticsOverlayEnabled
 		get() = sharedPreferences.getBoolean(streamDiagnosticsOverlayEnabledKey, false)

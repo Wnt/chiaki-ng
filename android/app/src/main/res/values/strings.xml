@@ -190,6 +190,8 @@
     <string name="preferences_gamepad_trigger_fallback_enabled_summary">Use brake/gas for L2/R2 when a controller does not report working trigger axes (applies to the next stream)</string>
     <string name="preferences_feedback_reduced_interval_enabled_title">Reduced feedback interval (experimental)</string>
     <string name="preferences_feedback_reduced_interval_enabled_summary">Send controller feedback state at most every 4ms instead of 8ms; untested on PS5, revert if it causes disconnects or dropped input (applies to the next stream)</string>
+    <string name="preferences_stream_end_cause_probe_enabled_title">Explain console-side stream ends</string>
+    <string name="preferences_stream_end_cause_probe_enabled_summary">When the console ends a stream, ask it on the local network whether it was taken over on the TV or went to rest, and say so on the home screen</string>
     <string name="preferences_feedback_stats_log_enabled_title">Log stream statistics (diagnostic)</string>
     <string name="preferences_feedback_stats_log_enabled_summary">Write one line per second to the session log with video, network, feedback, RTT, and audio statistics (applies to the next stream)</string>
     <string name="preferences_stream_diagnostics_overlay_enabled_title">In-stream diagnostics overlay</string>
@@ -252,6 +254,8 @@
     <string name="console_status_registration_required">Registration required</string>
     <string name="console_status_refreshing">Refreshing consoles</string>
     <string name="stream_summary_title">Last session</string>
+    <string name="stream_summary_end_console_takeover">The stream ended because someone started playing on the TV with the console\'s own controller. A PS5 allows one session at a time.</string>
+    <string name="stream_summary_end_console_rest">The stream ended because the console went into rest mode.</string>
     <string name="stream_summary_duration">Duration</string>
     <string name="stream_summary_latency">Avg latency</string>
     <string name="stream_summary_drops">Drops</string>
@@ -319,6 +323,7 @@
     <string name="preferences_gamepad_trigger_fallback_enabled_key">stream_gamepad_trigger_fallback</string>
     <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>
     <string name="preferences_feedback_stats_log_enabled_key">stream_feedback_stats_log</string>
+    <string name="preferences_stream_end_cause_probe_enabled_key">stream_end_cause_probe</string>
     <string name="preferences_stream_diagnostics_overlay_enabled_key">stream_diagnostics_overlay</string>
 	<string name="preferences_audio_buffer_bursts_key">stream_audio_buffer_bursts</string>
 	<string name="preferences_audio_fifo_ms_key">stream_audio_fifo_ms</string>

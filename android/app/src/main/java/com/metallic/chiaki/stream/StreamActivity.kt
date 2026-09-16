@@ -111,6 +111,7 @@ class StreamActivity : AppCompatActivity()
 	private var displayManager: DisplayManager? = null
 	private var displayListener: DisplayManager.DisplayListener? = null
 	private val summaryAccumulator = StreamSummaryAccumulator()
+	private var quitEndReason: StreamEndReason? = null
 	private var summaryResultSet = false
 	private val networkQualityClassifier = NetworkQualityClassifier()
 	private var networkQuality = NetworkQualitySnapshot.UNKNOWN
@@ -907,6 +908,8 @@ class StreamActivity : AppCompatActivity()
 			is StreamStateQuit ->
 			{
 				summaryAccumulator.ended(SystemClock.elapsedRealtime())
+				quitEndReason = StreamEndReason(state.reason.value, state.reasonString,
+					viewModel.session.connectInfo.host, viewModel.session.connectInfo.ps5)
 				if(dialogContents != StreamQuitDialog)
 				{
 					if(state.reason.isError)
@@ -1015,7 +1018,7 @@ class StreamActivity : AppCompatActivity()
 		if(!summaryResultSet)
 		{
 			summaryAccumulator.build(SystemClock.elapsedRealtime())?.let { summary ->
-				setResult(RESULT_OK, Intent().putExtra(EXTRA_STREAM_SUMMARY, summary))
+				setResult(RESULT_OK, Intent().putExtra(EXTRA_STREAM_SUMMARY, summary.copy(endReason = quitEndReason)))
 				summaryResultSet = true
 			}
 		}

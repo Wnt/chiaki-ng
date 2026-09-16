@@ -373,6 +373,13 @@
             app:icon="@drawable/ic_gamepad" />
 
         <SwitchPreference
+            app:key="@string/preferences_stream_end_cause_probe_enabled_key"
+            app:title="@string/preferences_stream_end_cause_probe_enabled_title"
+            app:summary="@string/preferences_stream_end_cause_probe_enabled_summary"
+            app:defaultValue="true"
+            app:icon="@drawable/ic_fps" />
+
+        <SwitchPreference
             app:key="@string/preferences_stream_diagnostics_overlay_enabled_key"
             app:title="@string/preferences_stream_diagnostics_overlay_enabled_title"
             app:summary="@string/preferences_stream_diagnostics_overlay_enabled_summary"

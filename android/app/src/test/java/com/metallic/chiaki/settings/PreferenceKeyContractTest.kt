@@ -70,6 +70,7 @@ class PreferenceKeyContractTest
 			"@string/preferences_resolution_key",
 			"@string/preferences_rumble_enabled_key",
 			"@string/preferences_stream_diagnostics_overlay_enabled_key",
+			"@string/preferences_stream_end_cause_probe_enabled_key",
 			"@string/preferences_swap_cross_moon_key",
 			"@string/preferences_takion_video_packet_reordering_disabled_key",
 			"@string/preferences_thread_priority_boost_enabled_key",
