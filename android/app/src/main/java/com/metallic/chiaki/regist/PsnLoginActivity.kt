@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.Toast
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -277,6 +278,12 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun markBrowserOpened()
 	{
+		// Pressing the tab's action button is the only way an Android app ever learns a Custom Tab's
+		// address (PLE-334: every other route is closed -- our own WebView is refused by both credential
+		// providers, and a redirect we could claim is not registered against Sony's client id). So the
+		// user has to know which control finishes the job, and once the tab is up this toast is the only
+		// surface of ours he can still see. One line, and never an instruction screen.
+		Toast.makeText(this, R.string.psn_login_finish_hint, Toast.LENGTH_LONG).show()
 		browserLaunched = true
 		browserPauseObserved = false
 		browserOpenedAtMs = System.currentTimeMillis()
@@ -376,6 +383,7 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
 		binding.pinLinkButton.visibility = View.GONE
+		binding.finishHintTextView.visibility = View.GONE
 		binding.progressBar.visibility = View.VISIBLE
 		binding.progressBar.isIndeterminate = true
 		lifecycleScope.launch {
@@ -402,6 +410,7 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
 		binding.pinLinkButton.visibility = View.GONE
+		binding.finishHintTextView.visibility = View.GONE
 		binding.progressBar.visibility = View.GONE
 		MaterialAlertDialogBuilder(this)
 			.setTitle(R.string.psn_login_failed)
@@ -429,6 +438,7 @@ class PsnLoginActivity : AppCompatActivity()
 	{
 		binding.continueButton.visibility = View.GONE
 		binding.pinLinkButton.visibility = View.GONE
+		binding.finishHintTextView.visibility = View.GONE
 		binding.webView.visibility = View.VISIBLE
 		binding.progressBar.visibility = View.VISIBLE
 		binding.progressBar.isIndeterminate = true
@@ -441,12 +451,14 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.progressBar.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
 		binding.pinLinkButton.visibility = View.GONE
+		binding.finishHintTextView.visibility = View.GONE
 	}
 
 	/** The tab came back without a code twice after reopening: sign in again, or link with the PIN (PLE-313). */
 	private fun showBrowserReturnedWithoutCode()
 	{
 		showBrowserWaiting()
+		binding.finishHintTextView.visibility = View.VISIBLE
 		binding.continueButton.visibility = View.VISIBLE
 		if(offerPinLink)
 			binding.pinLinkButton.visibility = View.VISIBLE

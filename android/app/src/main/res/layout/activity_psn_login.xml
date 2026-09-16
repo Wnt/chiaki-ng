@@ -42,6 +42,18 @@
             android:gravity="center_horizontal"
             android:orientation="vertical">
 
+            <TextView
+                android:id="@+id/finishHintTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:maxWidth="280dp"
+                android:gravity="center_horizontal"
+                android:text="@string/psn_login_finish_hint"
+                android:textAppearance="?attr/textAppearanceBody2"
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
+
             <Button
                 android:id="@+id/continueButton"
                 android:layout_width="wrap_content"
