@@ -35,10 +35,12 @@ import com.metallic.chiaki.databinding.ActivityPsnLoginBinding
 import kotlinx.coroutines.launch
 
 /**
- * Signs in inside a WebView, which reads Sony's redirect itself: no settings, nothing to paste.
- * Only when Sony asks for a passkey, which the WebView cannot provide, does the sign-in move to a
- * browser tab. That tab carries a Finish sign-in button handing the page address back to the app,
- * directly where the browser allows it and otherwise as soon as the tab is closed.
+ * Signs in inside the default browser's Custom Tab, the one surface that can do everything Sony's
+ * page asks for: passkeys included, which the app's own WebView can never provide for this package
+ * (Sony's assetlinks.json names only Sony's apps). One surface means the address is typed once
+ * (PLE-312: starting in the WebView and moving to the tab on the passkey prompt asked for it twice,
+ * because the two have separate cookie jars). The tab carries a Finish sign-in button handing the
+ * page address back to the app. The WebView remains only for a device with no Custom Tabs browser.
  */
 class PsnLoginActivity : AppCompatActivity()
 {
@@ -83,15 +85,20 @@ class PsnLoginActivity : AppCompatActivity()
 		browserLaunched = savedInstanceState?.getBoolean(STATE_BROWSER_LAUNCHED) ?: false
 		browserPauseObserved = savedInstanceState?.getBoolean(STATE_BROWSER_PAUSE_OBSERVED) ?: false
 		browserOpenedAtMs = savedInstanceState?.getLong(STATE_BROWSER_OPENED_AT) ?: 0L
-		if(browserSignIn)
-			showBrowserWaiting()
-		else
+		when
 		{
-			showWebView()
-			if(savedInstanceState == null)
-				binding.webView.loadUrl(PsnAuth.loginUrl())
-			else
+			browserSignIn -> showBrowserWaiting()
+			savedInstanceState != null ->
+			{
+				showWebView()
 				binding.webView.restoreState(savedInstanceState)
+			}
+			launchBrowserSignIn(tabOnly = true) -> Unit
+			else ->
+			{
+				showWebView()
+				binding.webView.loadUrl(PsnAuth.loginUrl())
+			}
 		}
 	}
 
@@ -197,13 +204,17 @@ class PsnLoginActivity : AppCompatActivity()
 		}
 	}
 
-	private fun launchBrowserSignIn()
+	/**
+	 * Opens the sign-in in a browser: a Custom Tab with the Finish sign-in button, or with [tabOnly]
+	 * false any browser at all. Returns false when nothing opened, leaving the WebView as the way in.
+	 */
+	private fun launchBrowserSignIn(tabOnly: Boolean = false): Boolean
 	{
 		val uri = Uri.parse(PsnAuth.loginUrl())
 		val tabIntent = customTabIntent(uri)
 		val intents = listOfNotNull(
 			tabIntent,
-			Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+			Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).takeUnless { tabOnly }
 		)
 		for(browserIntent in intents)
 		{
@@ -215,7 +226,7 @@ class PsnLoginActivity : AppCompatActivity()
 				binding.webView.loadUrl("about:blank")
 				browserSignIn = true
 				showBrowserWaiting()
-				return
+				return true
 			}
 			catch(_: ActivityNotFoundException)
 			{
@@ -224,6 +235,7 @@ class PsnLoginActivity : AppCompatActivity()
 		}
 		// No browser at all: the WebView is the only way left, even without passkeys.
 		browserLaunched = false
+		return false
 	}
 
 	private fun markBrowserOpened()

@@ -8,7 +8,11 @@
     android/psn-mock/onboarding_test.py --scenario expired-code  # any scenario from psn_mock.SCENARIOS
 
 It starts from a first-run state of com.metallic.chiaki.psnmock (a separate app from the
-real one), taps Sign in, fills the mock's password form in the browser and waits. It FAILS if:
+real one), taps Sign in, fills the mock's password form in the browser tab, taps the tab's
+Finish sign-in button on the blank redirect page and waits. With --play it then taps the
+listed console: the mock has no push service, so the link fails with HTTP 501, and the run
+checks that the failure is shown with a live Retry and that no NetworkOnMainThreadException
+was logged (PLE-312). It FAILS if:
   * anything other than the app or the browser comes to the front (Android Settings above all),
   * the app shows an instruction paragraph,
   * the screen stops changing without reaching an end state (a dead end),
@@ -148,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--serial", default=os.environ.get("ANDROID_SERIAL", "emulator-5554"))
     parser.add_argument("--timeout", type=float, default=150)
     parser.add_argument("--stall", type=float, default=40, help="seconds without a screen change that count as a dead end")
+    parser.add_argument("--play", action="store_true", help="after the console list, tap the console and check Retry stays alive")
     args = parser.parse_args(argv)
 
     host = HOSTS[args.link]
@@ -155,10 +160,14 @@ def main(argv: list[str] | None = None) -> int:
     out = WORKSPACE / "build/psn-mock" / f"onboarding-{run_id}-{args.link}-{args.scenario}"
     out.mkdir(parents=True, exist_ok=True)
     account = f"{args.scenario}+{run_id.lower()}@mock"
-    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "account": account, "taps": 0, "screens": []}
+    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "play": args.play, "account": account, "taps": 0, "screens": []}
 
     def finish(result: str, reason: str) -> int:
         summary.update(result=result, reason=reason)
+        try:
+            (out / "psnconsoles.txt").write_text(device.shell("logcat -d -s PsnConsoles", check=False))
+        except Exception:
+            pass
         try:
             events = [e for e in http_json(f"https://{host}/__mock/events?since={since}")["events"] if e.get("account") in (account, None)]
         except Exception as exc:  # the verdict does not depend on it
@@ -208,7 +217,13 @@ def main(argv: list[str] | None = None) -> int:
     started = last_change = time.monotonic()
     last_signature = ""
     signed_in_tapped = submitted = False
+    finish_taps = 0
+    play_phase = ""  # "" until the console list shows; then "tapped", "retried"
+    play_failures = 0
     seen_signatures: set[str] = set()
+
+    def play_failure_count() -> int:
+        return device.shell("logcat -d -s PsnConsoles", check=False).count("PSN play failed")
 
     while True:
         now = time.monotonic()
@@ -244,9 +259,34 @@ def main(argv: list[str] | None = None) -> int:
 
         by_id = {n.rid.rsplit("/", 1)[-1]: n for n in nodes if n.rid}
         names = [n.text for n in mine if n.rid.endswith("nameTextView")]
-        if foreground == PKG and "PS5 mock" in names:
+        if foreground == PKG and "PS5 mock" in names and not play_phase:
             summary["seconds"] = round(now - started, 1)
-            return finish("PASS", f"signed in; console list shows {names}")
+            if not args.play:
+                return finish("PASS", f"signed in; console list shows {names}")
+            # PLE-312: the link runs the PSN play path. The mock answers the push lookup with 501, so the
+            # honest outcome is an error with a live Retry, and never NetworkOnMainThreadException.
+            play = [n for n in mine if n.rid.endswith("playButton")]
+            if not play:
+                return finish("FAIL", "console list shows PS5 mock but no Play button")
+            device.tap(play[0])
+            summary["taps"] += 1
+            play_phase = "tapped"
+            continue
+        if play_phase and foreground == PKG:
+            log_text = device.shell("logcat -d -s PsnConsoles", check=False)
+            if "NetworkOnMainThreadException" in log_text:
+                return finish("FAIL", "the play path ran network on the main thread (NetworkOnMainThreadException)")
+            failures = log_text.count("PSN play failed")
+            if play_phase == "tapped" and failures >= 1 and "retryPsnActionButton" in by_id:
+                summary["first_play_failure"] = next(l for l in log_text.splitlines() if "PSN play failed" in l).split("PsnConsoles:", 1)[-1].strip()
+                device.tap(by_id["retryPsnActionButton"])
+                summary["taps"] += 1
+                play_phase = "retried"
+                continue
+            if play_phase == "retried" and failures >= 2 and "retryPsnActionButton" in by_id:
+                summary["retry_play_failure"] = [l for l in log_text.splitlines() if "PSN play failed" in l][-1].split("PsnConsoles:", 1)[-1].strip()
+                summary["play_failures"] = failures
+                return finish("PASS", f"link failed honestly and Retry re-ran it: {summary['retry_play_failure']}")
 
         if foreground == PKG and "onboardingSignInButton" in by_id and not signed_in_tapped:
             device.tap(by_id["onboardingSignInButton"])
@@ -263,6 +303,16 @@ def main(argv: list[str] | None = None) -> int:
             device.tap(button)
             summary["taps"] += 3
             submitted = True
+            continue
+        # On the blank redirect page the tab's action button hands the address back (PLE-279). A press
+        # before the redirect does nothing, so the driver presses it until the app is in front again.
+        finish_button = next((n for n in nodes if n.package in BROWSERS and n.desc == "Finish sign-in"), None)
+        if foreground in BROWSERS and submitted and "sign-in" not in by_id and finish_button is not None and finish_taps < 5:
+            device.tap(finish_button)
+            finish_taps += 1
+            summary["taps"] += 1
+            summary["finish_taps"] = finish_taps
+            time.sleep(2)
             continue
 
         stalled = now - last_change
