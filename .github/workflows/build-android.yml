@@ -58,7 +58,7 @@ jobs:
           echo "$KS" | base64 -d > ~/.android/debug.keystore
           chmod 600 ~/.android/debug.keystore
           keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey \
-            | grep 'SHA-256' | tr -d ': ' | sed 's/.*SHA-256//' | tr 'A-F' 'a-f' > ~/.android/expected-digest
+            | sed -n 's/.*SHA-256): *//p' | tr -d ':' | tr 'A-F' 'a-f' > ~/.android/expected-digest
           echo "keystore certificate digest: $(cat ~/.android/expected-digest)"
 
       - name: Build debug APK
