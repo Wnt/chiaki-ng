@@ -60,6 +60,7 @@ typedef struct android_chiaki_video_decoder_t
 	unsigned int fps;
 	unsigned int pts_rate_hz;
 	bool real_pts_enabled;
+	bool stats_log_enabled;
 	ChiakiSeqNum16Unwrapper frame_index_unwrapper;
 	AndroidChiakiVideoPresenter presenter;
 	ChiakiThread input_thread;
