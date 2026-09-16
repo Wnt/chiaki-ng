@@ -11,6 +11,8 @@
 
 #include "test_log.h"
 
+MunitResult test_network_stats_all(void);
+
 
 static MunitResult test_av_packet_parse(const MunitParameter params[], void *user)
 {
@@ -196,6 +198,7 @@ static MunitResult test_takion_format_congestion(const MunitParameter params[], 
 	munit_assert_memory_equal(sizeof(buf), buf, buf_expected_mac);
 
 	chiaki_gkcrypt_fini(&gkcrypt);
+	munit_assert_int(test_network_stats_all(), ==, MUNIT_OK);
 
 	return MUNIT_OK;
 }

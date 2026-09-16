@@ -11,6 +11,7 @@
 #include "audioreceiver.h"
 #include "videoreceiver.h"
 #include "congestioncontrol.h"
+#include "networkstats.h"
 
 #include <stdbool.h>
 
@@ -50,6 +51,7 @@ typedef struct chiaki_stream_connection_t
 	ChiakiDualSenseEffectIntensity trigger_intensity;
 	ChiakiFeedbackSender feedback_sender;
 	ChiakiCongestionControl congestion_control;
+	ChiakiNetworkStats network_stats;
 	/**
 	 * whether feedback_sender is initialized
 	 * only if this is true, feedback_sender may be accessed!

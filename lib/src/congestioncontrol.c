@@ -19,21 +19,24 @@ static void *congestion_control_thread_func(void *user)
 		if(err != CHIAKI_ERR_TIMEOUT)
 			break;
 
-		uint64_t received;
-		uint64_t lost;
-		chiaki_packet_stats_get(control->stats, true, &received, &lost);
+		uint64_t measured_received;
+		uint64_t measured_lost;
+		chiaki_packet_stats_get(control->stats, true, &measured_received, &measured_lost);
 		ChiakiTakionCongestionPacket packet = { 0 };
-		uint64_t total = received + lost;
-		control->packet_loss = total > 0 ? (double)lost / total : 0;
+		uint64_t total = measured_received + measured_lost;
+		control->packet_loss = total > 0 ? (double)measured_lost / total : 0;
 		if(control->packet_loss > control->packet_loss_max)
 		{
 			CHIAKI_LOGD(control->takion->log, "Clamping reported packet loss: measured=%.1f%% reported_max=%.1f%%",
 				control->packet_loss * 100.0, control->packet_loss_max * 100.0);
-			lost = total * control->packet_loss_max;
-			received = total - lost;
 		}
-		packet.received = (uint16_t)received;
-		packet.lost = (uint16_t)lost;
+		uint64_t reported_received;
+		uint64_t reported_lost;
+		chiaki_network_stats_record_congestion(control->network_stats,
+			measured_received, measured_lost, control->packet_loss_max,
+			&reported_received, &reported_lost);
+		packet.received = (uint16_t)reported_received;
+		packet.lost = (uint16_t)reported_lost;
 		CHIAKI_LOGV(control->takion->log, "Sending Congestion Control Packet, received: %u, lost: %u",
 			(unsigned int)packet.received, (unsigned int)packet.lost);
 		chiaki_takion_send_congestion(control->takion, &packet);
@@ -43,11 +46,12 @@ static void *congestion_control_thread_func(void *user)
 	return NULL;
 }
 
-CHIAKI_EXPORT ChiakiErrorCode chiaki_congestion_control_start(ChiakiCongestionControl *control, ChiakiTakion *takion, ChiakiPacketStats *stats, double packet_loss_max)
+CHIAKI_EXPORT ChiakiErrorCode chiaki_congestion_control_start(ChiakiCongestionControl *control, ChiakiTakion *takion, ChiakiPacketStats *stats, double packet_loss_max, ChiakiNetworkStats *network_stats)
 {
 	control->takion = takion;
 	control->stats = stats;
 	control->packet_loss_max = packet_loss_max;
+	control->network_stats = network_stats;
 	control->packet_loss = 0;
 
 	ChiakiErrorCode err = chiaki_bool_pred_cond_init(&control->stop_cond);

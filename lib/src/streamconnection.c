@@ -67,6 +67,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_init(ChiakiStreamConnecti
 	stream_connection->session = session;
 	stream_connection->log = session->log;
 	stream_connection->packet_loss_max = packet_loss_max;
+	stream_connection->measured_bitrate = 0.0;
 
 	stream_connection->ecdh_secret = NULL;
 	stream_connection->gkcrypt_remote = NULL;
@@ -79,9 +80,13 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_init(ChiakiStreamConnecti
 	stream_connection->haptic_intensity = Strong;
 	stream_connection->trigger_intensity = Strong;
 
-	ChiakiErrorCode err = chiaki_mutex_init(&stream_connection->state_mutex, false);
+	ChiakiErrorCode err = chiaki_network_stats_init(&stream_connection->network_stats);
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto error;
+
+	err = chiaki_mutex_init(&stream_connection->state_mutex, false);
+	if(err != CHIAKI_ERR_SUCCESS)
+		goto error_network_stats;
 
 	err = chiaki_cond_init(&stream_connection->state_cond);
 	if(err != CHIAKI_ERR_SUCCESS)
@@ -114,6 +119,8 @@ error_state_cond:
 	chiaki_cond_fini(&stream_connection->state_cond);
 error_state_mutex:
 	chiaki_mutex_fini(&stream_connection->state_mutex);
+error_network_stats:
+	chiaki_network_stats_fini(&stream_connection->network_stats);
 error:
 	return err;
 }
@@ -130,6 +137,7 @@ CHIAKI_EXPORT void chiaki_stream_connection_fini(ChiakiStreamConnection *stream_
 		chiaki_congestion_control_stop(&stream_connection->congestion_control);
 
 	chiaki_packet_stats_fini(&stream_connection->packet_stats);
+	chiaki_network_stats_fini(&stream_connection->network_stats);
 
 	chiaki_mutex_fini(&stream_connection->feedback_sender_mutex);
 
@@ -225,7 +233,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 		goto err_video_receiver;
 	}
 
-	err = chiaki_congestion_control_start(&stream_connection->congestion_control, &stream_connection->takion, &stream_connection->packet_stats, stream_connection->packet_loss_max);
+	err = chiaki_congestion_control_start(&stream_connection->congestion_control, &stream_connection->takion,
+		&stream_connection->packet_stats, stream_connection->packet_loss_max,
+		stream_stats_enabled ? &stream_connection->network_stats : NULL);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(session->log, "StreamConnection failed to start Congestion Control");
@@ -365,6 +375,15 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.takion_packets_received = packets_received - previous_packets_received;
 			stats_event.stream_stats.takion_packets_lost = packets_lost - previous_packets_lost;
 			stats_event.stream_stats.feedback_packets = feedback_packets - previous_feedback_packets;
+			ChiakiNetworkStatsSnapshot network_stats;
+			chiaki_network_stats_get_snapshot(&stream_connection->network_stats, &network_stats);
+			stats_event.stream_stats.connection_quality_valid = network_stats.connection_quality_valid;
+			stats_event.stream_stats.target_bitrate_bps = network_stats.target_bitrate_bps;
+			stats_event.stream_stats.measured_throughput_bps = network_stats.measured_throughput_bps;
+			stats_event.stream_stats.live_rtt_us = network_stats.live_rtt_us;
+			stats_event.stream_stats.server_loss = network_stats.server_loss;
+			stats_event.stream_stats.congestion_measured_loss = network_stats.congestion_measured_loss;
+			stats_event.stream_stats.congestion_reported_loss = network_stats.congestion_reported_loss;
 
 			diagnostics_window_start_ms = now_ms;
 			previous_stream_frames = stream_frames;
@@ -757,7 +776,14 @@ static void stream_connection_takion_data_idle(ChiakiStreamConnection *stream_co
 			 q.target_bitrate, q.upstream_bitrate,
 			 q.upstream_loss,
 			 q.disable_upstream_audio, q.rtt, q.loss);
-		stream_connection->measured_bitrate = chiaki_stream_stats_bitrate(&stream_connection->video_receiver->frame_processor.stream_stats, stream_connection->session->connect_info.video_profile.max_fps) / 1000000.0;
+		uint64_t measured_bitrate_bps = chiaki_stream_stats_bitrate(
+			&stream_connection->video_receiver->frame_processor.stream_stats,
+			stream_connection->session->connect_info.video_profile.max_fps);
+		stream_connection->measured_bitrate = measured_bitrate_bps / 1000000.0;
+		if(stream_connection->session->connect_info.stream_diagnostics_enabled
+				|| stream_connection->session->connect_info.feedback_stats_log_interval_ms > 0)
+			chiaki_network_stats_record_connection_quality(&stream_connection->network_stats,
+				q.target_bitrate, measured_bitrate_bps, q.rtt, q.loss);
 		CHIAKI_LOGV(stream_connection->log, "StreamConnection measured bitrate: %.4f MBit/s", stream_connection->measured_bitrate);
 		chiaki_stream_stats_reset(&stream_connection->video_receiver->frame_processor.stream_stats);
 		break;
