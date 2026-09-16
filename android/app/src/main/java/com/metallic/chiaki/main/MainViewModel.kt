@@ -259,6 +259,15 @@ class MainViewModel(
 		}
 	}
 
+	fun deleteRegisteredHost(registeredHost: RegisteredHost)
+	{
+		viewModelScope.launch(Dispatchers.IO) {
+			try {
+				database.registeredHostDao().delete(registeredHost)
+			} catch(_: Exception) {}
+		}
+	}
+
 	override fun onCleared()
 	{
 		super.onCleared()

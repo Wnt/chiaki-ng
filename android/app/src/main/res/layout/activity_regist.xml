@@ -68,59 +68,6 @@
                 android:text="@string/regist_broadcast"
                 android:textColor="?attr/colorOnSurface"/>
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/consoleTypeTextView"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/regist_console_type"
-                android:textAppearance="?attr/textAppearanceTitleMedium"
-                android:textColor="?attr/colorOnSurface"
-                app:layout_constraintTop_toBottomOf="@id/broadcastCheckBox" />
-
-            <RadioGroup
-                android:id="@+id/ps4VersionRadioGroup"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                app:layout_constraintTop_toBottomOf="@id/consoleTypeTextView">
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/ps5RadioButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/regist_option_ps5"
-                    android:textColor="?attr/colorOnSurface"
-                    android:layout_weight="1"
-                    android:checked="true"/>
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/ps4VersionGE8RadioButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/regist_option_ps4_ge_8"
-                    android:textColor="?attr/colorOnSurface"
-                    android:layout_weight="1"
-                    android:checked="true"/>
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/ps4VersionGE7RadioButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:checked="false"
-                    android:text="@string/regist_option_ps4_ge_7"
-                    android:textColor="?attr/colorOnSurface" />
-
-                <com.google.android.material.radiobutton.MaterialRadioButton
-                    android:id="@+id/ps4VersionLT7RadioButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/regist_option_ps4_lt_7"
-                    android:textColor="?attr/colorOnSurface"
-                        android:layout_weight="1"/>
-            </RadioGroup>
-
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/psnSignInButton"
                 android:layout_width="match_parent"
@@ -128,7 +75,7 @@
                 android:layout_marginTop="16dp"
                 android:text="@string/action_psn_sign_in"
                 android:visibility="gone"
-                app:layout_constraintTop_toBottomOf="@id/ps4VersionRadioGroup" />
+                app:layout_constraintTop_toBottomOf="@id/broadcastCheckBox" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/psnAccountIdStatusTextView"
@@ -188,7 +135,7 @@
                 android:id="@+id/psnIdTextInputLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="@string/hint_regist_psn_online_id"
+                android:hint="@string/hint_regist_psn_account_id"
                 app:hintTextColor="?attr/colorOnSurface"
                 app:startIconDrawable="@drawable/ic_psn_id"
                 app:layout_constraintTop_toBottomOf="@id/psnAccountIdHelpURLTextView"
@@ -208,7 +155,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="@string/regist_pin_instructions_ps4_before"
+                android:text="@string/regist_pin_instructions_ps5_before"
                 app:layout_constraintTop_toBottomOf="@id/psnIdTextInputLayout"
                 android:textAppearance="?attr/textAppearanceBody1"
                 android:textColor="?attr/colorOnSurface"
@@ -220,7 +167,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="@string/regist_pin_instructions_ps4_navigation"
+                android:text="@string/regist_pin_instructions_ps5_navigation"
                 app:layout_constraintTop_toBottomOf="@id/pinHelpBeforeTextView"
                 android:textAppearance="?attr/textAppearanceBody1"
                 android:textColor="?attr/colorOnSurface"

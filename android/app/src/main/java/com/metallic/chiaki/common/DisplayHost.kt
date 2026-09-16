@@ -44,7 +44,7 @@ class ManualDisplayHost(
 	override val host get() = manualHost.host
 	override val name get() = registeredHost?.serverNickname
 	override val id get() = registeredHost?.serverMac?.toString()
-	override val isPS5: Boolean get() = registeredHost?.target?.isPS5 ?: false
+	override val isPS5: Boolean get() = registeredHost?.target?.isPS5 ?: true
 
 	override fun equals(other: Any?): Boolean =
 		if(other !is ManualDisplayHost)
