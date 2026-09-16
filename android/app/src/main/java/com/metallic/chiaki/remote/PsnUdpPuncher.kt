@@ -148,8 +148,15 @@ object PsnCandidateHandshake
  * lookup (PLE-312). Any address given here must be unresolved or literal.
  *
  * One instance serves one PSN session. Like upstream `holepunch.c`, the session keeps one sid and one
- * hashed id for both the control and the data round, and an OFFER names the console sid known when it
- * was built: 0 for control, the control round's console sid for data (PLE-313).
+ * hashed id for both the control and the data round, and an OFFER names the sid of the console OFFER it
+ * is answering. PLE-313 staged that value by one round, so the control OFFER went out with `peerSid=0`;
+ * upstream stores the console sid as soon as its OFFER arrives (`holepunch.c:1561`) and sends it back in
+ * the same round (`:2760`). The console ignores an OFFER not addressed to its session (PLE-327).
+ *
+ * The OFFER lists STUN, STATIC, LOCAL, or just STATIC, LOCAL when the STUN-mapped port equals the local
+ * one (`:2912-2918`, `:2977`). Upstream's symmetric-NAT port guessing (`stun_port_allocation_test`, the
+ * `stun_allocation_increment != 0` branch at `:2828`) is not ported: a NAT that rewrites ports gets the
+ * plain three candidates and, if none answers, `PsnUnsupportedNatException`.
  */
 class DatagramPsnHolePuncher(
 	private val random: SecureRandom = SecureRandom(),
@@ -163,7 +170,6 @@ class DatagramPsnHolePuncher(
 {
 	private val localSid by lazy { random.nextInt(0x10000) }
 	private val localHash by lazy { ByteArray(20).also(random::nextBytes) }
-	private var knownConsoleSid = 0
 
 	override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation = withContext(Dispatchers.IO) {
 		val socket = DatagramSocket(null).apply {
@@ -176,19 +182,30 @@ class DatagramPsnHolePuncher(
 			val localAddress = socket.localAddress.takeUnless { it.isAnyLocalAddress } as? Inet4Address
 				?: routeAddress(resolve(stunServers.first()))
 			val stun = PsnCandidate("STUN", mapping.address.hostAddress ?: "0.0.0.0", port = mapping.port)
+			val static = PsnCandidate("STATIC", stun.addr, port = socket.localPort)
 			val local = PsnCandidate("LOCAL", localAddress.hostAddress ?: "0.0.0.0", port = socket.localPort)
-			// Upstream's order: the STUN candidate first, so a console behind a symmetric NAT tries it first.
-			val candidates = listOf(stun, PsnCandidate("STATIC", stun.addr, port = socket.localPort), local)
+			// Upstream offers STUN, STATIC, LOCAL (holepunch.c:2977, STUN first so a console behind a
+			// symmetric NAT tries it first) unless the NAT kept our local port as the external one: then
+			// STUN would duplicate STATIC, so upstream drops it and offers STATIC, LOCAL (:2912-2918, "don't
+			// make duplicate STUN candidate"). That is the shape the console itself offers on such a network
+			// (its STATIC and LOCAL both :9303 in the PLE-327 captures), and it is the shape our S25 captures
+			// broke: local port 53637, STUN-mapped port 53637, three candidates with a duplicate.
+			val natKeptOurPort = stun.port == socket.localPort
+			val remote = if(natKeptOurPort) static else stun
+			val candidates = if(natKeptOurPort) listOf(static, local) else listOf(stun, static, local)
 			val offer = PsnConnectionRequest(
 				sid = localSid,
-				peerSid = knownConsoleSid,
+				// Upstream stores the console's sid the moment its OFFER arrives and sends it straight
+				// back (holepunch.c:1561 then :2760), per round. Staging it for the *next* round left the
+				// control OFFER with peerSid=0, which the console ignores: it re-offers, and PLE-327 timed
+				// out after 30 s waiting for a RESULT that was never coming.
+				peerSid = peer.sid,
 				skey = Base64.Default.encode(ByteArray(16)),
 				candidate = candidates,
 				localPeerAddr = PsnPeerAddress(accountId, "REMOTE_PLAY"),
 				localHashedId = Base64.Default.encode(localHash)
 			)
-			knownConsoleSid = peer.sid
-			Preparation(socket, offer, peer, localHash, random, local, stun)
+			Preparation(socket, offer, peer, localHash, random, local, remote)
 		}
 		catch(error: Throwable)
 		{

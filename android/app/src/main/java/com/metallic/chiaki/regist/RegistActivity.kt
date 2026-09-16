@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.Base64
+import android.util.Log
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
@@ -13,13 +14,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.RevealActivity
 import com.metallic.chiaki.common.ext.applySystemBarInsets
 import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
+import com.metallic.chiaki.common.getDatabase
 import com.metallic.chiaki.databinding.ActivityRegistBinding
+import com.metallic.chiaki.discovery.DiscoveryManager
 import com.metallic.chiaki.lib.RegistInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.lang.IllegalArgumentException
 
 class RegistActivity: AppCompatActivity(), RevealActivity
@@ -89,6 +96,42 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		updatePsnControls()
 		if(guided)
 			showGuidedPinEntry()
+		wakeConsoleIfKnown()
+	}
+
+	/**
+	 * PLE-331: wake the console before the user is asked for the PIN, so it is coming out of
+	 * standby while they walk to the TV rather than after.
+	 *
+	 * The PS5 discovery WAKEUP packet is authenticated with the RP-RegistKey from a previous
+	 * successful registration (see lib/src/discovery.c, chiaki_discovery_wakeup and
+	 * scripts/dev/ps5-wake.sh) - the console silently ignores a wake request that doesn't carry
+	 * its own key. Every guided-PIN entry point this screen is opened from
+	 * (MainActivity.pinLinkCandidate / unlinkedLocalHost) is specifically a console with NO
+	 * registered host yet, so there is no key to wake it with: on a first-ever link the console
+	 * is necessarily already on, since Settings -> System -> Remote Play -> Link Device is not
+	 * reachable from standby. The one case where a key already exists is re-registering a saved
+	 * manual host (EXTRA_ASSIGN_MANUAL_HOST_ID), so that's the case this wakes.
+	 */
+	private fun wakeConsoleIfKnown()
+	{
+		val host = intent.getStringExtra(EXTRA_HOST)?.trim()?.takeIf { it.isNotEmpty() } ?: return
+		val manualHostId = intent.getLongExtra(EXTRA_ASSIGN_MANUAL_HOST_ID, -1L).takeIf { it >= 0L } ?: return
+		lifecycleScope.launch {
+			val registeredHost = try
+			{
+				withContext(Dispatchers.IO) {
+					getDatabase(this@RegistActivity).manualHostDao().getByIdWithRegisteredHost(manualHostId).registeredHost
+				}
+			}
+			catch(e: Exception)
+			{
+				Log.w("RegistActivity", "Failed to look up registered host for wakeup", e)
+				null
+			}
+			if(registeredHost != null && registeredHost.target.isPS5)
+				DiscoveryManager().sendWakeup(host, registeredHost.rpRegistKey, true)
+		}
 	}
 
 	private fun keepFocusedInputVisible()
@@ -138,9 +181,6 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		binding.psnManualEntryButton.visibility = View.GONE
 		binding.psnAccountIdHelpGroup.visibility = View.GONE
 		binding.psnIdTextInputLayout.visibility = View.GONE
-		binding.pinHelpBeforeTextView.visibility = View.GONE
-		binding.pinHelpAfterTextView.visibility = View.GONE
-		binding.pinHelpNavigationTextView.alpha = 1f
 		binding.registButton.setText(R.string.action_link_console)
 		binding.pinEditText.requestFocus()
 	}

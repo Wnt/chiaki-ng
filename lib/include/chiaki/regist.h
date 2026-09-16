@@ -95,6 +95,27 @@ CHIAKI_EXPORT void chiaki_regist_stop(ChiakiRegist *regist);
  */
 CHIAKI_EXPORT ChiakiErrorCode chiaki_regist_request_payload_format(ChiakiTarget target, const uint8_t *ambassador, uint8_t *buf, size_t *buf_size, ChiakiRPCrypt *crypt, const char *psn_online_id, const uint8_t *psn_account_id, uint32_t pin, ChiakiHolepunchRegistInfo *holepunch_info);
 
+/**
+ * Whether addr names a client address that can be used as the HOST header of a registration
+ * request. NULL, the empty string, anything that is not an IP address and the wildcard
+ * addresses are rejected: a socket bound to the wildcard reports 0.0.0.0 or ::, and a console
+ * cannot reach the client back at those.
+ */
+CHIAKI_EXPORT bool chiaki_regist_local_addr_usable(const char *addr);
+
+/**
+ * Determine the local address a datagram addressed to peer_addr would leave from, which is the
+ * client address the console should see - the same value upstream's holepunch advertises as its
+ * LOCAL candidate and then passes on as ChiakiHolepunchRegistInfo::regist_local_ip.
+ *
+ * Writes a NUL-terminated presentation-form address into out. Nothing is transmitted: connect()
+ * on a datagram socket only fixes the peer, so this cannot block and the console sees nothing.
+ *
+ * @param peer_addr presentation-form address of the console
+ * @param out receives the local address, must hold at least INET6_ADDRSTRLEN bytes
+ */
+CHIAKI_EXPORT ChiakiErrorCode chiaki_regist_local_addr_for_peer(const char *peer_addr, char *out, size_t out_size);
+
 #ifdef __cplusplus
 }
 #endif

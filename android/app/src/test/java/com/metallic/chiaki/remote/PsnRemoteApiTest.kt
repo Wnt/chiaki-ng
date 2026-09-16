@@ -127,6 +127,72 @@ class PsnRemoteApiTest
 		assertEquals("socket read on the caller thread", emptyList<String>(), readThreads.onCallerThread())
 	}
 
+	/**
+	 * PLE-327: the envelope the controller logs is byte-for-byte what is posted, in upstream's shape
+	 * (`holepunch.c:139-145`), and the recipient duid is lowercase hex however PSN listed it (`:144`).
+	 */
+	@Test fun signalEnvelopeIsWhatSendSignalPosts() = runBlocking {
+		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")))
+		server.enqueue(MockResponse().setResponseCode(204))
+		val session = PsnSession("11111111-2222-4333-8444-555555555555", "12345678901234567")
+		val device = PsnDevice("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF", "Fixture PS5")
+		val message = PsnSignalMessage("RESULT", 7)
+
+		api.sendSignal(session, device, message)
+
+		server.takeRequest() // token refresh
+		val posted = server.takeRequest()
+		assertEquals("/api/sessionManager/v1/remotePlaySessions/11111111-2222-4333-8444-555555555555/sessionMessage", posted.path)
+		val envelope = api.signalEnvelope(session, device, message)
+		assertEquals(envelope, posted.body.readUtf8())
+		assertEquals(
+			"""{"channel":"remote_play:1","payload":"ver=1.0, type=text, body={\"action\":\"RESULT\",\"reqId\":7,\"error\":0,\"connRequest\":{}}",""" +
+				""""to":[{"accountId":"12345678901234567","deviceUniqueId":"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff","platform":"PS5"}]}""",
+			envelope
+		)
+	}
+
+	/**
+	 * PLE-327: upstream's `session_connrequest_fmt` is a printf format, so an OFFER always carries
+	 * `natType`, `defaultRouteMacAddr`, `localPeerAddr.platform` and `mappedAddr`/`mappedPort` on every
+	 * candidate (`holepunch.c:160-176`). kotlinx.serialization drops a field that equals its default,
+	 * which cost us all five and left the console with no natType to read: it re-offered and then
+	 * TERMINATEd (proven on the S25, build/captures/ple326/run3-logcat.txt). Every field stays on the
+	 * wire, in upstream's order.
+	 */
+	@Test fun offerCarriesEveryFieldUpstreamAlwaysSends() = runBlocking {
+		val session = PsnSession("11111111-2222-4333-8444-555555555555", "12345678901234567")
+		val device = PsnDevice("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF", "Fixture PS5")
+		val request = PsnConnectionRequest(
+			sid = 33990,
+			peerSid = 12976,
+			skey = "AAAAAAAAAAAAAAAAAAAAAA==",
+			candidate = listOf(
+				PsnCandidate("STATIC", "88.192.35.229", port = 37589),
+				PsnCandidate("LOCAL", "192.168.1.221", port = 37589)
+			),
+			localPeerAddr = PsnPeerAddress("12345678901234567", "REMOTE_PLAY"),
+			localHashedId = "RMvOiOW1BMAlMn3BJBW5Jzp8zJ8="
+		)
+
+		val envelope = api.signalEnvelope(session, device, PsnSignalMessage("OFFER", 2, connRequest = request))
+
+		val body = envelope.substringAfter("body=").substringBefore("\",\"to\"")
+		for(field in listOf("natType", "defaultRouteMacAddr", "mappedAddr", "mappedPort", "platform"))
+			assertTrue("$field missing from $body", body.contains(field))
+		assertEquals(
+			"""{\"action\":\"OFFER\",\"reqId\":2,\"error\":0,\"connRequest\":""" +
+				"""{\"sid\":33990,\"peerSid\":12976,\"skey\":\"AAAAAAAAAAAAAAAAAAAAAA==\",\"natType\":2,""" +
+				"""\"candidate\":[""" +
+				"""{\"type\":\"STATIC\",\"addr\":\"88.192.35.229\",\"mappedAddr\":\"0.0.0.0\",\"port\":37589,\"mappedPort\":0},""" +
+				"""{\"type\":\"LOCAL\",\"addr\":\"192.168.1.221\",\"mappedAddr\":\"0.0.0.0\",\"port\":37589,\"mappedPort\":0}],""" +
+				"""\"defaultRouteMacAddr\":\"\",""" +
+				"""\"localPeerAddr\":{\"accountId\":\"12345678901234567\",\"platform\":\"REMOTE_PLAY\"},""" +
+				"""\"localHashedId\":\"RMvOiOW1BMAlMn3BJBW5Jzp8zJ8=\"}}""",
+			body
+		)
+	}
+
 	@Test fun httpFailureCarriesStatusAndErrorExcerpt() = runBlocking {
 		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")))
 		server.enqueue(MockResponse().setResponseCode(500).setBody("{\"error\":{\"code\":2285,\n\"message\":\"server\"}}"))

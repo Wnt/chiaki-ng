@@ -39,6 +39,7 @@ class PsnRemoteControllerTest
 	private val duid = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 	private var terminateAfterOffer = false
 	private var settled = 0
+	private val traces = Collections.synchronizedList(mutableListOf<String>())
 
 	@Before fun setUp()
 	{
@@ -68,7 +69,8 @@ class PsnRemoteControllerTest
 			native,
 			randomBytes = PsnRandomBytes { size -> ByteArray(size) { (it + 1).toByte() } },
 			uuid = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
-			json = json
+			json = json,
+			trace = { traces += it }
 		)
 		native.state = { controller.state.value }
 
@@ -84,6 +86,25 @@ class PsnRemoteControllerTest
 
 		controller.disconnect()
 		assertTrue(requests.any { it.method == "DELETE" && it.path?.endsWith("/members/me") == true })
+
+		// PLE-327: request ids run as upstream's do (holepunch.c:783, :2740, :1596, :1663), and the
+		// console's repeated OFFER 71 is ignored, not answered a second time (:5433-5440).
+		assertEquals(listOf(2, 5), sentSignals().filter { it.action == "OFFER" }.map { it.reqId })
+		assertEquals(listOf(3, 6), sentSignals().filter { it.action == "ACCEPT" }.map { it.reqId })
+		assertEquals(listOf(71, 72, 81, 82), sentSignals().filter { it.action == "RESULT" }.map { it.reqId })
+		assertTrue(traces.any { it.startsWith("ignoring OFFER reqId=71 ") && it.endsWith("while awaiting RESULT reqId=2") })
+
+		// PLE-327: the raw JSON of both directions is traced, with the account id blanked everywhere.
+		val sentRaw = traces.filter { it.startsWith("sending raw ") }
+		val receivedRaw = traces.filter { it.startsWith("received raw ") }
+		assertEquals(8, sentRaw.size)
+		assertTrue(sentRaw.any { it.contains("\\\"action\\\":\\\"OFFER\\\"") && it.contains("\"channel\":\"remote_play:1\"") && it.contains(duid) })
+		assertTrue(sentRaw.any { it.contains("\\\"action\\\":\\\"RESULT\\\",\\\"reqId\\\":71,\\\"error\\\":0,\\\"connRequest\\\":{}") })
+		assertTrue(receivedRaw.any { it.contains("ver=1.0, type=text, body={\"action\":\"OFFER\",\"reqId\":71") })
+		assertTrue(receivedRaw.any { it.contains("\"accountId\":\"<redacted>\"") })
+		assertTrue(sentRaw.any { it.contains("\\\"accountId\\\":\\\"<redacted>\\\"") && it.contains("\"accountId\":\"<redacted>\"") })
+		assertEquals("account id in trace", emptyList<String>(), traces.filter { it.contains("12345678901234567") })
+		assertEquals("token in trace", emptyList<String>(), traces.filter { it.contains("access-token-placeholder", ignoreCase = true) })
 
 		// PLE-313: ACCEPT names the console's candidate that answered and, in its mapped fields, ours.
 		val accepts = sentSignals().filter { it.action == "ACCEPT" }
@@ -112,6 +133,21 @@ class PsnRemoteControllerTest
 			error!!.message
 		)
 		assertTrue(controller.state.value is PsnRemoteState.Failed)
+	}
+
+	/** PLE-327: every form the account id takes in a signaling envelope or payload is blanked. */
+	@Test fun redactBlanksEveryAccountIdForm()
+	{
+		assertEquals(
+			"""{"to":[{"accountId":"<redacted>","deviceUniqueId":"$duid"}]}""",
+			PsnRemoteController.redact("""{"to":[{"accountId":"12345678901234567","deviceUniqueId":"$duid"}]}""")
+		)
+		assertEquals(
+			"""body={\"localPeerAddr\":{\"accountId\":\"<redacted>\",\"platform\":\"REMOTE_PLAY\"}}""",
+			PsnRemoteController.redact("""body={\"localPeerAddr\":{\"accountId\":\"12345678901234567\",\"platform\":\"REMOTE_PLAY\"}}""")
+		)
+		assertEquals("""{"accountId":"<redacted>","roomId":0}""", PsnRemoteController.redact("""{"accountId":12345678901234567,"roomId":0}"""))
+		assertEquals("""{"accountId": "<redacted>"}""", PsnRemoteController.redact("""{"accountId": "me"}"""))
 	}
 
 	private fun fixtureController(native: PsnRemoteNativeBridge) = PsnRemoteController(
@@ -310,10 +346,12 @@ class PsnRemoteControllerTest
 				put("body", buildJsonObject { put("data", buildJsonObject { put("customData1", custom) }) })
 			}.toString(),
 			signalNotification(PsnSignalMessage("OFFER", 71, connRequest = peer)),
-			signalNotification(PsnSignalMessage("RESULT", 1)),
+			// The console re-sends its OFFER while PSN is still delivering our RESULT (PLE-327 captures).
+			signalNotification(PsnSignalMessage("OFFER", 71, connRequest = peer)),
+			signalNotification(PsnSignalMessage("RESULT", 2)),
 			signalNotification(PsnSignalMessage("ACCEPT", 72, connRequest = peer)),
 			signalNotification(PsnSignalMessage("OFFER", 81, connRequest = peer.copy(sid = 5678))),
-			signalNotification(PsnSignalMessage("RESULT", 3)),
+			signalNotification(PsnSignalMessage("RESULT", 5)),
 			signalNotification(PsnSignalMessage("ACCEPT", 82, connRequest = peer.copy(sid = 5678)))
 		)
 	}

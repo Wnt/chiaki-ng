@@ -21,6 +21,8 @@
 typedef uint32_t in_addr_t;
 #else
 #include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #endif
 
 #define REGIST_PORT 9295
@@ -165,6 +167,71 @@ static int request_header_format(char *buf, size_t buf_size, size_t payload_size
 	return cur;
 }
 
+CHIAKI_EXPORT bool chiaki_regist_local_addr_usable(const char *addr)
+{
+	static const uint8_t zero[16] = { 0 };
+	struct in_addr v4;
+	struct in6_addr v6;
+	if(!addr || !addr[0])
+		return false;
+	if(inet_pton(AF_INET, addr, &v4) == 1)
+		return memcmp(&v4, zero, sizeof(v4)) != 0;
+	if(inet_pton(AF_INET6, addr, &v6) == 1)
+		return memcmp(&v6, zero, sizeof(v6)) != 0;
+	return false;
+}
+
+CHIAKI_EXPORT ChiakiErrorCode chiaki_regist_local_addr_for_peer(const char *peer_addr, char *out, size_t out_size)
+{
+	struct addrinfo hints;
+	struct addrinfo *addrinfos = NULL;
+	struct sockaddr_storage local;
+	socklen_t local_size = sizeof(local);
+	chiaki_socket_t sock = CHIAKI_INVALID_SOCKET;
+	ChiakiErrorCode err = CHIAKI_ERR_UNKNOWN;
+	const void *src = NULL;
+	char port[8];
+
+	if(!peer_addr || !peer_addr[0] || !out || out_size < INET6_ADDRSTRLEN)
+		return CHIAKI_ERR_INVALID_DATA;
+	out[0] = '\0';
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_family = strchr(peer_addr, ':') ? AF_INET6 : AF_INET;
+	hints.ai_flags = AI_NUMERICHOST;
+	snprintf(port, sizeof(port), "%u", (unsigned)REGIST_PORT);
+	if(getaddrinfo(peer_addr, port, &hints, &addrinfos) != 0 || !addrinfos)
+		return CHIAKI_ERR_PARSE_ADDR;
+
+	sock = socket(addrinfos->ai_family, SOCK_DGRAM, IPPROTO_UDP);
+	if(CHIAKI_SOCKET_IS_INVALID(sock))
+		goto done;
+	if(connect(sock, addrinfos->ai_addr, (socklen_t)addrinfos->ai_addrlen) != 0)
+		goto close_sock;
+	memset(&local, 0, sizeof(local));
+	if(getsockname(sock, (struct sockaddr *)&local, &local_size) != 0)
+		goto close_sock;
+	if(local.ss_family == AF_INET6)
+		src = &((struct sockaddr_in6 *)&local)->sin6_addr;
+	else if(local.ss_family == AF_INET)
+		src = &((struct sockaddr_in *)&local)->sin_addr;
+	else
+		goto close_sock;
+	if(!inet_ntop(local.ss_family, src, out, (socklen_t)out_size))
+		goto close_sock;
+	if(chiaki_regist_local_addr_usable(out))
+		err = CHIAKI_ERR_SUCCESS;
+	else
+		out[0] = '\0';
+
+close_sock:
+	CHIAKI_SOCKET_CLOSE(sock);
+done:
+	freeaddrinfo(addrinfos);
+	return err;
+}
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_regist_request_payload_format(ChiakiTarget target, const uint8_t *ambassador, uint8_t *buf, size_t *buf_size, ChiakiRPCrypt *crypt, const char *psn_online_id, const uint8_t *psn_account_id, uint32_t pin, ChiakiHolepunchRegistInfo *holepunch_info)
 {
 	size_t buf_size_val = *buf_size;
@@ -262,7 +329,18 @@ static void *regist_thread_func(void *user)
 	// random local addr if our local addr is not provided
 	char regist_local_addr[INET6_ADDRSTRLEN] = "10.0.2.15";
 	if(regist->info.holepunch_info)
-		memcpy(regist_local_addr, regist->info.holepunch_info->regist_local_ip, sizeof(regist_local_addr));
+	{
+		// The request HOST header is the client's own address. A wildcard-bound socket reports
+		// 0.0.0.0, and an Android session with no holepunch info of its own reports the empty
+		// string; neither is routable, so keep the fallback rather than send it to the console.
+		if(chiaki_regist_local_addr_usable(regist->info.holepunch_info->regist_local_ip))
+		{
+			strncpy(regist_local_addr, regist->info.holepunch_info->regist_local_ip, sizeof(regist_local_addr) - 1);
+			regist_local_addr[sizeof(regist_local_addr) - 1] = '\0';
+		}
+		else
+			CHIAKI_LOGW(regist->log, "Regist was given no usable local address; using the fallback for the request host header");
+	}
 	int request_header_size = request_header_format(request_header, sizeof(request_header), payload_size, regist->info.target, regist_local_addr);
 
 	if(request_header_size < 0 || request_header_size >= sizeof(request_header))
