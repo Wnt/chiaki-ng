@@ -93,11 +93,12 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		}
 	}
 
+	/** Called from the PSN controller on its IO dispatcher (PLE-312), so the state is posted, not set. */
 	fun attachRemoteSession(remoteSession: Session)
 	{
 		session = remoteSession
 		remoteSession.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
-		_state.value = StreamStateConnecting
+		_state.postValue(StreamStateConnecting)
 		val currentSurface = surface
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
@@ -113,7 +114,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	fun detachRemoteSession()
 	{
 		session = null
-		_state.value = StreamStateIdle
+		_state.postValue(StreamStateIdle)
 	}
 
 	fun remoteEvent(event: Event) = eventCallback(event)

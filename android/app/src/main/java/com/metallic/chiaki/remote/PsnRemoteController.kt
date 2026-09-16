@@ -4,6 +4,8 @@
 package com.metallic.chiaki.remote
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +44,13 @@ fun interface PsnRandomBytes
 	fun next(size: Int): ByteArray
 }
 
+/**
+ * The PSN control plane. Every public suspend function runs its whole body on [ioDispatcher], so the
+ * caller's dispatcher (the main thread, for a ViewModel) never performs a socket read, a DNS lookup or
+ * a UDP exchange, whichever collaborator does it (PLE-261, PLE-312). Callbacks out of [nativeBridge]
+ * therefore arrive on IO and must post to the UI rather than set it. `PsnRemoteControllerTest`
+ * checks each public entry point by name, so a new one has to be covered there too.
+ */
 class PsnRemoteController(
 	private val api: PsnRemoteApi,
 	private val pushTransport: PsnPushTransport,
@@ -49,7 +58,8 @@ class PsnRemoteController(
 	private val nativeBridge: PsnRemoteNativeBridge,
 	private val randomBytes: PsnRandomBytes = PsnRandomBytes { size -> ByteArray(size).also(SecureRandom()::nextBytes) },
 	private val uuid: () -> String = { UUID.randomUUID().toString() },
-	private val json: Json = api.json
+	private val json: Json = api.json,
+	private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : Closeable
 {
 	private val _state = MutableStateFlow<PsnRemoteState>(PsnRemoteState.Idle)
@@ -61,10 +71,9 @@ class PsnRemoteController(
 	private val openSockets = mutableListOf<PsnPunchedSocket>()
 	private var requestId = 1
 
-	suspend fun listDevices(): List<PsnDevice>
-	{
+	suspend fun listDevices(): List<PsnDevice> = withContext(ioDispatcher) {
 		_state.value = PsnRemoteState.ListingDevices
-		return try
+		try
 		{
 			val devices = api.listDevices()
 			_state.value = PsnRemoteState.Devices(devices)
@@ -77,8 +86,7 @@ class PsnRemoteController(
 		}
 	}
 
-	suspend fun connect(device: PsnDevice)
-	{
+	suspend fun connect(device: PsnDevice): Unit = withContext(ioDispatcher) {
 		check(session == null) { "A PSN remote session is already active" }
 		try
 		{
@@ -121,8 +129,7 @@ class PsnRemoteController(
 	}
 
 	/** Sends the PSN remote-play command, which wakes the console, then closes the temporary session. */
-	suspend fun wake(device: PsnDevice)
-	{
+	suspend fun wake(device: PsnDevice): Unit = withContext(ioDispatcher) {
 		check(session == null) { "A PSN remote session is already active" }
 		try
 		{
@@ -142,8 +149,7 @@ class PsnRemoteController(
 		}
 	}
 
-	suspend fun disconnect()
-	{
+	suspend fun disconnect(): Unit = withContext(ioDispatcher) {
 		_state.value = PsnRemoteState.Cancelling
 		cleanup()
 	}
