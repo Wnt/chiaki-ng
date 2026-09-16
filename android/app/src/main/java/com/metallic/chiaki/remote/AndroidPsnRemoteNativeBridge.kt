@@ -2,6 +2,7 @@
 
 package com.metallic.chiaki.remote
 
+import android.content.Context
 import android.os.ParcelFileDescriptor
 import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.lib.Event
@@ -25,7 +26,8 @@ class AndroidPsnRemoteNativeBridge(
 	private val decoderInputThread: Boolean,
 	private val onSessionCreated: (Session) -> Unit = {},
 	private val onSessionClosed: () -> Unit = {},
-	private val onSessionEvent: (Event) -> Unit = {}
+	private val onSessionEvent: (Event) -> Unit = {},
+	private val context: Context? = null
 ) : PsnRemoteNativeBridge
 {
 	var session: Session? = null
@@ -45,6 +47,7 @@ class AndroidPsnRemoteNativeBridge(
 				logVerbose = logVerbose,
 				realVideoTimestamps = realVideoTimestamps,
 				decoderInputThread = decoderInputThread,
+				context = context,
 				remoteConnection = NativeRemoteConnection(
 					controlFd = controlFd,
 					psnAccountId = accountIdBytes(registration.accountId),

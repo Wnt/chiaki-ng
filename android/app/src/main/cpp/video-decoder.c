@@ -15,7 +15,8 @@
 #define INPUT_BUFFER_TIMEOUT_MS 10
 #define OUTPUT_BACKLOG_IDR_THRESHOLD 5
 
-#define DECODER_CONFIGURE_TIER_COUNT 4
+#define DECODER_CONFIGURE_BASELINE_TIER 3
+#define DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER 4
 
 extern media_status_t AMediaCodec_getName_weak(AMediaCodec *codec, char **out_name)
 		__asm__("AMediaCodec_getName") __attribute__((weak));
@@ -28,7 +29,7 @@ static void android_chiaki_video_decoder_presenter_release(void *user, bool drop
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
-		bool input_thread_enabled, bool late_frame_recovery_enabled)
+		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled)
 {
 	decoder->log = log;
 	decoder->codec = NULL;
@@ -43,6 +44,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->target_fps = target_fps;
 	decoder->target_codec = codec;
 	decoder->low_latency_enabled = low_latency_enabled;
+	decoder->performance_mode_enabled = performance_mode_enabled;
 	decoder->late_frame_recovery_enabled = late_frame_recovery_enabled;
 	decoder->last_queued_frame_index_valid = false;
 	decoder->output_backlog = 0;
@@ -177,9 +179,16 @@ static AMediaFormat *create_decoder_format(const AndroidChiakiVideoDecoder *deco
 		if(qti_decoder)
 			AMediaFormat_setInt32(format, "vendor.qti-ext-dec-picture-order.enable", 1);
 	}
-	if(tier <= 1)
+	else if(decoder->performance_mode_enabled && tier <= DECODER_CONFIGURE_BASELINE_TIER)
+	{
+		AMediaFormat_setInt32(format, "frame-rate", decoder->target_fps);
+	}
+	if(tier <= 1 || (decoder->performance_mode_enabled && tier <= DECODER_CONFIGURE_BASELINE_TIER))
 	{
 		AMediaFormat_setInt32(format, "operating-rate", decoder->target_fps * 4);
+	}
+	if(tier <= 1)
+	{
 		AMediaFormat_setInt32(format, "priority", 1);
 	}
 	if(tier == 0)
@@ -296,11 +305,16 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 	CHIAKI_LOGI(decoder->log, "Video decoder component: %s", decoder_name);
 
 	bool qti_decoder = strncmp(decoder_name, "c2.qti.", strlen("c2.qti.")) == 0;
-	int first_tier = decoder->low_latency_enabled ? 0 : 3;
+	if(decoder->performance_mode_enabled)
+		CHIAKI_LOGI(decoder->log, "Stream performance mode requesting MediaCodec operating-rate=%d",
+				decoder->target_fps * 4);
+	int first_tier = decoder->low_latency_enabled ? 0 : DECODER_CONFIGURE_BASELINE_TIER;
+	int last_tier = decoder->performance_mode_enabled
+			? DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER : DECODER_CONFIGURE_BASELINE_TIER;
 	media_status_t r = AMEDIA_ERROR_UNKNOWN;
 	AMediaFormat *format = NULL;
 	int configured_tier = -1;
-	for(int tier = first_tier; tier < DECODER_CONFIGURE_TIER_COUNT; tier++)
+	for(int tier = first_tier; tier <= last_tier; tier++)
 	{
 		format = create_decoder_format(decoder, mime, tier, qti_decoder);
 		if(!format)
@@ -322,8 +336,10 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 			AMediaCodec_releaseName_weak(decoder->codec, decoder_name_allocated);
 		goto error_codec;
 	}
-	CHIAKI_LOGI(decoder->log, "AMediaCodec_configure() succeeded for %s at tier %d%s", decoder_name, configured_tier,
-			decoder->low_latency_enabled ? "" : " (low-latency setting disabled)");
+	CHIAKI_LOGI(decoder->log, "AMediaCodec_configure() succeeded for %s at tier %d%s%s", decoder_name, configured_tier,
+			decoder->low_latency_enabled ? "" : " (low-latency setting disabled)",
+			configured_tier == DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER
+					? " (performance format unsupported; baseline fallback)" : "");
 	if(decoder_name_allocated)
 		AMediaCodec_releaseName_weak(decoder->codec, decoder_name_allocated);
 

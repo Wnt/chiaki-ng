@@ -166,6 +166,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(threadPriorityBoostEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(threadPriorityBoostEnabledKey, value).apply() }
 
+	val performanceModeEnabledKey get() = resources.getString(R.string.preferences_performance_mode_enabled_key)
+	var performanceModeEnabled
+		get() = sharedPreferences.getBoolean(performanceModeEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(performanceModeEnabledKey, value).apply() }
+
 	val takionVideoPacketReorderingDisabledKey get() = resources.getString(R.string.preferences_takion_video_packet_reordering_disabled_key)
 	var takionVideoPacketReorderingDisabled
 		get() = sharedPreferences.getBoolean(takionVideoPacketReorderingDisabledKey, false)

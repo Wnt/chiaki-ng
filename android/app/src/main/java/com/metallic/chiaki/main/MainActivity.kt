@@ -232,12 +232,20 @@ class MainActivity : AppCompatActivity()
 		{
 			fun connect() {
 				val preferences = Preferences(this)
-				val connectInfo = ConnectInfo(host.isPS5, host.host, registeredHost.rpRegistKey, registeredHost.rpKey,
-					preferences.videoProfile, preferences.decoderLowLatencyEnabled,
-					preferences.threadPriorityBoostEnabled, preferences.decoderLateFrameRecoveryEnabled,
-					preferences.packetLossMax,
-					preferences.takionVideoPacketReorderingDisabled,
-					if(preferences.feedbackReducedIntervalEnabled) 4 else 0)
+				val connectInfo = ConnectInfo(
+					ps5 = host.isPS5,
+					host = host.host,
+					registKey = registeredHost.rpRegistKey,
+					morning = registeredHost.rpKey,
+					videoProfile = preferences.videoProfile,
+					decoderLowLatencyEnabled = preferences.decoderLowLatencyEnabled,
+					threadPriorityBoostEnabled = preferences.threadPriorityBoostEnabled,
+					decoderLateFrameRecoveryEnabled = preferences.decoderLateFrameRecoveryEnabled,
+					packetLossMax = preferences.packetLossMax,
+					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
+					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
+					performanceModeEnabled = preferences.performanceModeEnabled
+				)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)
 					startActivity(it)

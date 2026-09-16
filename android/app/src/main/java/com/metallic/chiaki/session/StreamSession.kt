@@ -2,6 +2,7 @@
 
 package com.metallic.chiaki.session
 
+import android.content.Context
 import android.graphics.SurfaceTexture
 import android.os.Build
 import android.util.Log
@@ -20,7 +21,7 @@ data class StreamStateRemoteError(val message: String): StreamState()
 data class StreamStateQuit(val reason: QuitReason, val reasonString: String?): StreamState()
 data class StreamStateLoginPinRequest(val pinIncorrect: Boolean): StreamState()
 
-class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
+class StreamSession(private val context: Context, val connectInfo: ConnectInfo, val logManager: LogManager, val logVerbose: Boolean, val realVideoTimestamps: Boolean,
 		val decoderInputThread: Boolean, val videoPacingEnabled: Boolean, val videoPacingMode: Int,
 		val input: StreamInput, private val externallyManaged: Boolean = false)
 {
@@ -69,7 +70,7 @@ class StreamSession(val connectInfo: ConnectInfo, val logManager: LogManager, va
 		try
 		{
 			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose,
-				realVideoTimestamps || videoPacingEnabled, decoderInputThread)
+				realVideoTimestamps || videoPacingEnabled, decoderInputThread, context = context)
 			_state.value = StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()

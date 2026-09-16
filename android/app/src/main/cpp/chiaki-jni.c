@@ -5,6 +5,7 @@
 #include <jni.h>
 
 #include <android/log.h>
+#include <android/api-level.h>
 
 #include <chiaki/common.h>
 #include <chiaki/log.h>
@@ -177,6 +178,9 @@ typedef struct android_chiaki_session_t
 	jmethodID java_session_event_rumble_meth;
 	jmethodID java_session_event_remote_data_socket_needed_meth;
 	jmethodID java_session_event_registration_success_meth;
+	jmethodID java_session_performance_hint_thread_started_meth;
+	jmethodID java_session_performance_hint_report_meth;
+	jmethodID java_session_performance_hint_thread_stopped_meth;
 	jfieldID java_controller_state_buttons;
 	jfieldID java_controller_state_l2_state;
 	jfieldID java_controller_state_r2_state;
@@ -203,6 +207,52 @@ typedef struct android_chiaki_session_t
 	AndroidChiakiAudioDecoder audio_decoder;
 	void *audio_output;
 } AndroidChiakiSession;
+
+static void clear_performance_hint_exception(JNIEnv *env, AndroidChiakiSession *session, const char *operation)
+{
+	if(!E->ExceptionCheck(env))
+		return;
+	E->ExceptionClear(env);
+	CHIAKI_LOGW(session->log, "Performance hint %s callback failed", operation);
+}
+
+static void android_chiaki_performance_hint_thread_started(void *user, ChiakiThreadName role)
+{
+	AndroidChiakiSession *session = user;
+	JNIEnv *env = attach_thread_jni();
+	if(!env)
+		return;
+	E->CallVoidMethod(env, session->java_session,
+			session->java_session_performance_hint_thread_started_meth, (jint)role, (jint)gettid());
+	clear_performance_hint_exception(env, session, "thread-start");
+	// Keep this native worker attached so per-frame reports do not pay attach/detach overhead.
+}
+
+static void android_chiaki_performance_hint_report(void *user, ChiakiThreadName role,
+		uint64_t actual_duration_ns)
+{
+	AndroidChiakiSession *session = user;
+	JNIEnv *env = NULL;
+	if((*global_vm)->GetEnv(global_vm, (void **)&env, JNI_VERSION) != JNI_OK)
+		return;
+	E->CallVoidMethod(env, session->java_session,
+			session->java_session_performance_hint_report_meth,
+			(jint)role, (jlong)actual_duration_ns);
+	clear_performance_hint_exception(env, session, "report");
+}
+
+static void android_chiaki_performance_hint_thread_stopped(void *user, ChiakiThreadName role)
+{
+	AndroidChiakiSession *session = user;
+	JNIEnv *env = attach_thread_jni();
+	if(env)
+	{
+		E->CallVoidMethod(env, session->java_session,
+				session->java_session_performance_hint_thread_stopped_meth, (jint)role);
+		clear_performance_hint_exception(env, session, "thread-stop");
+	}
+	(*global_vm)->DetachCurrentThread(global_vm);
+}
 
 static ChiakiErrorCode android_chiaki_video_decoder_request_idr(void *user)
 {
@@ -308,6 +358,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jboolean decoder_low_latency = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLowLatencyEnabled", "Z"));
 	jboolean thread_priority_boost = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "threadPriorityBoostEnabled", "Z"));
 	g_thread_priority_boost_enabled = thread_priority_boost;
+	jboolean performance_mode = E->GetBooleanField(env, connect_info_obj,
+			E->GetFieldID(env, connect_info_class, "performanceModeEnabled", "Z"));
 	jboolean decoder_late_frame_recovery = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLateFrameRecoveryEnabled", "Z"));
 	jdouble packet_loss_max = E->GetDoubleField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "packetLossMax", "D"));
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
@@ -413,7 +465,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->log = log;
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
-			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery);
+			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
+			performance_mode);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -455,6 +508,18 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_rumble_meth = E->GetMethodID(env, session->java_session_class, "eventRumble", "(II)V");
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
+	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
+	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
+	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");
+	if(performance_mode && android_get_device_api_level() >= 31)
+	{
+		android_chiaki_video_presenter_set_performance_hint_callbacks(&session->video_decoder.presenter,
+				android_chiaki_performance_hint_thread_started,
+				android_chiaki_performance_hint_report,
+				android_chiaki_performance_hint_thread_stopped, session);
+		CHIAKI_LOGI(log, "ADPF performance hints enabled with a %d fps frame budget",
+				connect_info.video_profile.max_fps);
+	}
 
 	jclass controller_state_class = E->FindClass(env, BASE_PACKAGE"/ControllerState");
 	session->java_controller_state_buttons = E->GetFieldID(env, controller_state_class, "buttons", "I");
