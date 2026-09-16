@@ -148,6 +148,7 @@ dependencies {
     implementation libs.recyclerview
     implementation libs.preference.ktx
     implementation libs.material
+    implementation libs.browser
 
     implementation libs.lifecycle.viewmodel.ktx
     implementation libs.lifecycle.livedata.ktx
