@@ -65,6 +65,17 @@ data class ConnectVideoProfile(
 }
 
 @Parcelize
+data class AndroidChiakiVideoPresenterConfig(
+	val pacingEnabled: Boolean = false,
+	val pacingMode: Int = 2,
+	val presenterLead: Int = 0,
+	val boundedAgeEnabled: Boolean = false,
+	val maxFrameAgePeriods: Int = 2,
+	val nonblockingProducer: Boolean = false,
+	val recoveryStrategy: Int = 0
+): Parcelable
+
+@Parcelize
 data class ConnectInfo(
 	val ps5: Boolean,
 	val host: String,
@@ -87,7 +98,8 @@ data class ConnectInfo(
 	val decoderOperatingRateAuto: Boolean = true,
 	val decoderRealtimePriority: Boolean = false,
 	val videoTimestampRateHz: Int = 0,
-	val streamDiagnosticsEnabled: Boolean = false
+	val streamDiagnosticsEnabled: Boolean = false,
+	val videoPresenterConfig: AndroidChiakiVideoPresenterConfig = AndroidChiakiVideoPresenterConfig()
 ): Parcelable
 
 data class NativeRemoteConnection(
@@ -131,11 +143,9 @@ private class ChiakiNative
 		@JvmStatic external fun sessionJoin(ptr: Long): Int
 		@JvmStatic external fun sessionSetRemoteDataSocket(ptr: Long, fd: Int): Int
 		@JvmStatic external fun sessionSetSurface(ptr: Long, surface: Surface?, streamFps: Int,
-			refreshHz: Double, appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int,
-			maxQueueAgePeriods: Int, nonblockingProducer: Boolean, recoveryStrategy: Int)
+			refreshHz: Double, appVsyncOffsetNanos: Long)
 		@JvmStatic external fun sessionSetTiming(ptr: Long, streamFps: Int, refreshHz: Double,
-			appVsyncOffsetNanos: Long, pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int,
-			nonblockingProducer: Boolean, recoveryStrategy: Int)
+			appVsyncOffsetNanos: Long)
 		@JvmStatic external fun sessionSetPacingMode(ptr: Long, pacingMode: Int)
 		@JvmStatic external fun sessionGetVideoStats(ptr: Long): VideoStats
 		@JvmStatic external fun sessionSetControllerState(ptr: Long, controllerState: ControllerState)
@@ -570,20 +580,14 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	/** Native takes ownership of fd only when the returned error is successful. */
 	fun setRemoteDataSocket(fd: Int) = ErrorCode(ChiakiNative.sessionSetRemoteDataSocket(nativePtr, fd))
 
-	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
-		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, nonblockingProducer: Boolean,
-		recoveryStrategy: Int)
+	fun setSurface(surface: Surface?, streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long)
 	{
-		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos,
-			pacingMode, presenterLead, maxQueueAgePeriods, nonblockingProducer, recoveryStrategy)
+		ChiakiNative.sessionSetSurface(nativePtr, surface, streamFps, refreshHz, appVsyncOffsetNanos)
 	}
 
-	fun setTiming(streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long,
-		pacingMode: Int, presenterLead: Int, maxQueueAgePeriods: Int, nonblockingProducer: Boolean,
-		recoveryStrategy: Int)
+	fun setTiming(streamFps: Int, refreshHz: Double, appVsyncOffsetNanos: Long)
 	{
-		ChiakiNative.sessionSetTiming(nativePtr, streamFps, refreshHz, appVsyncOffsetNanos,
-			pacingMode, presenterLead, maxQueueAgePeriods, nonblockingProducer, recoveryStrategy)
+		ChiakiNative.sessionSetTiming(nativePtr, streamFps, refreshHz, appVsyncOffsetNanos)
 	}
 
 	fun setPacingMode(pacingMode: Int) = ChiakiNative.sessionSetPacingMode(nativePtr, pacingMode)

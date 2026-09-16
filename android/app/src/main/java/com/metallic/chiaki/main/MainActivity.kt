@@ -262,7 +262,8 @@ class MainActivity : AppCompatActivity()
 					decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 					decoderRealtimePriority = preferences.decoderRealtimePriority,
 					videoTimestampRateHz = preferences.videoTimestampRateHz,
-					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
+					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled,
+					videoPresenterConfig = preferences.videoPresenterConfig
 				)
 				Intent(this, StreamActivity::class.java).let {
 					it.putExtra(StreamActivity.EXTRA_CONNECT_INFO, connectInfo)

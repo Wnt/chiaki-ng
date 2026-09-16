@@ -98,20 +98,15 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
 		int32_t operating_rate, bool operating_rate_default, bool operating_rate_auto,
 		bool realtime_priority, unsigned int pts_rate_hz,
-		bool diagnostics_enabled, bool stats_log_enabled);
+		bool diagnostics_enabled, bool stats_log_enabled,
+		const AndroidChiakiVideoPresenterConfig *presenter_config);
 void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy);
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns);
 void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy);
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns);
 void android_chiaki_video_decoder_set_pacing_mode(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoPacingMode pacing_mode);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size,
