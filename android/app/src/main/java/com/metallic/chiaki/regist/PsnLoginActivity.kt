@@ -2,6 +2,10 @@
 
 package com.metallic.chiaki.regist
 
+import android.animation.Animator
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
@@ -12,8 +16,13 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Toast
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
@@ -27,6 +36,7 @@ import androidx.browser.customtabs.CustomTabsIntent
 import androidx.browser.customtabs.CustomTabsService
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.R
@@ -62,6 +72,11 @@ class PsnLoginActivity : AppCompatActivity()
 		private const val STATE_BROWSER_PAUSE_OBSERVED = "browser_pause_observed"
 		private const val STATE_BROWSER_OPENED_AT = "browser_opened_at"
 		private const val STATE_BROWSER_RECOVERIES = "browser_recoveries"
+		private const val STATE_EXPLAINER_SHOWING = "explainer_showing"
+		private const val STATE_EXPLAINER_REMAINING = "explainer_remaining"
+		private const val STATE_EXPLAINER_TAB_ONLY = "explainer_tab_only"
+		/** 25 frames a second is smooth for a bar with no digits on it, and costs nothing. */
+		private const val EXPLAINER_TICK_MS = 40L
 	}
 
 	private lateinit var binding: ActivityPsnLoginBinding
@@ -74,6 +89,30 @@ class PsnLoginActivity : AppCompatActivity()
 	private var browserRecoveries = 0
 	/** Read once: a redirect arriving through onNewIntent replaces the intent without this extra. */
 	private var offerPinLink = false
+	/** The explainer is in front of the browser launch it will make when its bar fills (PLE-339). */
+	private var explainerShowing = false
+	private var explainerTabOnly = false
+	private var explainerRemainingMs = PSN_SIGN_IN_EXPLAINER_MS
+	private var explainerDeadlineMs = 0L
+	/** Stopping twice (onPause, then onSaveInstanceState) must not shorten what is left. */
+	private var explainerTicking = false
+	private val explainerHandler = Handler(Looper.getMainLooper())
+	private var highlightPulse: Animator? = null
+	private val explainerTick = object : Runnable
+	{
+		override fun run()
+		{
+			if(!explainerShowing)
+				return
+			val remaining = explainerDeadlineMs - SystemClock.elapsedRealtime()
+			binding.signInExplainer.signInExplainerProgress.progress =
+				psnSignInExplainerProgress(PSN_SIGN_IN_EXPLAINER_MS - remaining)
+			if(remaining <= 0L)
+				proceedFromSignInExplainer()
+			else
+				explainerHandler.postDelayed(this, EXPLAINER_TICK_MS)
+		}
+	}
 
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
@@ -87,8 +126,9 @@ class PsnLoginActivity : AppCompatActivity()
 		binding.toolbar.setNavigationOnClickListener { finish() }
 		binding.continueButton.setOnClickListener {
 			browserRecoveries = 0
-			launchBrowserSignIn()
+			beginBrowserSignIn()
 		}
+		binding.signInExplainer.signInExplainerButton.setOnClickListener { proceedFromSignInExplainer() }
 		binding.pinLinkButton.setOnClickListener {
 			setResult(RESULT_LINK_WITH_PIN)
 			finish()
@@ -109,15 +149,25 @@ class PsnLoginActivity : AppCompatActivity()
 		browserPauseObserved = savedInstanceState?.getBoolean(STATE_BROWSER_PAUSE_OBSERVED) ?: false
 		browserOpenedAtMs = savedInstanceState?.getLong(STATE_BROWSER_OPENED_AT) ?: 0L
 		browserRecoveries = savedInstanceState?.getInt(STATE_BROWSER_RECOVERIES) ?: 0
+		explainerTabOnly = savedInstanceState?.getBoolean(STATE_EXPLAINER_TAB_ONLY) ?: false
+		explainerRemainingMs = savedInstanceState?.getLong(STATE_EXPLAINER_REMAINING) ?: PSN_SIGN_IN_EXPLAINER_MS
 		when
 		{
 			browserSignIn -> showBrowserWaiting()
+			// A rotation while the explainer is up keeps its place in the countdown, not its start.
+			savedInstanceState?.getBoolean(STATE_EXPLAINER_SHOWING) == true ->
+			{
+				// The page under the explainer is kept too: the passkey path reaches here from a
+				// loaded WebView, which is still the fallback if no browser opens after all.
+				binding.webView.restoreState(savedInstanceState)
+				showSignInExplainer(explainerTabOnly, explainerRemainingMs)
+			}
 			savedInstanceState != null ->
 			{
 				showWebView()
 				binding.webView.restoreState(savedInstanceState)
 			}
-			launchBrowserSignIn(tabOnly = true) -> Unit
+			beginBrowserSignIn(tabOnly = true) -> Unit
 			else ->
 			{
 				showWebView()
@@ -130,7 +180,18 @@ class PsnLoginActivity : AppCompatActivity()
 	{
 		if(browserLaunched)
 			browserPauseObserved = true
+		// Out of sight the countdown stops: a browser started from the background is dropped by
+		// Android 10 and later anyway, and the user has not had his 15 s while looking elsewhere.
+		if(explainerShowing)
+			stopSignInExplainerTimer()
 		super.onPause()
+	}
+
+	override fun onResume()
+	{
+		super.onResume()
+		if(explainerShowing)
+			startSignInExplainerTimer()
 	}
 
 	override fun onWindowFocusChanged(hasFocus: Boolean)
@@ -237,10 +298,147 @@ class PsnLoginActivity : AppCompatActivity()
 					return@runOnUiThread
 				if(!isPsnSignInHost(binding.webView.url?.let { Uri.parse(it).host }))
 					return@runOnUiThread
-				launchBrowserSignIn()
+				beginBrowserSignIn()
 			}
 		}
 	}
+
+	/**
+	 * The way into the browser for anyone who asked for it: the user pressing Link or Continue, a
+	 * retry, or the page asking for a passkey the WebView can never give. The explainer goes first,
+	 * because pressing the tab's ✓ is the only way this app ever learns the tab's address and the
+	 * user has to be told before the tab covers the screen. Returns false when no browser would
+	 * open at all, leaving the WebView as the way in; the silent reopen after a tab came back
+	 * without a code (PLE-323) calls [launchBrowserSignIn] directly and stays silent.
+	 */
+	private fun beginBrowserSignIn(tabOnly: Boolean = false): Boolean
+	{
+		if(!canOpenBrowserSignIn(tabOnly))
+			return false
+		showSignInExplainer(tabOnly, PSN_SIGN_IN_EXPLAINER_MS)
+		return true
+	}
+
+	/** Whether [launchBrowserSignIn] has anything to launch, asked before the explainer commits to it. */
+	private fun canOpenBrowserSignIn(tabOnly: Boolean): Boolean
+	{
+		val uri = Uri.parse(PsnAuth.loginUrl())
+		if(findCustomTabsPackage(uri) != null)
+			return true
+		if(tabOnly)
+			return false
+		val viewIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+		return packageManager.resolveActivity(viewIntent, 0) != null
+	}
+
+	/**
+	 * The 15 s explainer: the drawn toolbar with its ✓ picked out, a bar with no digits on it, and
+	 * a button for the user who is already holding his password. Both ways out are the same launch.
+	 */
+	private fun showSignInExplainer(tabOnly: Boolean, remainingMs: Long)
+	{
+		explainerShowing = true
+		explainerTabOnly = tabOnly
+		explainerRemainingMs = remainingMs.coerceIn(0L, PSN_SIGN_IN_EXPLAINER_MS)
+		binding.webView.visibility = View.GONE
+		binding.progressBar.visibility = View.GONE
+		binding.continueButton.visibility = View.GONE
+		binding.pinLinkButton.visibility = View.GONE
+		binding.finishHintTextView.visibility = View.GONE
+		binding.signInExplainer.signInExplainerProgress.max = PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX
+		binding.signInExplainer.signInExplainerProgress.progress =
+			psnSignInExplainerProgress(PSN_SIGN_IN_EXPLAINER_MS - explainerRemainingMs)
+		binding.signInExplainer.root.visibility = View.VISIBLE
+		startHighlightPulse()
+		// onResume starts the countdown when the screen is not in front yet (a rotation, onCreate).
+		if(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+			startSignInExplainerTimer()
+	}
+
+	private fun startSignInExplainerTimer()
+	{
+		explainerDeadlineMs = SystemClock.elapsedRealtime() + explainerRemainingMs
+		explainerHandler.removeCallbacks(explainerTick)
+		explainerTicking = true
+		explainerTick.run()
+	}
+
+	private fun stopSignInExplainerTimer()
+	{
+		explainerHandler.removeCallbacks(explainerTick)
+		if(!explainerTicking)
+			return
+		explainerTicking = false
+		explainerRemainingMs = (explainerDeadlineMs - SystemClock.elapsedRealtime())
+			.coerceIn(0L, PSN_SIGN_IN_EXPLAINER_MS)
+	}
+
+	/** The bar ran out, or the user pressed Sign in: the same browser launch either way. */
+	private fun proceedFromSignInExplainer()
+	{
+		if(!explainerShowing)
+			return
+		hideSignInExplainer()
+		val tabOnly = explainerTabOnly
+		if(launchBrowserSignIn(tabOnly))
+			return
+		// The browser went away between the explainer and this launch: the WebView is what is left.
+		showWebView()
+		binding.webView.loadUrl(PsnAuth.loginUrl())
+	}
+
+	private fun hideSignInExplainer()
+	{
+		if(explainerShowing)
+			stopSignInExplainerTimer()
+		explainerShowing = false
+		explainerRemainingMs = PSN_SIGN_IN_EXPLAINER_MS
+		stopHighlightPulse()
+		binding.signInExplainer.root.visibility = View.GONE
+	}
+
+	/**
+	 * The ✓ wears a ring at rest; a second ring pulses out of it, unless animations are off
+	 * system-wide, in which case the ring stays and only the movement goes (see
+	 * [shouldPulseSignInHighlight]).
+	 */
+	private fun startHighlightPulse()
+	{
+		stopHighlightPulse()
+		val pulse = binding.signInExplainer.signInExplainerCheckPulse
+		if(!shouldPulseSignInHighlight(animatorDurationScale()))
+		{
+			pulse.visibility = View.INVISIBLE
+			return
+		}
+		pulse.visibility = View.VISIBLE
+		highlightPulse = ObjectAnimator.ofPropertyValuesHolder(
+			pulse,
+			PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.7f),
+			PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.7f),
+			PropertyValuesHolder.ofFloat(View.ALPHA, 0.9f, 0f)
+		).apply {
+			duration = 1400L
+			repeatCount = ValueAnimator.INFINITE
+			interpolator = AccelerateDecelerateInterpolator()
+			start()
+		}
+	}
+
+	private fun stopHighlightPulse()
+	{
+		highlightPulse?.cancel()
+		highlightPulse = null
+		binding.signInExplainer.signInExplainerCheckPulse.let {
+			it.scaleX = 1f
+			it.scaleY = 1f
+			it.alpha = 0.9f
+			it.visibility = View.INVISIBLE
+		}
+	}
+
+	private fun animatorDurationScale(): Float =
+		Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
 
 	/**
 	 * Opens the sign-in in a browser: a Custom Tab with the Finish sign-in button, or with [tabOnly]
@@ -378,6 +576,7 @@ class PsnLoginActivity : AppCompatActivity()
 		if(handlingRedirect)
 			return
 		handlingRedirect = true
+		hideSignInExplainer()
 		PsnPendingRedirect.take()
 		binding.webView.stopLoading()
 		binding.webView.visibility = View.GONE
@@ -406,6 +605,7 @@ class PsnLoginActivity : AppCompatActivity()
 	private fun showError(message: String)
 	{
 		handlingRedirect = true
+		hideSignInExplainer()
 		binding.webView.stopLoading()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
@@ -425,7 +625,7 @@ class PsnLoginActivity : AppCompatActivity()
 	{
 		handlingRedirect = false
 		if(browserSignIn)
-			launchBrowserSignIn()
+			beginBrowserSignIn()
 		else
 		{
 			showWebView()
@@ -436,6 +636,7 @@ class PsnLoginActivity : AppCompatActivity()
 
 	private fun showWebView()
 	{
+		hideSignInExplainer()
 		binding.continueButton.visibility = View.GONE
 		binding.pinLinkButton.visibility = View.GONE
 		binding.finishHintTextView.visibility = View.GONE
@@ -447,6 +648,7 @@ class PsnLoginActivity : AppCompatActivity()
 	/** Behind the browser tab: nothing to read, nothing to decide. */
 	private fun showBrowserWaiting()
 	{
+		hideSignInExplainer()
 		binding.webView.visibility = View.GONE
 		binding.progressBar.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE
@@ -471,6 +673,11 @@ class PsnLoginActivity : AppCompatActivity()
 		outState.putBoolean(STATE_BROWSER_PAUSE_OBSERVED, browserPauseObserved)
 		outState.putLong(STATE_BROWSER_OPENED_AT, browserOpenedAtMs)
 		outState.putInt(STATE_BROWSER_RECOVERIES, browserRecoveries)
+		if(explainerShowing)
+			stopSignInExplainerTimer()
+		outState.putBoolean(STATE_EXPLAINER_SHOWING, explainerShowing)
+		outState.putLong(STATE_EXPLAINER_REMAINING, explainerRemainingMs)
+		outState.putBoolean(STATE_EXPLAINER_TAB_ONLY, explainerTabOnly)
 		if(!browserSignIn)
 			binding.webView.saveState(outState)
 		super.onSaveInstanceState(outState)
@@ -478,6 +685,9 @@ class PsnLoginActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		explainerHandler.removeCallbacks(explainerTick)
+		highlightPulse?.cancel()
+		highlightPulse = null
 		binding.webView.stopLoading()
 		binding.webView.removeJavascriptInterface(PSN_PASSKEY_BRIDGE)
 		binding.webView.webChromeClient = null

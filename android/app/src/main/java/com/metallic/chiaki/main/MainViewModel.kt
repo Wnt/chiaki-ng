@@ -221,27 +221,26 @@ class MainViewModel(
 	}
 
 	/**
-	 * PLE-337: turn the control-plane states into something a waiting user can read. The measured
-	 * first run spends 3.5 s reaching the console and 6 s waiting for its OFFER, so the card must
-	 * keep moving on its own — the second count does that even while one phase sits still.
+	 * PLE-337/PLE-340: turn the control-plane states into something a waiting user can read. The
+	 * card must keep moving on its own even while one phase sits still, so [ConnectProgress] is
+	 * driven by [sessionStartedAt] - set once, here, when this run of tracking begins - never by
+	 * how long the current phase alone has run; that would restart the bar at every phase change,
+	 * which is the "bar per phase" PLE-340 replaced.
 	 *
 	 * Polls rather than collects because the elapsed time has to advance between state changes.
 	 */
 	private suspend fun trackPsnProgress(controller: PsnRemoteController)
 	{
 		var phase = ConnectPhase.REACHING_NETWORK
-		var phaseStartedAt = SystemClock.elapsedRealtime()
+		val sessionStartedAt = SystemClock.elapsedRealtime()
 		var shown: ConnectProgress? = null
 		while(true)
 		{
 			val now = SystemClock.elapsedRealtime()
 			val current = connectPhaseOf(controller.state.value)
-			if(current != null && current != phase)
-			{
+			if(current != null)
 				phase = current
-				phaseStartedAt = now
-			}
-			val progress = connectProgress(phase, now - phaseStartedAt)
+			val progress = connectProgress(phase, now - sessionStartedAt)
 			if(progress != shown)
 			{
 				shown = progress

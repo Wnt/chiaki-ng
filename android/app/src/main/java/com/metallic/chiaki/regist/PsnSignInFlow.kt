@@ -87,6 +87,37 @@ internal fun psnBrowserReturnStep(recoveriesInARow: Int): PsnBrowserReturnStep =
 	if(recoveriesInARow < PSN_SILENT_BROWSER_RECOVERIES) PsnBrowserReturnStep.REOPEN_TAB else PsnBrowserReturnStep.OFFER_CHOICES
 
 /**
+ * The explainer stands in front of the browser for this long (PLE-339). A toast was tried first
+ * and could not be read in time; 15 s is long enough to read the toolbar mock-up and short enough
+ * that a user who already knows the tap only waits out a bar he can skip with the button.
+ */
+internal const val PSN_SIGN_IN_EXPLAINER_MS = 15_000L
+
+/** Steps of the explainer's bar: fine enough to look continuous, coarse enough to cost nothing. */
+internal const val PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX = 1000
+
+/**
+ * How full the explainer's bar is after [elapsedMs] of [totalMs]. Clamped at both ends, because a
+ * frame can arrive late or after the countdown was paused and resumed, and the bar may not jump
+ * backwards or past its end.
+ */
+internal fun psnSignInExplainerProgress(elapsedMs: Long, totalMs: Long = PSN_SIGN_IN_EXPLAINER_MS): Int
+{
+	if(totalMs <= 0L)
+		return PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX
+	val filled = elapsedMs * PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX / totalMs
+	return filled.coerceIn(0L, PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX.toLong()).toInt()
+}
+
+/**
+ * With animations turned off system-wide (Settings.Global.ANIMATOR_DURATION_SCALE at 0) an animator
+ * finishes in no time, so the pulse around the ✓ would flicker or spin instead of running. The ring
+ * is then shown at rest: the highlight stays, only its movement goes.
+ */
+internal fun shouldPulseSignInHighlight(animatorDurationScale: Float): Boolean =
+	animatorDurationScale > 0f && animatorDurationScale.isFinite()
+
+/**
  * Off only in a PSN mock build running the PLE-302 fault `exit-loses-code`, which puts back the dead
  * end this recovery removed so the onboarding driver can show it catches it.
  */

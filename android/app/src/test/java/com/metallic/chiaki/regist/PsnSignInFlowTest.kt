@@ -100,4 +100,24 @@ class PsnSignInFlowTest
 		assertEquals(PsnBrowserReturnStep.OFFER_CHOICES, psnBrowserReturnStep(2))
 		assertEquals(PsnBrowserReturnStep.OFFER_CHOICES, psnBrowserReturnStep(3))
 	}
+
+	@Test
+	fun explainerBar_fillsOverFifteenSecondsAndStopsThere()
+	{
+		assertEquals(0, psnSignInExplainerProgress(0L))
+		assertEquals(PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX / 2, psnSignInExplainerProgress(PSN_SIGN_IN_EXPLAINER_MS / 2))
+		assertEquals(PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX, psnSignInExplainerProgress(PSN_SIGN_IN_EXPLAINER_MS))
+		// A late frame, or one after a pause, may not push the bar past its end or behind its start.
+		assertEquals(PSN_SIGN_IN_EXPLAINER_PROGRESS_MAX, psnSignInExplainerProgress(PSN_SIGN_IN_EXPLAINER_MS * 3))
+		assertEquals(0, psnSignInExplainerProgress(-5_000L))
+	}
+
+	@Test
+	fun highlightPulses_onlyWhileAnimationsAreOn()
+	{
+		assertTrue(shouldPulseSignInHighlight(1f))
+		assertTrue(shouldPulseSignInHighlight(0.5f))
+		assertFalse(shouldPulseSignInHighlight(0f))
+		assertFalse(shouldPulseSignInHighlight(Float.NaN))
+	}
 }

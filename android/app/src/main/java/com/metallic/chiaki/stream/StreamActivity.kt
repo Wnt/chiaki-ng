@@ -39,8 +39,9 @@ import androidx.lifecycle.*
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.remote.ConnectPhase
+import com.metallic.chiaki.remote.applyTo
 import com.metallic.chiaki.remote.connectProgress
-import com.metallic.chiaki.remote.detailText
+import com.metallic.chiaki.remote.hideConnectBar
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.viewModelFactory
@@ -133,9 +134,10 @@ class StreamActivity : AppCompatActivity()
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
-	// PLE-337: which wait the connect is in, and when it started, so the overlay can count.
+	// PLE-337/PLE-340: which wait the connect is in, and when this attempt started (not the
+	// current phase - see setConnectPhase), so the overlay's bar can fill continuously.
 	private var connectPhase: ConnectPhase? = null
-	private var connectPhaseStartedAt = 0L
+	private var connectSessionStartedAt = 0L
 	private val connectProgressTick = object: Runnable
 	{
 		override fun run()
@@ -898,17 +900,17 @@ class StreamActivity : AppCompatActivity()
 	}
 
 	/**
-	 * PLE-337: the connect overlay. [phase] changing restarts the clock; the same phase repeating -
-	 * which is exactly what a handoff retry does - leaves it running, so the count keeps rising
-	 * across every poll of the console instead of resetting to zero each time.
+	 * PLE-337/PLE-340: the connect overlay. [phase] changing updates the label but never restarts
+	 * the bar's clock - only going from no phase to a phase (a fresh attempt) does that; the same
+	 * phase repeating, which is exactly what a handoff retry does, and a later phase taking over
+	 * both leave [connectSessionStartedAt] alone, so the bar keeps filling across every poll of
+	 * the console instead of resetting at each named step.
 	 */
 	private fun setConnectPhase(phase: ConnectPhase?)
 	{
-		if(phase != connectPhase)
-		{
-			connectPhase = phase
-			connectPhaseStartedAt = SystemClock.elapsedRealtime()
-		}
+		if(phase != null && connectPhase == null)
+			connectSessionStartedAt = SystemClock.elapsedRealtime()
+		connectPhase = phase
 		uiVisibilityHandler.removeCallbacks(connectProgressTick)
 		renderConnectProgress()
 		if(phase != null)
@@ -921,15 +923,13 @@ class StreamActivity : AppCompatActivity()
 		if(phase == null)
 		{
 			binding.connectingStatusText.visibility = View.GONE
-			binding.connectingDetailText.visibility = View.GONE
+			hideConnectBar(binding.connectingBar, binding.connectingOvertimeText)
 			return
 		}
-		val progress = connectProgress(phase, SystemClock.elapsedRealtime() - connectPhaseStartedAt,
-			showStep = viewModel.justLinked)
+		val progress = connectProgress(phase, SystemClock.elapsedRealtime() - connectSessionStartedAt)
 		binding.connectingStatusText.visibility = View.VISIBLE
 		binding.connectingStatusText.setText(phase.labelRes)
-		binding.connectingDetailText.visibility = View.VISIBLE
-		binding.connectingDetailText.text = progress.detailText(this)
+		progress.applyTo(binding.connectingBar, binding.connectingOvertimeText)
 	}
 
 	override fun onWindowFocusChanged(hasFocus: Boolean)

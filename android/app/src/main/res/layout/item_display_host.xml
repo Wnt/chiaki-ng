@@ -102,18 +102,35 @@
             tools:text="Waking your console"
             tools:visibility="visible" />
 
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/actionDetailTextView"
+        <!-- PLE-340: a bar timed to fill over ~45 s across the whole connect (no digits); past
+             that it goes indeterminate and actionOvertimeTextView says so instead of stalling. -->
+        <ProgressBar
+            android:id="@+id/actionConnectProgressBar"
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="1000"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="@id/actionStatusTextView"
+            app:layout_constraintTop_toBottomOf="@id/actionStatusTextView"
+            tools:progress="450"
+            tools:visibility="visible" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/actionOvertimeTextView"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:maxLines="1"
+            android:text="@string/connect_taking_longer"
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="@id/actionStatusTextView"
-            app:layout_constraintTop_toBottomOf="@id/actionStatusTextView"
-            tools:text="Step 2 of 6 · 12 s"
+            app:layout_constraintTop_toBottomOf="@id/actionConnectProgressBar"
             tools:visibility="visible" />
 
         <androidx.constraintlayout.widget.Barrier
@@ -121,7 +138,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:barrierDirection="bottom"
-            app:constraint_referenced_ids="stateIndicatorImageView,detailTextView,actionDetailTextView,linkedTagTextView" />
+            app:constraint_referenced_ids="stateIndicatorImageView,detailTextView,actionConnectProgressBar,actionOvertimeTextView,linkedTagTextView" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/menuButton"

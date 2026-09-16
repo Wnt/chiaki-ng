@@ -10,8 +10,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * PLE-337. The first run's phases come straight from the measured capture
- * `build/captures/ple335-firstrun-20260916T224733Z-logcat.txt`.
+ * PLE-337/PLE-340. The first run's phases come straight from the measured capture
+ * `build/captures/ple337-firstrun-20260916T230330Z-logcat.txt` (3.6 s + 9.8 s + ~0 s + 30.3 s +
+ * 0.05 s ≈ 43.9 s), which is why the bar is calibrated to [CONNECT_BAR_DURATION_MS] = 45 s.
  */
 class ConnectProgressTest
 {
@@ -63,38 +64,75 @@ class ConnectProgressTest
 	}
 
 	@Test
-	fun `the clock advances a second at a time`()
+	fun `the bar starts empty and fills linearly towards 45 s`()
 	{
-		assertEquals(0, connectProgress(ConnectPhase.WAKING_CONSOLE, 0).elapsedSeconds)
-		assertEquals(0, connectProgress(ConnectPhase.WAKING_CONSOLE, 999).elapsedSeconds)
-		assertEquals(1, connectProgress(ConnectPhase.WAKING_CONSOLE, 1_000).elapsedSeconds)
-		assertEquals(35, connectProgress(ConnectPhase.CONSOLE_NOT_READY, 35_200).elapsedSeconds)
-		// a clock that ran backwards would be worse than none
-		assertEquals(0, connectProgress(ConnectPhase.WAKING_CONSOLE, -5_000).elapsedSeconds)
+		assertEquals(0f, connectProgress(ConnectPhase.WAKING_CONSOLE, 0).barFraction, 1e-6f)
+		assertEquals(
+			0.2f,
+			connectProgress(ConnectPhase.OPENING_ROUTE, 9_000).barFraction,
+			1e-6f
+		)
+		assertEquals(
+			1f,
+			connectProgress(ConnectPhase.CONSOLE_NOT_READY, CONNECT_BAR_DURATION_MS).barFraction,
+			1e-6f
+		)
 	}
 
 	@Test
-	fun `a phase running to time is not called slow`()
+	fun `a negative clock reads as zero, never negative progress`()
 	{
-		// the capture's own numbers: 6.0 s for the console's OFFER, 3.8 s for the punch
-		assertFalse(connectProgress(ConnectPhase.WAKING_CONSOLE, 6_000).slow)
-		assertFalse(connectProgress(ConnectPhase.OPENING_ROUTE, 3_800).slow)
-		assertFalse(connectProgress(ConnectPhase.CONSOLE_NOT_READY, 19_999).slow)
+		val progress = connectProgress(ConnectPhase.WAKING_CONSOLE, -5_000)
+		assertEquals(0f, progress.barFraction, 1e-6f)
+		assertFalse(progress.overtime)
 	}
 
 	@Test
-	fun `a phase that overstays stops claiming progress`()
+	fun `the bar never claims more than full and switches to overtime at 45 s, not before`()
 	{
-		val progress = connectProgress(ConnectPhase.CONSOLE_NOT_READY, 30_000)
-		assertTrue(progress.slow)
-		assertEquals(30, progress.elapsedSeconds)
-		assertTrue(connectProgress(ConnectPhase.WAKING_CONSOLE, 30_000).slow)
+		assertFalse(connectProgress(ConnectPhase.CONSOLE_NOT_READY, CONNECT_BAR_DURATION_MS - 1).overtime)
+		assertEquals(
+			1f,
+			connectProgress(ConnectPhase.CONSOLE_NOT_READY, CONNECT_BAR_DURATION_MS - 1).barFraction,
+			0.001f
+		)
+		val atLimit = connectProgress(ConnectPhase.CONSOLE_NOT_READY, CONNECT_BAR_DURATION_MS)
+		assertTrue(atLimit.overtime)
+		assertEquals(1f, atLimit.barFraction, 1e-6f)
+		// well past 45 s: still full, still overtime - it never claims more than 100%
+		val wayPast = connectProgress(ConnectPhase.CONSOLE_NOT_READY, CONNECT_BAR_DURATION_MS * 4)
+		assertTrue(wayPast.overtime)
+		assertEquals(1f, wayPast.barFraction, 1e-6f)
 	}
 
 	@Test
-	fun `an ordinary stream gets the clock without the first-run step count`()
+	fun `the bar is monotonic across an entire connect, phase changes included`()
 	{
-		assertFalse(connectProgress(ConnectPhase.STARTING_STREAM, 2_000, showStep = false).showStep)
-		assertTrue(connectProgress(ConnectPhase.STARTING_STREAM, 2_000).showStep)
+		// A session clock that only ever advances, walking through every named phase in order -
+		// exactly what setConnectPhase / trackPsnProgress feed connectProgress with. The bar must
+		// never go backwards and a phase finishing early must not lurch it past where a smooth
+		// fill would already be.
+		val timeline = listOf(
+			ConnectPhase.REACHING_NETWORK to 0L,
+			ConnectPhase.REACHING_NETWORK to 1_200L,
+			ConnectPhase.WAKING_CONSOLE to 3_600L,
+			ConnectPhase.OPENING_ROUTE to 5_000L,
+			ConnectPhase.OPENING_ROUTE to 13_400L,
+			ConnectPhase.LINKING to 13_450L,
+			ConnectPhase.STARTING_STREAM to 13_500L,
+			ConnectPhase.CONSOLE_NOT_READY to 20_000L,
+			ConnectPhase.CONSOLE_NOT_READY to 43_800L,
+			ConnectPhase.CONSOLE_NOT_READY to 60_000L
+		)
+		var previousFraction = 0f
+		timeline.forEach { (phase, sessionElapsedMs) ->
+			val progress = connectProgress(phase, sessionElapsedMs)
+			assertTrue(
+				"fraction must not go backwards at $sessionElapsedMs ms",
+				progress.barFraction >= previousFraction
+			)
+			previousFraction = progress.barFraction
+		}
+		assertEquals(1f, previousFraction, 1e-6f)
 	}
 }
