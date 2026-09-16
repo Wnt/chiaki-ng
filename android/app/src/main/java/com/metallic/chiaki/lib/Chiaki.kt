@@ -82,6 +82,10 @@ data class ConnectInfo(
 	val audioFifoMs: Int = 171,
 	val autoRegister: Boolean = false,
 	val performanceModeEnabled: Boolean = false,
+	val decoderOperatingRate: Int = 0,
+	val decoderOperatingRateAuto: Boolean = true,
+	val decoderRealtimePriority: Boolean = false,
+	val videoTimestampRateHz: Int = 0,
 	val streamDiagnosticsEnabled: Boolean = false
 ): Parcelable
 

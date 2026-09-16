@@ -129,6 +129,10 @@ class MainViewModel(
 		audioFifoMs = preferences.audioFifoMs,
 		autoRegister = autoRegister,
 		performanceModeEnabled = preferences.performanceModeEnabled,
+		decoderOperatingRate = preferences.decoderOperatingRate,
+		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
+		decoderRealtimePriority = preferences.decoderRealtimePriority,
+		videoTimestampRateHz = preferences.videoTimestampRateHz,
 		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 	)
 

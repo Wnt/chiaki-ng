@@ -31,6 +31,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled
 		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
+		preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto
+		preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority
 		preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled
 		preferences.feedbackStatsLogEnabledKey -> preferences.feedbackStatsLogEnabled
 		preferences.decoderInputThreadEnabledKey -> preferences.decoderInputThreadEnabled
@@ -59,6 +61,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled = value
 			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
+			preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto = value
+			preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority = value
 			preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled = value
 			preferences.feedbackStatsLogEnabledKey -> preferences.feedbackStatsLogEnabled = value
 			preferences.decoderInputThreadEnabledKey -> preferences.decoderInputThreadEnabled = value
@@ -87,6 +91,8 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		key == preferences.videoPresenterLeadKey -> preferences.videoPresenterLead.value
 		key == preferences.bitrateKey -> preferences.bitrate?.toString() ?: ""
 		key == preferences.packetLossMaxPercentKey -> preferences.packetLossMaxPercent.toString()
+		key == preferences.decoderOperatingRateKey -> preferences.decoderOperatingRate.toString()
+		key == preferences.videoTimestampRateHzKey -> preferences.videoTimestampRateHz.toString()
 		key == preferences.audioBufferBurstsKey -> preferences.audioBufferBursts.toString()
 		key == preferences.audioFifoMsKey -> preferences.audioFifoMs.toString()
 		key == preferences.codecKey -> preferences.codec.value
@@ -127,6 +133,14 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			key == preferences.packetLossMaxPercentKey ->
 			{
 				value?.toIntOrNull()?.let { preferences.packetLossMaxPercent = it }
+			}
+			key == preferences.decoderOperatingRateKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.decoderOperatingRate = it }
+			}
+			key == preferences.videoTimestampRateHzKey ->
+			{
+				value?.toIntOrNull()?.let { preferences.videoTimestampRateHz = it }
 			}
 			key == preferences.audioBufferBurstsKey ->
 			{
@@ -216,6 +230,26 @@ class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 			it.setOnBindEditTextListener { editText ->
 				editText.inputType = InputType.TYPE_CLASS_NUMBER
 				editText.setText(preferences.packetLossMaxPercent.toString())
+			}
+		}
+
+		preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_decoder_operating_rate_key))?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_decoder_operating_rate_value, preferences.decoderOperatingRate)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.decoderOperatingRate.toString())
+			}
+		}
+
+		preferenceScreen.findPreference<EditTextPreference>(getString(R.string.preferences_video_timestamp_rate_hz_key))?.let {
+			it.summaryProvider = Preference.SummaryProvider<EditTextPreference> {
+				getString(R.string.preferences_video_timestamp_rate_hz_value, preferences.videoTimestampRateHz)
+			}
+			it.setOnBindEditTextListener { editText ->
+				editText.inputType = InputType.TYPE_CLASS_NUMBER
+				editText.setText(preferences.videoTimestampRateHz.toString())
 			}
 		}
 

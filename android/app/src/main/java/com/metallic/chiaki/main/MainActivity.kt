@@ -257,6 +257,10 @@ class MainActivity : AppCompatActivity()
 					audioBufferBursts = preferences.audioBufferBursts,
 					audioFifoMs = preferences.audioFifoMs,
 					performanceModeEnabled = preferences.performanceModeEnabled,
+					decoderOperatingRate = preferences.decoderOperatingRate,
+					decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
+					decoderRealtimePriority = preferences.decoderRealtimePriority,
+					videoTimestampRateHz = preferences.videoTimestampRateHz,
 					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 				)
 				Intent(this, StreamActivity::class.java).let {
