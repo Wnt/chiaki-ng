@@ -41,7 +41,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
 		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
 		int32_t operating_rate, bool operating_rate_auto, bool realtime_priority, unsigned int pts_rate_hz,
-		bool diagnostics_enabled)
+		bool diagnostics_enabled, bool stats_log_enabled)
 {
 	decoder->log = log;
 	decoder->codec = NULL;
@@ -105,7 +105,8 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 		return err;
 	}
 	err = android_chiaki_video_presenter_init(&decoder->presenter, log, late_frame_recovery_enabled,
-			real_pts_enabled, diagnostics_enabled, android_chiaki_video_decoder_presenter_release, decoder);
+			real_pts_enabled, diagnostics_enabled, stats_log_enabled,
+			android_chiaki_video_decoder_presenter_release, decoder);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		chiaki_mutex_fini(&decoder->input_mutex);
@@ -654,6 +655,12 @@ void android_chiaki_video_decoder_get_diagnostics(AndroidChiakiVideoDecoder *dec
 	diagnostics->presenter_frames_dropped = presenter.dropped_frames;
 	diagnostics->presenter_bounded_age_frames_dropped = presenter.bounded_age_dropped_frames;
 	diagnostics->dejitter_buffer_ns = presenter.dejitter_buffer_ns;
+	diagnostics->cadence_depth_ns = presenter.cadence_depth_ns;
+	diagnostics->cadence_target_ns = presenter.cadence_target_ns;
+	diagnostics->cadence_err_p50_ns = presenter.cadence_err_p50_ns;
+	diagnostics->cadence_err_p99_ns = presenter.cadence_err_p99_ns;
+	diagnostics->decode_ewma_ns = presenter.decode_ewma_ns;
+	diagnostics->cadence_window_dropped_frames = presenter.cadence_window_dropped_frames;
 	diagnostics->presenter_queue_depth = presenter.queue_depth;
 }
 

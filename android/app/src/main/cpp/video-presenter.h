@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "video-presenter-cadence.h"
+
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_QUEUE_CAPACITY 5
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW 300
 #define ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY 256
@@ -50,6 +52,12 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint64_t dropped_frames;
 	uint64_t bounded_age_dropped_frames;
 	uint64_t dejitter_buffer_ns;
+	uint64_t cadence_depth_ns;
+	uint64_t cadence_target_ns;
+	uint64_t cadence_err_p50_ns;
+	uint64_t cadence_err_p99_ns;
+	uint64_t decode_ewma_ns;
+	uint64_t cadence_window_dropped_frames;
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;
 
@@ -122,12 +130,16 @@ typedef struct android_chiaki_video_presenter_t
 	uint64_t bounded_age_dropped_frames;
 	uint32_t max_queue_age_periods;
 	bool diagnostics_enabled;
+	bool stats_log_enabled;
 	AndroidChiakiVideoInputMetadata input_metadata[ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY];
 	uint32_t input_metadata_next;
 	uint64_t diagnostics_decode_ns[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
 	uint32_t diagnostics_decode_count;
 	uint32_t diagnostics_decode_next;
 	uint64_t diagnostics_output_frames;
+	AndroidChiakiVideoCadence cadence;
+	uint64_t cadence_last_dropped_frames;
+	uint64_t cadence_window_dropped_frames;
 	AndroidChiakiVideoPresenterReleaseCallback release_cb;
 	void *release_cb_user;
 	AndroidChiakiPerformanceHintThreadCallback performance_hint_thread_start_cb;
@@ -137,7 +149,7 @@ typedef struct android_chiaki_video_presenter_t
 } AndroidChiakiVideoPresenter;
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
-		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled,
+		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled, bool stats_log_enabled,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user);
 void android_chiaki_video_presenter_fini(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiakiVideoPresenter *presenter,
