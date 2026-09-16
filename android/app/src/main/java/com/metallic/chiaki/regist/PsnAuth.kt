@@ -4,6 +4,7 @@ package com.metallic.chiaki.regist
 
 import android.net.Uri
 import android.util.Base64
+import com.metallic.chiaki.remote.PsnServiceEndpoints
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -21,9 +22,10 @@ internal object PsnAuth
 {
 	private const val CLIENT_ID = "ba495a24-818c-472b-b12d-ff231c1b5745"
 	private const val CLIENT_SECRET = "mvaiZkRsAsI1IBkY"
-	private const val AUTHORIZE_URL = "https://auth.api.sonyentertainmentnetwork.com/2.0/oauth/authorize"
-	private const val TOKEN_URL = "https://auth.api.sonyentertainmentnetwork.com/2.0/oauth/token"
-	const val REDIRECT_URL = "https://remoteplay.dl.playstation.net/remoteplay/redirect"
+	// Sony's, unless this is a debug build made for the PSN mock (PLE-284).
+	private val AUTHORIZE_URL get() = PsnServiceEndpoints.current.authorizeUrl
+	private val TOKEN_URL get() = PsnServiceEndpoints.current.tokenUrl
+	val REDIRECT_URL get() = PsnServiceEndpoints.current.redirectUrl
 	private const val SCOPE = "psn:clientapp referenceDataService:countryConfig.read pushNotification:webSocket.desktop.connect sessionManager:remotePlaySession.system.update"
 	private const val DUID_PREFIX = "0000000700410080"
 
@@ -123,12 +125,12 @@ internal sealed interface PsnRedirect
 	data class Code(val value: String) : PsnRedirect
 }
 
-internal fun parsePsnRedirect(url: String): PsnRedirect
+internal fun parsePsnRedirect(url: String, endpoints: PsnServiceEndpoints = PsnServiceEndpoints.current): PsnRedirect
 {
 	val uri = try { URI(url.trim()) } catch(_: Exception) { return PsnRedirect.NotRedirect }
 	if(!uri.scheme.equals("https", ignoreCase = true) ||
-		!uri.host.equals("remoteplay.dl.playstation.net", ignoreCase = true) ||
-		uri.path != "/remoteplay/redirect")
+		!uri.host.equals(endpoints.redirectHost, ignoreCase = true) ||
+		uri.path != endpoints.redirectPath)
 		return PsnRedirect.NotRedirect
 
 	val code = try {

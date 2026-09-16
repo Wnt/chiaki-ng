@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+"""Unit tests for psn_mock.py: python3 -m unittest discover -s android/psn-mock"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import http.client
+import json
+import re
+import threading
+import time
+import unittest
+from http.server import ThreadingHTTPServer
+from urllib.parse import parse_qs, urlencode, urlsplit
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+
+import psn_mock
+
+VERIFIED = "verified.test"
+NOLINK = "nolink.test"
+BASIC = "Basic " + base64.b64encode(f"{psn_mock.CLIENT_ID}:not-the-real-one".encode()).decode()
+
+
+def cbor_encode(value) -> bytes:
+    def head(major: int, arg: int) -> bytes:
+        if arg < 24:
+            return bytes([major << 5 | arg])
+        for info, size in ((24, 1), (25, 2), (26, 4), (27, 8)):
+            if arg < 1 << (8 * size):
+                return bytes([major << 5 | info]) + arg.to_bytes(size, "big")
+        raise ValueError(arg)
+
+    if isinstance(value, int):
+        return head(0, value) if value >= 0 else head(1, -1 - value)
+    if isinstance(value, bytes):
+        return head(2, len(value)) + value
+    if isinstance(value, str):
+        return head(3, len(value.encode())) + value.encode()
+    if isinstance(value, dict):
+        return head(5, len(value)) + b"".join(cbor_encode(k) + cbor_encode(v) for k, v in value.items())
+    raise TypeError(value)
+
+
+class SoftwareAuthenticator:
+    def __init__(self, rp_id: str):
+        self.rp_id = rp_id
+        self.key = ec.generate_private_key(ec.SECP256R1())
+        self.cred_id = b"credential-1"
+
+    def auth_data(self, attested: bool) -> bytes:
+        flags = 0x01 | 0x04 | (0x40 if attested else 0)
+        data = hashlib.sha256(self.rp_id.encode()).digest() + bytes([flags]) + (0).to_bytes(4, "big")
+        if attested:
+            numbers = self.key.public_key().public_numbers()
+            cose = {1: 2, 3: -7, -1: 1, -2: numbers.x.to_bytes(32, "big"), -3: numbers.y.to_bytes(32, "big")}
+            data += bytes(16) + len(self.cred_id).to_bytes(2, "big") + self.cred_id + cbor_encode(cose)
+        return data
+
+    @staticmethod
+    def client_data(kind: str, challenge: str, origin: str) -> bytes:
+        return json.dumps({"type": kind, "challenge": challenge, "origin": origin}).encode()
+
+    def create(self, challenge: str, origin: str) -> dict:
+        attestation = cbor_encode({"fmt": "none", "attStmt": {}, "authData": self.auth_data(True)})
+        return {"challenge": challenge, "id": psn_mock.b64url(self.cred_id),
+                "clientDataJSON": psn_mock.b64url(self.client_data("webauthn.create", challenge, origin)),
+                "attestationObject": psn_mock.b64url(attestation)}
+
+    def get(self, challenge: str, origin: str) -> dict:
+        auth_data = self.auth_data(False)
+        client_data = self.client_data("webauthn.get", challenge, origin)
+        signature = self.key.sign(auth_data + hashlib.sha256(client_data).digest(), ec.ECDSA(hashes.SHA256()))
+        return {"challenge": challenge, "id": psn_mock.b64url(self.cred_id),
+                "clientDataJSON": psn_mock.b64url(client_data), "authenticatorData": psn_mock.b64url(auth_data),
+                "signature": psn_mock.b64url(signature)}
+
+
+class MockServerTest(unittest.TestCase):
+    def setUp(self):
+        self.state = psn_mock.State(hosts={VERIFIED: True, NOLINK: False}, packages=psn_mock.DEFAULT_PACKAGES,
+                                    credentials_file=None, drop_seconds=0.2, echo=False)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), psn_mock.make_handler(self.state))
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def request(self, method: str, path: str, host: str = VERIFIED, body: bytes | str | None = None, headers: dict | None = None):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        conn.request(method, path, body=body, headers={"Host": host, **(headers or {})})
+        response = conn.getresponse()
+        data = response.read()
+        conn.close()
+        return response, data
+
+    def authorize(self, host: str = VERIFIED, redirect_host: str | None = None) -> str:
+        query = urlencode({"response_type": "code", "client_id": psn_mock.CLIENT_ID,
+                           "redirect_uri": f"https://{redirect_host or host}/remoteplay/redirect", "scope": "psn:clientapp"})
+        response, page = self.request("GET", "/2.0/oauth/authorize?" + query, host)
+        self.assertEqual(response.status, 200, page)
+        return re.search(rb'name="txn" value="([^"]+)"', page).group(1).decode()
+
+    def sign_in(self, account: str, host: str = VERIFIED, password: str = "pw") -> dict[str, str]:
+        txn = self.authorize(host)
+        response, _ = self.request("POST", "/2.0/oauth/authorize/password", host,
+                                   urlencode({"txn": txn, "account": account, "password": password}),
+                                   {"Content-Type": "application/x-www-form-urlencoded"})
+        self.assertEqual(response.status, 302)
+        location = urlsplit(response.getheader("Location"))
+        self.assertEqual((location.hostname, location.path), (host, "/remoteplay/redirect"))
+        return {k: v[0] for k, v in parse_qs(location.query).items()}
+
+    def exchange(self, code: str, host: str = VERIFIED):
+        body = urlencode({"grant_type": "authorization_code", "code": code, "scope": "psn:clientapp",
+                          "redirect_uri": f"https://{host}/remoteplay/redirect"})
+        response, data = self.request("POST", "/2.0/oauth/token", host, body,
+                                      {"Authorization": BASIC, "Content-Type": "application/x-www-form-urlencoded"})
+        return response.status, json.loads(data) if data else None
+
+    def list_consoles(self, access_token: str):
+        response, data = self.request("GET", "/api/cloudAssistedNavigation/v2/users/me/clients?platform=PS5",
+                                      headers={"Authorization": "Bearer " + access_token})
+        return response.status, json.loads(data)
+
+    def test_assetlinks_only_on_the_verified_host(self):
+        response, data = self.request("GET", "/.well-known/assetlinks.json")
+        self.assertEqual(response.status, 200)
+        target = json.loads(data)[0]["target"]
+        self.assertEqual(target["package_name"], "com.metallic.chiaki.psnmock")
+        self.assertEqual(target["sha256_cert_fingerprints"][0].replace(":", "").lower(), psn_mock.DEBUG_CERT_SHA256)
+        response, _ = self.request("GET", "/.well-known/assetlinks.json", NOLINK)
+        self.assertEqual(response.status, 404)
+
+    def test_unknown_host_and_unregistered_redirect_are_rejected(self):
+        response, _ = self.request("GET", "/2.0/oauth/authorize", "elsewhere.test")
+        self.assertEqual(response.status, 421)
+        query = urlencode({"response_type": "code", "client_id": psn_mock.CLIENT_ID,
+                           "redirect_uri": "https://remoteplay.dl.playstation.net/remoteplay/redirect"})
+        response, _ = self.request("GET", "/2.0/oauth/authorize?" + query)
+        self.assertEqual(response.status, 400)
+
+    def test_happy_path_is_single_use_and_lists_a_remote_play_console(self):
+        code = self.sign_in("ok+t1@mock")["code"]
+        status, token = self.exchange(code)
+        self.assertEqual(status, 200)
+        self.assertNotIn("user_id", token)
+        response, info = self.request("GET", "/2.0/oauth/token/" + token["access_token"])
+        self.assertEqual(response.status, 200)
+        self.assertTrue(json.loads(info)["user_id"].isdigit())
+        self.assertEqual(self.exchange(code)[0], 400)
+        status, listing = self.list_consoles(token["access_token"])
+        self.assertEqual(status, 200)
+        self.assertEqual([c["device"]["enabledFeatures"] for c in listing["clients"]], [["remotePlay"], []])
+
+    def test_token_exchange_needs_the_client_credentials(self):
+        code = self.sign_in("ok")["code"]
+        body = urlencode({"grant_type": "authorization_code", "code": code, "redirect_uri": f"https://{VERIFIED}/remoteplay/redirect"})
+        response, _ = self.request("POST", "/2.0/oauth/token", body=body)
+        self.assertEqual(response.status, 401)
+
+    def test_redirect_uri_must_match_the_authorize_request(self):
+        code = self.sign_in("ok")["code"]
+        self.assertEqual(self.exchange(code, NOLINK)[0], 400)
+
+    def test_wrong_password_stays_on_the_page(self):
+        txn = self.authorize()
+        response, page = self.request("POST", "/2.0/oauth/authorize/password", body=urlencode({"txn": txn, "account": "ok", "password": "wrong"}))
+        self.assertEqual(response.status, 200)
+        self.assertIn(b"incorrect", page)
+
+    def test_code_scenarios_fail_the_exchange(self):
+        for account in ("expired-code@mock", "code-used+x@mock"):
+            with self.subTest(account=account):
+                status, body = self.exchange(self.sign_in(account)["code"])
+                self.assertEqual((status, body["error"]), (400, "invalid_grant"))
+
+    def test_cancel_redirects_with_an_error_and_no_code(self):
+        params = self.sign_in("cancel@mock", NOLINK)
+        self.assertEqual(params, {"error": "access_denied", "error_description": "User cancelled"})
+        txn = self.authorize()
+        response, _ = self.request("POST", "/2.0/oauth/authorize/cancel", body=urlencode({"txn": txn}))
+        self.assertIn("error=access_denied", response.getheader("Location"))
+
+    def test_network_drop_closes_without_a_response(self):
+        code = self.sign_in("network-drop@mock")["code"]
+        started = time.monotonic()
+        with self.assertRaises((http.client.RemoteDisconnected, ConnectionError)):
+            self.exchange(code)
+        self.assertGreaterEqual(time.monotonic() - started, 0.2)
+
+    def test_token_refused_fails_refresh_only(self):
+        status, token = self.exchange(self.sign_in("token-refused@mock")["code"])
+        self.assertEqual(status, 200)
+        response, data = self.request("POST", "/2.0/oauth/token", body=urlencode({"grant_type": "refresh_token", "refresh_token": token["refresh_token"]}),
+                                      headers={"Authorization": BASIC})
+        self.assertEqual(response.status, 400)
+        status, ok_token = self.exchange(self.sign_in("ok")["code"])
+        response, _ = self.request("POST", "/2.0/oauth/token", body=urlencode({"grant_type": "refresh_token", "refresh_token": ok_token["refresh_token"]}),
+                                   headers={"Authorization": BASIC})
+        self.assertEqual(response.status, 200)
+
+    def test_listing_scenarios(self):
+        _, empty = self.exchange(self.sign_in("empty-consoles@mock")["code"])
+        self.assertEqual(self.list_consoles(empty["access_token"]), (200, {"clients": [], "totalResults": 0}))
+        _, failing = self.exchange(self.sign_in("consoles-500@mock")["code"])
+        self.assertEqual(self.list_consoles(failing["access_token"])[0], 500)
+        self.assertEqual(self.list_consoles("not-a-token")[0], 401)
+
+    def test_passkey_register_then_sign_in(self):
+        authenticator = SoftwareAuthenticator(VERIFIED)
+        origin = f"https://{VERIFIED}"
+
+        def post(path, body, host=VERIFIED):
+            response, data = self.request("POST", path, host, json.dumps(body), {"Content-Type": "application/json"})
+            return response.status, json.loads(data)
+
+        status, options = post("/webauthn/register/options", {"account": "empty-consoles+pk@mock"})
+        self.assertEqual((status, options["rpId"]), (200, VERIFIED))
+        self.assertEqual(post("/webauthn/register", authenticator.create(options["challenge"], origin))[0], 200)
+
+        txn = self.authorize()
+        _, options = post("/webauthn/login/options", {"txn": txn})
+        wrong_origin = authenticator.get(options["challenge"], "https://evil.test")
+        self.assertEqual(post("/webauthn/login", {"txn": txn, **wrong_origin})[0], 400)
+
+        _, options = post("/webauthn/login/options", {"txn": txn})
+        status, result = post("/webauthn/login", {"txn": txn, **authenticator.get(options["challenge"], origin)})
+        self.assertEqual(status, 200, result)
+        redirect = urlsplit(result["redirect"])
+        self.assertEqual(redirect.hostname, VERIFIED)
+        _, token = self.exchange(parse_qs(redirect.query)["code"][0])
+        self.assertEqual(self.list_consoles(token["access_token"])[1]["clients"], [])
+
+        # A passkey is bound to its host, as WebAuthn binds it to the relying party.
+        _, options = post("/webauthn/login/options", {"txn": self.authorize(NOLINK)}, NOLINK)
+        self.assertEqual(post("/webauthn/login", {"txn": txn, **authenticator.get(options["challenge"], f"https://{NOLINK}")}, NOLINK)[0], 400)
+
+    def test_events_never_carry_codes_or_tokens(self):
+        code = self.sign_in("ok")["code"]
+        _, token = self.exchange(code)
+        self.list_consoles(token["access_token"])
+        response, data = self.request("GET", "/__mock/events")
+        text = data.decode()
+        for secret in (code, token["access_token"], token["refresh_token"]):
+            self.assertNotIn(secret, text)
+        self.assertIn("exchange_ok", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

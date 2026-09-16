@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL -->
+<!--
+  PLE-284: merged into the debug build only when it is made with -PchiakiPsnMock (see build.gradle).
+  The verified host serves assetlinks.json and is autoVerify'd; the nolink host is declared the way
+  Sony's redirect host is in production, unverifiable, so both link states can be tested side by side.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:label="PSN MOCK Chiaki"
+        tools:replace="android:label">
+
+        <provider
+            android:name="com.metallic.chiaki.remote.PsnMockBanner"
+            android:authorities="${applicationId}.psnmockbanner"
+            android:exported="false" />
+
+        <activity android:name=".regist.PsnRedirectActivity">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="pleikkari-psn.lab.madekivi.fi"
+                    android:path="/remoteplay/redirect" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="pleikkari-psn-nolink.lab.madekivi.fi"
+                    android:path="/remoteplay/redirect" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

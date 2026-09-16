@@ -10,8 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.annotation.RequiresApi
+import com.metallic.chiaki.remote.PsnServiceEndpoints
 
-internal const val PSN_REDIRECT_HOST = "remoteplay.dl.playstation.net"
+internal val PSN_REDIRECT_HOST get() = PsnServiceEndpoints.current.redirectHost
 
 /** Android 11 and earlier do not expose per-app domain-selection state. */
 internal fun isPsnRedirectAppLinkAllowed(context: Context): Boolean

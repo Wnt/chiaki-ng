@@ -15,7 +15,7 @@ class AndroidPsnRemoteClient(context: Context)
 	private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 	private val api = PsnRemoteApi(
 		http,
-		PsnRemoteEndpoints.Production,
+		PsnServiceEndpoints.current.remote,
 		PsnCredentialStore(context.applicationContext),
 		json
 	)
