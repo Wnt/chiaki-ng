@@ -12,6 +12,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.WebSocket
@@ -35,6 +37,8 @@ class PsnRemoteControllerTest
 	private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 	private val requests = Collections.synchronizedList(mutableListOf<RecordedRequest>())
 	private val duid = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	private var terminateAfterOffer = false
+	private var settled = 0
 
 	@Before fun setUp()
 	{
@@ -80,7 +84,60 @@ class PsnRemoteControllerTest
 
 		controller.disconnect()
 		assertTrue(requests.any { it.method == "DELETE" && it.path?.endsWith("/members/me") == true })
+
+		// PLE-313: ACCEPT names the console's candidate that answered and, in its mapped fields, ours.
+		val accepts = sentSignals().filter { it.action == "ACCEPT" }
+		assertEquals(2, accepts.size)
+		val accept = accepts.first().connRequest!!
+		assertEquals(1234, accept.sid)
+		assertEquals(4567, accept.peerSid)
+		assertEquals(0, accept.natType)
+		assertEquals("", accept.localHashedId)
+		assertEquals(Base64.Default.encode(ByteArray(16)), accept.skey)
+		assertEquals(listOf(PsnCandidate("STUN", "192.0.2.10", "198.51.100.7", 41000, 42001)), accept.candidate)
+		assertEquals(PsnPeerAddress("12345678901234567"), accept.localPeerAddr)
+		assertEquals(5678, accepts[1].connRequest!!.peerSid)
+		assertEquals(2, settled)
+		assertEquals(null, sentSignals().first { it.action == "RESULT" }.connRequest)
 	}
+
+	/** PLE-313: a TERMINATE must say where the exchange stood and carry the console's error code. */
+	@Test fun terminateNamesTheStageAndTheConsoleError() = runBlocking {
+		terminateAfterOffer = true
+		val controller = fixtureController(RecordingNativeBridge().also { native -> native.state = { PsnRemoteState.Idle } })
+		val error = runCatching { controller.connect(PsnDevice(duid, "Fixture PS5")) }.exceptionOrNull()
+		assertTrue("$error", error is PsnRemoteProtocolException)
+		assertEquals(
+			"Console terminated PSN candidate exchange while ControlSignaling awaited RESULT (error -2137)",
+			error!!.message
+		)
+		assertTrue(controller.state.value is PsnRemoteState.Failed)
+	}
+
+	private fun fixtureController(native: PsnRemoteNativeBridge) = PsnRemoteController(
+		PsnRemoteApi(
+			OkHttpClient(),
+			PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
+			object : PsnRefreshTokenStore {
+				override fun read() = "refresh-token-placeholder"
+				override fun write(value: String) = Unit
+			},
+			json
+		),
+		OkHttpPsnPushTransport(OkHttpClient(), json),
+		FixtureHolePuncher(),
+		native,
+		randomBytes = PsnRandomBytes { size -> ByteArray(size) { (it + 1).toByte() } },
+		uuid = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+		json = json
+	)
+
+	private fun sentSignals(): List<PsnSignalMessage> = requests
+		.filter { it.path?.endsWith("/sessionMessage") == true }
+		.map { request ->
+			val payload = json.parseToJsonElement(request.body.clone().readUtf8()).jsonObject["payload"]!!.jsonPrimitive.content
+			PsnRemoteController.decodeSignal(json, payload)
+		}
 
 	@Test fun wakeSendsConsoleCommandWithoutPunchingOrStartingNative() = runBlocking {
 		val api = PsnRemoteApi(
@@ -143,6 +200,7 @@ class PsnRemoteControllerTest
 				val preparation = inner.prepare(peer, accountId)
 				return object : PsnPunchPreparation by preparation {
 					override suspend fun punch(): PsnPunchedSocket { recordThread(threads); return preparation.punch() }
+					override suspend fun settle() { recordThread(threads); preparation.settle() }
 				}
 			}
 		}
@@ -232,6 +290,17 @@ class PsnRemoteControllerTest
 			localHashedId = Base64.Default.encode(ByteArray(20) { 9 })
 		)
 		val custom = Base64.Default.encode(Base64.Default.encode(ByteArray(16) { 7 }).encodeToByteArray())
+		if(terminateAfterOffer) return listOf(
+			notification("psn:sessionManager:sys:remotePlaySession:created"),
+			memberNotification("client-placeholder"),
+			memberNotification(duid),
+			buildJsonObject {
+				put("dataType", "psn:sessionManager:sys:rps:customData1:updated")
+				put("body", buildJsonObject { put("data", buildJsonObject { put("customData1", custom) }) })
+			}.toString(),
+			signalNotification(PsnSignalMessage("OFFER", 71, connRequest = peer)),
+			signalNotification(PsnSignalMessage("TERMINATE", 72, error = -2137))
+		)
 		return listOf(
 			notification("psn:sessionManager:sys:remotePlaySession:created"),
 			memberNotification("client-placeholder"),
@@ -267,12 +336,12 @@ class PsnRemoteControllerTest
 
 	private fun fixture(name: String): String = javaClass.getResource("/psn/$name")!!.readText()
 
-	private class FixtureHolePuncher : PsnHolePuncher
+	private inner class FixtureHolePuncher : PsnHolePuncher
 	{
 		private var round = 0
 		override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation
 		{
-			val selected = peer.candidate.first()
+			val selected = peer.candidate.first().copy(mappedAddress = "198.51.100.7", mappedPort = 42001)
 			val local = PsnConnectionRequest(
 				sid = 1234 + round++, peerSid = peer.sid,
 				skey = Base64.Default.encode(ByteArray(16)), candidate = listOf(PsnCandidate("LOCAL", "192.0.2.20", port = 42000)),
@@ -282,6 +351,7 @@ class PsnRemoteControllerTest
 			{
 				override val offer = local
 				override suspend fun punch() = withContext(Dispatchers.IO) { PsnPunchedSocket(DatagramSocket(), selected) }
+				override suspend fun settle() { settled++ }
 				override fun close() = Unit
 			}
 		}

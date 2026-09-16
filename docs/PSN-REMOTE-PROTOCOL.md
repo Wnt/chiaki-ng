@@ -346,10 +346,26 @@ For each socket (control first, data later), the signaling order is:
 
 1. receive the console's OFFER and send RESULT with its `reqId`;
 2. send our OFFER and wait for a matching RESULT;
-3. probe the console candidates and select/connect a working UDP socket;
+3. probe the console candidates and select/connect a working UDP socket, then
+   keep answering the console's own probe requests until it is quiet for one
+   second;
 4. send ACCEPT containing the selected candidate;
 5. receive console ACCEPT and send its matching RESULT; and
 6. answer any final UDP probe packets for one second.
+
+Our OFFER lists STUN, STATIC, then LOCAL candidates. One `sid` and one
+`localHashedId` serve the whole PSN session, both rounds. An OFFER's `peerSid`
+is the console sid known when the OFFER was built: 0 for the control round,
+the control round's console sid for the data round. The ACCEPT (upstream
+`send_accept`) is not our OFFER with a new candidate. It holds our `sid`, the
+current console `sid` as `peerSid`, a zero `skey`, `natType` 0, an empty
+`localHashedId`, and exactly one candidate: **the console's** candidate that
+answered. Its `mappedAddr`/`mappedPort` name the candidate of ours the console
+reached: our LOCAL candidate when the console's is LOCAL (or a private-address
+DERIVED one), otherwise our STUN candidate. An ACCEPT without those mapped
+fields, or without answers to the console's probes, is followed by a console
+TERMINATE (PLE-313, from a device capture that ended there). `adb logcat -s
+PsnRemote` traces every stage and message, including a TERMINATE's `error`.
 
 Each OFFER/RESULT/ACCEPT wait is bounded by 30 seconds. Extra console OFFERs
 that arrive after the first control OFFER or after the data OFFER are

@@ -59,11 +59,21 @@ class PsnRemoteController(
 	private val randomBytes: PsnRandomBytes = PsnRandomBytes { size -> ByteArray(size).also(SecureRandom()::nextBytes) },
 	private val uuid: () -> String = { UUID.randomUUID().toString() },
 	private val json: Json = api.json,
-	private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+	private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+	/** One line per stage and signalling message, for logcat: a device capture must say where a link stopped. */
+	private val trace: (String) -> Unit = {}
 ) : Closeable
 {
 	private val _state = MutableStateFlow<PsnRemoteState>(PsnRemoteState.Idle)
 	val state: StateFlow<PsnRemoteState> = _state.asStateFlow()
+
+	private var current: PsnRemoteState
+		get() = _state.value
+		set(value)
+		{
+			_state.value = value
+			trace("stage ${value::class.simpleName}")
+		}
 
 	private var push: PsnPushConnection? = null
 	private var session: PsnSession? = null
@@ -72,16 +82,16 @@ class PsnRemoteController(
 	private var requestId = 1
 
 	suspend fun listDevices(): List<PsnDevice> = withContext(ioDispatcher) {
-		_state.value = PsnRemoteState.ListingDevices
+		current = PsnRemoteState.ListingDevices
 		try
 		{
 			val devices = api.listDevices()
-			_state.value = PsnRemoteState.Devices(devices)
+			current = PsnRemoteState.Devices(devices)
 			devices
 		}
 		catch(error: Throwable)
 		{
-			_state.value = PsnRemoteState.Failed(error.message ?: "Unable to list PSN consoles", error)
+			current = PsnRemoteState.Failed(error.message ?: "Unable to list PSN consoles", error)
 			throw error
 		}
 	}
@@ -94,8 +104,8 @@ class PsnRemoteController(
 
 			val control = signalAndPunch(created, device, isData = false)
 			openSockets += control
-			_state.value = PsnRemoteState.ControlPunched(control.candidate)
-			_state.value = PsnRemoteState.NativeStarting
+			current = PsnRemoteState.ControlPunched(control.candidate)
+			current = PsnRemoteState.NativeStarting
 			when(val result = nativeBridge.start(control, registration))
 			{
 				is PsnNativeStartResult.Registered ->
@@ -104,25 +114,25 @@ class PsnRemoteController(
 				}
 				PsnNativeStartResult.DataSocketNeeded ->
 				{
-					_state.value = PsnRemoteState.AwaitingDataSocket
+					current = PsnRemoteState.AwaitingDataSocket
 					val data = signalAndPunch(created, device, isData = true)
 					openSockets += data
-					_state.value = PsnRemoteState.DataPunched(data.candidate)
+					current = PsnRemoteState.DataPunched(data.candidate)
 					nativeBridge.setDataSocket(data)
-					_state.value = PsnRemoteState.Streaming
+					current = PsnRemoteState.Streaming
 				}
 			}
 		}
 		catch(cancelled: CancellationException)
 		{
-			_state.value = PsnRemoteState.Cancelling
+			current = PsnRemoteState.Cancelling
 			cleanup()
 			throw cancelled
 		}
 		catch(error: Throwable)
 		{
 			val failed = PsnRemoteState.Failed(error.message ?: "PSN remote connection failed", error)
-			_state.value = failed
+			current = failed
 			cleanup(failed)
 			throw error
 		}
@@ -150,31 +160,31 @@ class PsnRemoteController(
 	}
 
 	suspend fun disconnect(): Unit = withContext(ioDispatcher) {
-		_state.value = PsnRemoteState.Cancelling
+		current = PsnRemoteState.Cancelling
 		cleanup()
 	}
 
 	private suspend fun prepareConsole(device: PsnDevice): Pair<PsnSession, PsnRegistrationMaterial>
 	{
-		_state.value = PsnRemoteState.ResolvingPushServer
+		current = PsnRemoteState.ResolvingPushServer
 		val pushUrl = api.resolvePushWebSocket()
-		_state.value = PsnRemoteState.OpeningWebSocket
+		current = PsnRemoteState.OpeningWebSocket
 		val connection = withTimeout(30_000) { pushTransport.open(pushUrl, api.accessToken()) }
 		push = connection
 		notificationQueue = NotificationQueue(connection.notifications)
 
-		_state.value = PsnRemoteState.CreatingSession
+		current = PsnRemoteState.CreatingSession
 		val created = api.createSession(uuid())
 		session = created
 		awaitClientJoin()
-		_state.value = PsnRemoteState.ClientJoined
+		current = PsnRemoteState.ClientJoined
 
 		val data1 = randomBytes.next(16)
 		val data2 = randomBytes.next(16)
-		_state.value = PsnRemoteState.StartingConsole
+		current = PsnRemoteState.StartingConsole
 		api.startConsole(created, device, Base64.Default.encode(data1), Base64.Default.encode(data2))
 		val customData1 = awaitConsoleJoin(device)
-		_state.value = PsnRemoteState.ConsoleJoined
+		current = PsnRemoteState.ConsoleJoined
 		return created to PsnRegistrationMaterial(created.accountId, data1, data2, customData1)
 	}
 
@@ -218,24 +228,25 @@ class PsnRemoteController(
 
 	private suspend fun signalAndPunch(session: PsnSession, device: PsnDevice, isData: Boolean): PsnPunchedSocket
 	{
-		_state.value = if(isData) PsnRemoteState.DataSignaling else PsnRemoteState.ControlSignaling
+		current = if(isData) PsnRemoteState.DataSignaling else PsnRemoteState.ControlSignaling
 		val consoleOffer = awaitSignal("OFFER")
 		val peer = consoleOffer.connRequest ?: throw PsnRemoteProtocolException("Console OFFER did not contain connRequest")
-		api.sendSignal(session, device, PsnSignalMessage("RESULT", consoleOffer.reqId))
+		send(session, device, PsnSignalMessage("RESULT", consoleOffer.reqId))
 
 		val preparation = holePuncher.prepare(peer, session.accountId)
 		try
 		{
 			val offerRequestId = requestId++
-			api.sendSignal(session, device, PsnSignalMessage("OFFER", offerRequestId, connRequest = preparation.offer))
+			send(session, device, PsnSignalMessage("OFFER", offerRequestId, connRequest = preparation.offer))
 			awaitSignal("RESULT", offerRequestId, session, device)
-			_state.value = if(isData) PsnRemoteState.DataProbing else PsnRemoteState.ControlProbing
+			current = if(isData) PsnRemoteState.DataProbing else PsnRemoteState.ControlProbing
 			val punched = preparation.punch()
+			trace("punched ${describe(punched.candidate)}")
 			val acceptRequestId = requestId++
-			val acceptedRequest = preparation.offer.copy(candidate = listOf(punched.candidate))
-			api.sendSignal(session, device, PsnSignalMessage("ACCEPT", acceptRequestId, connRequest = acceptedRequest))
+			send(session, device, PsnSignalMessage("ACCEPT", acceptRequestId, connRequest = acceptRequest(preparation.offer, peer, punched.candidate)))
 			val consoleAccept = awaitSignal("ACCEPT", session = session, device = device)
-			api.sendSignal(session, device, PsnSignalMessage("RESULT", consoleAccept.reqId))
+			send(session, device, PsnSignalMessage("RESULT", consoleAccept.reqId))
+			preparation.settle()
 			return punched
 		}
 		finally { preparation.close() }
@@ -252,15 +263,15 @@ class PsnRemoteController(
 			val notification = queue().take { it.dataType() == SESSION_MESSAGE }
 			val payload = notification.path("body", "data", "sessionMessage", "payload")?.jsonPrimitive?.contentOrNull
 				?: throw PsnRemoteProtocolException("PSN signaling notification did not contain payload")
-			val body = payload.substringAfter("body=", missingDelimiterValue = "")
-				.replace("\"localPeerAddr\":,", "\"localPeerAddr\":{}")
-			if(body.isEmpty()) throw PsnRemoteProtocolException("PSN signaling payload did not contain a body")
-			val message = runCatching { json.decodeFromString<PsnSignalMessage>(body) }
-				.getOrElse { throw PsnRemoteProtocolException("Invalid PSN signaling message", it) }
-			if(message.action == "TERMINATE") throw PsnRemoteProtocolException("Console terminated PSN candidate exchange")
+			val message = decodeSignal(json, payload)
+			trace("received ${describe(message)}")
+			if(message.action == "TERMINATE")
+				throw PsnRemoteProtocolException(
+					"Console terminated PSN candidate exchange while ${current::class.simpleName} awaited $action (error ${message.error})"
+				)
 			if(message.action == "OFFER" && action != "OFFER" && session != null && device != null)
 			{
-				api.sendSignal(session, device, PsnSignalMessage("RESULT", message.reqId))
+				send(session, device, PsnSignalMessage("RESULT", message.reqId))
 				continue
 			}
 			if(message.action == action && (reqId == null || message.reqId == reqId)) return@withTimeout message
@@ -268,6 +279,21 @@ class PsnRemoteController(
 		@Suppress("UNREACHABLE_CODE")
 		error("unreachable")
 	}
+
+	private suspend fun send(session: PsnSession, device: PsnDevice, message: PsnSignalMessage)
+	{
+		trace("sending ${describe(message)}")
+		api.sendSignal(session, device, message)
+	}
+
+	private fun describe(message: PsnSignalMessage): String =
+		"${message.action} reqId=${message.reqId} error=${message.error}" + (message.connRequest?.let { request ->
+			" sid=${request.sid} peerSid=${request.peerSid} natType=${request.natType} " +
+				request.candidate.joinToString(prefix = "[", postfix = "]", transform = ::describe)
+		} ?: "")
+
+	private fun describe(candidate: PsnCandidate): String =
+		"${candidate.type} ${candidate.addr}:${candidate.port} mapped ${candidate.mappedAddress}:${candidate.mappedPort}"
 
 	private fun decodeCustomData(value: String?): ByteArray
 	{
@@ -281,10 +307,10 @@ class PsnRemoteController(
 	}
 
 	private suspend fun cleanup(finalState: PsnRemoteState = PsnRemoteState.Idle) = withContext(NonCancellable) {
-		_state.value = PsnRemoteState.DeletingSession
+		current = PsnRemoteState.DeletingSession
 		nativeBridge.stop()
-		val current = session
-		if(current != null) runCatching { withTimeout(3_000) { api.deleteSession(current.sessionId) } }
+		val active = session
+		if(active != null) runCatching { withTimeout(3_000) { api.deleteSession(active.sessionId) } }
 		push?.close()
 		openSockets.forEach { it.socket.close() }
 		openSockets.clear()
@@ -292,7 +318,7 @@ class PsnRemoteController(
 		session = null
 		notificationQueue = null
 		requestId = 1
-		_state.value = finalState
+		current = finalState
 	}
 
 	private fun queue(): NotificationQueue = notificationQueue ?: error("PSN push channel is not open")
@@ -307,7 +333,7 @@ class PsnRemoteController(
 		session = null
 		notificationQueue = null
 		requestId = 1
-		_state.value = PsnRemoteState.Idle
+		current = PsnRemoteState.Idle
 	}
 
 	private class NotificationQueue(private val channel: ReceiveChannel<JsonObject>)
@@ -341,6 +367,35 @@ class PsnRemoteController(
 		private const val MEMBER_CREATED = "psn:sessionManager:sys:rps:members:created"
 		private const val CUSTOM_DATA = "psn:sessionManager:sys:rps:customData1:updated"
 		private const val SESSION_MESSAGE = "psn:sessionManager:sys:rps:sessionMessage:created"
+
+		/**
+		 * Upstream `send_accept`: the console's candidate that answered, carrying in its mapped fields the
+		 * candidate of ours it reached, with a zero skey, NAT type 0 and no hashed id (PLE-313).
+		 */
+		internal fun acceptRequest(offer: PsnConnectionRequest, peer: PsnConnectionRequest, selected: PsnCandidate) =
+			PsnConnectionRequest(
+				sid = offer.sid,
+				peerSid = peer.sid,
+				skey = Base64.Default.encode(ByteArray(16)),
+				natType = 0,
+				candidate = listOf(selected),
+				localPeerAddr = offer.localPeerAddr,
+				localHashedId = ""
+			)
+
+		/**
+		 * The body of a `ver=1.0, type=text, body=...` payload. Sony's clients write `"localPeerAddr":,` when
+		 * they have none, and a RESULT carries `"connRequest":{}` (upstream `short_message_serialize`).
+		 */
+		internal fun decodeSignal(json: Json, payload: String): PsnSignalMessage
+		{
+			val body = payload.substringAfter("body=", missingDelimiterValue = "")
+				.replace("\"localPeerAddr\":,", "\"localPeerAddr\":{}")
+				.replace("\"connRequest\":{}", "\"connRequest\":null")
+			if(body.isEmpty()) throw PsnRemoteProtocolException("PSN signaling payload did not contain a body")
+			return runCatching { json.decodeFromString<PsnSignalMessage>(body) }
+				.getOrElse { throw PsnRemoteProtocolException("Invalid PSN signaling message", it) }
+		}
 
 		private fun JsonObject.dataType(): String? = this["dataType"]?.jsonPrimitive?.contentOrNull
 

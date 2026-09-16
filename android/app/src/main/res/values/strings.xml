@@ -33,7 +33,6 @@
     <string name="title_regist">Register Console</string>
     <string name="link_console_title">Link %s</string>
     <string name="action_link_console">Link console</string>
-    <string name="action_link_with_pin">Link with PIN</string>
     <string name="hint_regist_host">Console address</string>
     <string name="regist_broadcast">Search local network</string>
     <string name="regist_option_ps5">PlayStation 5</string>
