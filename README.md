@@ -44,7 +44,7 @@ Defaults below are the effective defaults in this branch. Preference keys are sh
 | PLE-18, PLE-52, PLE-74 | Render the deband shader only when a new frame is available; PLE-74 fixed the lost-notification freeze | `stream_debanding_render_when_dirty` | Off |
 | PLE-19 | Reduce the controller feedback-state minimum interval from 8 ms to 4 ms | `stream_feedback_reduced_interval` | Off |
 | PLE-20 | Configure the maximum packet loss reported to the console | `stream_packet_loss_max_percent` | 5% |
-| PLE-23, PLE-54 | Vsync-paced presenter with lowest-latency, balanced, and smoothest modes | `stream_video_pacing_enabled`; `stream_video_pacing_mode` | Off; `balanced` |
+| PLE-23, PLE-54, PLE-107, PLE-211 | Vsync-paced presenter with lowest-latency, balanced, and smoothest modes, plus selectable late-frame recovery | `stream_video_pacing_enabled`; `stream_video_pacing_mode`; `stream_video_recovery_strategy` | Off; `balanced`; `flush` |
 | PLE-24 | Experimental AImageReader/EGL deband renderer with a front-buffer attempt and double-buffer fallback | `-PchiakiAndroidEglRenderer=true` | Off |
 | PLE-25 | In-app PSN sign-in and account-ID retrieval for registration | `psn_sign_in_registration_enabled` | Off |
 | PLE-26, PLE-50 | Kotlin PSN remote-play control plane, PIN-less registration path, and PSN consoles/actions on the home screen | `psn_remote_play_enabled` | Off; depends on PSN sign-in |

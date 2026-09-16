@@ -79,7 +79,7 @@ class Preferences(context: Context)
 		val videoPresenterLeadDefault = VideoPresenterLead.TWO_MS
 		val videoPresenterLeadAll = VideoPresenterLead.values()
 		const val videoPacingMaxFrameAgePeriodsDefault = 2
-		val videoRecoveryStrategyDefault = VideoRecoveryStrategy.TIMELINE_SHIFT
+		val videoRecoveryStrategyDefault = VideoRecoveryStrategy.FLUSH
 		val videoRecoveryStrategyAll = VideoRecoveryStrategy.values()
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
