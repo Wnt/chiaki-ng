@@ -47,6 +47,12 @@ class StreamDiagnosticsFormatterTest
 			takionPacketsLost = 200,
 			feedbackPackets = 240,
 			dejitterBufferNanos = 8_000_000,
+			cadenceDepthNanos = 6_000_000,
+			cadenceTargetNanos = 5_000_000,
+			cadenceErrP50Nanos = 1_000_000,
+			cadenceErrP99Nanos = 3_000_000,
+			decodeEwmaNanos = 8_500_000,
+			cadenceWindowDrops = 9,
 			presenterQueueDepth = 1,
 			audioLatencyMicros = 12_500,
 			audioXruns = 7,
@@ -59,7 +65,8 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
 		assertTrue(text.contains("RTT 4.25 ms"))
 		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
-		assertEquals(8, text.lines().size)
+		assertTrue(text.contains("stage0 D 6.0 target 5.0 | err p50 1.0 p99 3.0 ms | decode-ewma 8.5 | drops 9"))
+		assertEquals(9, text.lines().size)
 	}
 
 	@Test

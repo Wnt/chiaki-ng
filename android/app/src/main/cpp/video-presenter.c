@@ -56,6 +56,10 @@ static void record_output_available(AndroidChiakiVideoPresenter *presenter,
 			if(presenter->diagnostics_decode_count < ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY)
 				presenter->diagnostics_decode_count++;
 		}
+		if(frame->arrival_ns >= input->queued_ns
+				&& frame->arrival_ns - input->queued_ns <= 5000000000LL)
+			android_chiaki_video_cadence_record_decode(&presenter->cadence,
+					(uint64_t)(frame->arrival_ns - input->queued_ns));
 		break;
 	}
 	chiaki_mutex_unlock(&presenter->mutex);
@@ -240,6 +244,25 @@ static void adjust_dejitter_buffer_locked(AndroidChiakiVideoPresenter *presenter
 static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 		const AndroidChiakiVideoPresenterFrame *frame)
 {
+	if(frame->input_metadata_valid && android_chiaki_video_cadence_record_frame(
+			&presenter->cadence, frame->frame_index, frame->frame_ready_time_us,
+			presenter->stream_fps))
+	{
+		presenter->cadence_window_dropped_frames = presenter->dropped_frames
+				- presenter->cadence_last_dropped_frames;
+		presenter->cadence_last_dropped_frames = presenter->dropped_frames;
+		if(presenter->stats_log_enabled)
+			CHIAKI_LOGI(presenter->log,
+					"Video presenter DJB D=%.1f ms target=%.1f ms"
+					" (err p50 %.1f p99 %.1f ms, decode %.1f ms, drops %llu)",
+					(double)presenter->cadence.depth_ns / 1000000.0,
+					(double)presenter->cadence.target_ns / 1000000.0,
+					(double)presenter->cadence.err_p50_ns / 1000000.0,
+					(double)presenter->cadence.err_p99_ns / 1000000.0,
+					(double)presenter->cadence.decode_ewma_ns / 1000000.0,
+					(unsigned long long)presenter->cadence_window_dropped_frames);
+	}
+
 	int64_t sample_ns;
 	if(presenter->real_pts_enabled)
 	{
@@ -647,7 +670,7 @@ static void *output_thread_func(void *user)
 }
 
 ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter *presenter, ChiakiLog *log,
-		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled,
+		bool late_frame_recovery_enabled, bool real_pts_enabled, bool diagnostics_enabled, bool stats_log_enabled,
 		AndroidChiakiVideoPresenterReleaseCallback release_cb, void *release_cb_user)
 {
 	memset(presenter, 0, sizeof(*presenter));
@@ -655,6 +678,7 @@ ChiakiErrorCode android_chiaki_video_presenter_init(AndroidChiakiVideoPresenter 
 	presenter->late_frame_recovery_enabled = late_frame_recovery_enabled;
 	presenter->real_pts_enabled = real_pts_enabled;
 	presenter->diagnostics_enabled = diagnostics_enabled;
+	presenter->stats_log_enabled = stats_log_enabled;
 	presenter->release_cb = release_cb;
 	presenter->release_cb_user = release_cb_user;
 	presenter->dejitter_buffer_ns = VIDEO_PRESENTER_DJB_START_NS;
@@ -724,6 +748,9 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->diagnostics_decode_count = 0;
 	presenter->diagnostics_decode_next = 0;
 	presenter->diagnostics_output_frames = 0;
+	android_chiaki_video_cadence_reset(&presenter->cadence);
+	presenter->cadence_last_dropped_frames = 0;
+	presenter->cadence_window_dropped_frames = 0;
 	memset(presenter->input_metadata, 0, sizeof(presenter->input_metadata));
 	chiaki_mutex_unlock(&presenter->mutex);
 
@@ -888,6 +915,12 @@ void android_chiaki_video_presenter_get_diagnostics(AndroidChiakiVideoPresenter 
 	diagnostics->dropped_frames = presenter->dropped_frames;
 	diagnostics->bounded_age_dropped_frames = presenter->bounded_age_dropped_frames;
 	diagnostics->dejitter_buffer_ns = presenter->dejitter_buffer_ns;
+	diagnostics->cadence_depth_ns = presenter->cadence.depth_ns;
+	diagnostics->cadence_target_ns = presenter->cadence.target_ns;
+	diagnostics->cadence_err_p50_ns = presenter->cadence.err_p50_ns;
+	diagnostics->cadence_err_p99_ns = presenter->cadence.err_p99_ns;
+	diagnostics->decode_ewma_ns = presenter->cadence.decode_ewma_ns;
+	diagnostics->cadence_window_dropped_frames = presenter->cadence_window_dropped_frames;
 	diagnostics->queue_depth = presenter->queue_size;
 	uint32_t count = presenter->diagnostics_decode_count;
 	uint64_t samples[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];

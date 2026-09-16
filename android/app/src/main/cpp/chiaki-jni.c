@@ -405,6 +405,12 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.takion_packets_lost,
 					(jlong)event->stream_stats.feedback_packets,
 					(jlong)diagnostics.dejitter_buffer_ns,
+					(jlong)diagnostics.cadence_depth_ns,
+					(jlong)diagnostics.cadence_target_ns,
+					(jlong)diagnostics.cadence_err_p50_ns,
+					(jlong)diagnostics.cadence_err_p99_ns,
+					(jlong)diagnostics.decode_ewma_ns,
+					(jlong)diagnostics.cadence_window_dropped_frames,
 					(jlong)diagnostics.presenter_queue_depth,
 					(jlong)audio.latency_us,
 					(jlong)audio.xruns,
@@ -567,7 +573,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
 			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_auto, decoder_realtime_priority,
-			video_timestamp_rate_hz > 0 ? (unsigned int)video_timestamp_rate_hz : 0, stream_stats_enabled);
+			video_timestamp_rate_hz > 0 ? (unsigned int)video_timestamp_rate_hz : 0, stream_stats_enabled,
+			feedback_stats_log_interval_ms > 0);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -613,7 +620,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

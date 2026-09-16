@@ -3,6 +3,7 @@
 #include <munit.h>
 
 #include "../android/app/src/main/cpp/video-presenter-age.h"
+#include "../android/app/src/main/cpp/video-presenter-cadence.h"
 #include "../android/app/src/main/cpp/video-presenter-histogram.h"
 #include "../android/app/src/main/cpp/video-presenter-timing.h"
 
@@ -79,6 +80,51 @@ static MunitResult test_frame_exceeds_age(const MunitParameter params[], void *u
 	return MUNIT_OK;
 }
 
+static MunitResult test_cadence_stable_window(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence);
+	const uint64_t period_us = 1000000 / 60;
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
+	{
+		android_chiaki_video_cadence_record_decode(&cadence, 8000000);
+		bool complete = android_chiaki_video_cadence_record_frame(&cadence,
+				(ChiakiSeqNum16)(0xffc0 + i), 1000000 + i * period_us, 60);
+		munit_assert_int(complete, ==, i + 1 == ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW);
+	}
+	munit_assert_uint64(cadence.generation, ==, 1);
+	munit_assert_uint64(cadence.err_p50_ns, ==, 0);
+	munit_assert_uint64(cadence.err_p99_ns, ==, 0);
+	munit_assert_uint64(cadence.decode_ewma_ns, ==, 8000000);
+	munit_assert_uint64(cadence.target_ns, ==, 4000000);
+	munit_assert_uint64(cadence.depth_ns, ==, 4000000);
+	return MUNIT_OK;
+}
+
+static MunitResult test_cadence_late_tail_raises_target(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence);
+	const uint64_t period_us = 1000000 / 60;
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
+	{
+		uint64_t late_us = i >= 100 ? 10000 : 0;
+		android_chiaki_video_cadence_record_decode(&cadence, 8000000);
+		android_chiaki_video_cadence_record_frame(&cadence, (ChiakiSeqNum16)i,
+				2000000 + i * period_us + late_us, 60);
+	}
+	munit_assert_uint64(cadence.err_p99_ns, >=, 8000000);
+	munit_assert_uint64(cadence.target_ns, >=, 9000000);
+	munit_assert_uint64(cadence.depth_ns, ==, cadence.target_ns);
+	return MUNIT_OK;
+}
+
 static MunitResult test_period_observation(const MunitParameter params[], void *user)
 {
 	(void)params;
@@ -99,7 +145,6 @@ static MunitResult test_period_observation(const MunitParameter params[], void *
 			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_SMOOTH);
 	munit_assert_int(android_chiaki_video_presenter_classify_period(period_120_hz, 25000000), ==,
 			ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_GAP);
-
 	return MUNIT_OK;
 }
 
@@ -115,6 +160,22 @@ MunitTest tests_video_presenter[] = {
 	{
 		"/frame_exceeds_age",
 		test_frame_exceeds_age,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL,
+	},
+	{
+		"/cadence_stable_window",
+		test_cadence_stable_window,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL,
+	},
+	{
+		"/cadence_late_tail_raises_target",
+		test_cadence_late_tail_raises_target,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

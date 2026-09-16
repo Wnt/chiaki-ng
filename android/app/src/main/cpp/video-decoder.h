@@ -32,6 +32,12 @@ typedef struct android_chiaki_video_diagnostics_t
 	uint64_t presenter_frames_dropped;
 	uint64_t presenter_bounded_age_frames_dropped;
 	uint64_t dejitter_buffer_ns;
+	uint64_t cadence_depth_ns;
+	uint64_t cadence_target_ns;
+	uint64_t cadence_err_p50_ns;
+	uint64_t cadence_err_p99_ns;
+	uint64_t decode_ewma_ns;
+	uint64_t cadence_window_dropped_frames;
 	uint32_t presenter_queue_depth;
 } AndroidChiakiVideoDiagnostics;
 
@@ -87,7 +93,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
 		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
 		int32_t operating_rate, bool operating_rate_auto, bool realtime_priority, unsigned int pts_rate_hz,
-		bool diagnostics_enabled);
+		bool diagnostics_enabled, bool stats_log_enabled);
 void android_chiaki_video_decoder_set_request_idr_cb(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoDecoderRequestIDRCallback cb, void *user);
 void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder);
