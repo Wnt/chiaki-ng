@@ -70,7 +70,7 @@
 
         <activity
             android:name=".regist.RegistActivity"
-            android:theme="@style/MageTheme"
+            android:theme="@style/AppTheme"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
             android:windowSoftInputMode="adjustResize"/>
 
@@ -97,12 +97,12 @@
 
         <activity
             android:name=".regist.RegistExecuteActivity"
-            android:theme="@style/MageTheme"
+            android:theme="@style/AppTheme"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />
 
         <activity
             android:name=".manualconsole.EditManualConsoleActivity"
-            android:theme="@style/MageTheme"
+            android:theme="@style/AppTheme"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />
     </application>
 

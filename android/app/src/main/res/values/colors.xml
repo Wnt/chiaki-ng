@@ -3,6 +3,8 @@
     <color name="primary">#162d50</color>
     <color name="primary_dark">#000128</color>
     <color name="accent">#ffaaee</color>
+    <color name="on_primary">#ffffff</color>
+    <color name="on_secondary">#000000</color>
 
     <color name="stream_text">@android:color/white</color>
     <color name="stream_background">@android:color/black</color>
