@@ -29,7 +29,7 @@ class DebandRenderer(
         private const val TAG = "DebandRenderer"
 
         // 1. Copy pass (OES -> FBO)
-        private const val COPY_VERTEX_SHADER = """
+        private val COPY_VERTEX_SHADER = """
             #version 300 es
             in vec4 a_Position;
             in vec2 a_TexCoord;
@@ -39,9 +39,9 @@ class DebandRenderer(
                 gl_Position = a_Position;
                 v_TexCoord = (u_STMatrix * vec4(a_TexCoord, 0.0, 1.0)).xy;
             }
-        """
+        """.trimIndent()
 
-        private const val COPY_FRAGMENT_SHADER = """
+        private val COPY_FRAGMENT_SHADER = """
             #version 300 es
             #extension GL_OES_EGL_image_external_essl3 : require
             precision highp float;
@@ -51,10 +51,10 @@ class DebandRenderer(
             void main() {
                 outColor = texture(u_Texture, v_TexCoord);
             }
-        """
+        """.trimIndent()
 
         // 2. Effects pass (FBO -> Screen)
-        private const val EFFECT_VERTEX_SHADER = """
+        private val EFFECT_VERTEX_SHADER = """
             #version 300 es
             in vec4 a_Position;
             in vec2 a_TexCoord;
@@ -64,9 +64,9 @@ class DebandRenderer(
                 // FBO texture is usually upside down relative to OES coordinates
                 v_TexCoord = a_TexCoord;
             }
-        """
+        """.trimIndent()
 
-        private const val EFFECT_FRAGMENT_SHADER = """
+        private val EFFECT_FRAGMENT_SHADER = """
             #version 300 es
             precision highp float;
 
@@ -166,7 +166,7 @@ class DebandRenderer(
 
                 outColor = vec4(color, 1.0);
             }
-        """
+        """.trimIndent()
 
         // Fullscreen quad vertices (position + texcoord)
         private val QUAD_VERTICES = floatArrayOf(
