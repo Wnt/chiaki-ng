@@ -127,6 +127,31 @@ class PsnRemoteApiTest
 		assertEquals("socket read on the caller thread", emptyList<String>(), readThreads.onCallerThread())
 	}
 
+	/**
+	 * PLE-327: the envelope the controller logs is byte-for-byte what is posted, in upstream's shape
+	 * (`holepunch.c:139-145`), and the recipient duid is lowercase hex however PSN listed it (`:144`).
+	 */
+	@Test fun signalEnvelopeIsWhatSendSignalPosts() = runBlocking {
+		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")))
+		server.enqueue(MockResponse().setResponseCode(204))
+		val session = PsnSession("11111111-2222-4333-8444-555555555555", "12345678901234567")
+		val device = PsnDevice("00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF", "Fixture PS5")
+		val message = PsnSignalMessage("RESULT", 7)
+
+		api.sendSignal(session, device, message)
+
+		server.takeRequest() // token refresh
+		val posted = server.takeRequest()
+		assertEquals("/api/sessionManager/v1/remotePlaySessions/11111111-2222-4333-8444-555555555555/sessionMessage", posted.path)
+		val envelope = api.signalEnvelope(session, device, message)
+		assertEquals(envelope, posted.body.readUtf8())
+		assertEquals(
+			"""{"channel":"remote_play:1","payload":"ver=1.0, type=text, body={\"action\":\"RESULT\",\"reqId\":7,\"error\":0,\"connRequest\":{}}",""" +
+				""""to":[{"accountId":"12345678901234567","deviceUniqueId":"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff","platform":"PS5"}]}""",
+			envelope
+		)
+	}
+
 	@Test fun httpFailureCarriesStatusAndErrorExcerpt() = runBlocking {
 		server.enqueue(MockResponse().setBody(fixture("token_refresh.json")))
 		server.enqueue(MockResponse().setResponseCode(500).setBody("{\"error\":{\"code\":2285,\n\"message\":\"server\"}}"))

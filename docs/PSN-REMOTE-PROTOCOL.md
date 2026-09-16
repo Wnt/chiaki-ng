@@ -338,7 +338,10 @@ The body carried after `body=` has this logical schema:
 `RESULT` acknowledgements carry an empty `connRequest`. The official client
 can emit invalid JSON as `"localPeerAddr":,`; normalize that exact token to
 `"localPeerAddr":{}` before decoding. Do not apply a general-purpose JSON
-repair. `reqId` begins at 1 and increments for each local OFFER or ACCEPT.
+repair. Our `reqId` counter starts at 1 and, like upstream, spends one id
+building each OFFER before the send takes the next (`holepunch.c:783`,
+`:2740-2741`, `:1596-1598`, `:1663`): the OFFERs go out as 2 and 5, the
+ACCEPTs as 3 and 6. The console numbers its own messages independently.
 `RESULT` must echo the request ID being acknowledged. A `TERMINATE` aborts the
 operation.
 
@@ -353,10 +356,15 @@ For each socket (control first, data later), the signaling order is:
 5. receive console ACCEPT and send its matching RESULT; and
 6. answer any final UDP probe packets for one second.
 
-Our OFFER lists STUN, STATIC, then LOCAL candidates. One `sid` and one
-`localHashedId` serve the whole PSN session, both rounds. An OFFER's `peerSid`
-is the console sid known when the OFFER was built: 0 for the control round,
-the control round's console sid for the data round. The ACCEPT (upstream
+Our OFFER lists STUN, STATIC, then LOCAL candidates, or only STATIC and LOCAL
+when the STUN-mapped port equals the local port, because STUN would then
+duplicate STATIC (`holepunch.c:2912-2918`; `:2977` for the three-candidate
+case). One `sid` and one `localHashedId` serve the whole PSN session, both
+rounds. An OFFER's `peerSid` is the `sid` of the console OFFER it answers:
+upstream stores it the moment that OFFER arrives (`:1561`) and sends it back
+in the same round (`:2760`). PLE-313 staged it by a round, which sent the
+control OFFER with `peerSid=0` and the console never answered (PLE-327). The
+ACCEPT (upstream
 `send_accept`) is not our OFFER with a new candidate. It holds our `sid`, the
 current console `sid` as `peerSid`, a zero `skey`, `natType` 0, an empty
 `localHashedId`, and exactly one candidate: **the console's** candidate that
@@ -365,11 +373,18 @@ reached: our LOCAL candidate when the console's is LOCAL (or a private-address
 DERIVED one), otherwise our STUN candidate. An ACCEPT without those mapped
 fields, or without answers to the console's probes, is followed by a console
 TERMINATE (PLE-313, from a device capture that ended there). `adb logcat -s
-PsnRemote` traces every stage and message, including a TERMINATE's `error`.
+PsnRemote` traces every stage and message, including a TERMINATE's `error`,
+and since PLE-327 the raw JSON in both directions (`sending raw` is the exact
+POST body, `received raw` the notification payload) with every `accountId`
+blanked; nothing else secret travels in these messages.
 
-Each OFFER/RESULT/ACCEPT wait is bounded by 30 seconds. Extra console OFFERs
-that arrive after the first control OFFER or after the data OFFER are
-acknowledged to prevent console retries but do not restart negotiation.
+Each OFFER/RESULT/ACCEPT wait is bounded by 30 seconds. The console re-sends
+its OFFER about a second after the first, while PSN is still delivering our
+RESULT (both PLE-327 captures). Upstream `wait_for_session_message` drops any
+message whose action is not the awaited one (`holepunch.c:5433-5440`) and
+`wait_for_session_message_ack` drops a RESULT for another id (`:5486-5493`);
+we do the same and log `ignoring ...`. PLE-313 answered the repeat with a
+second RESULT, which upstream never sends.
 
 ### Delete/leave
 

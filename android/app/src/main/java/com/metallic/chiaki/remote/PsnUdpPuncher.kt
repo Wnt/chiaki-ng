@@ -152,6 +152,11 @@ object PsnCandidateHandshake
  * is answering. PLE-313 staged that value by one round, so the control OFFER went out with `peerSid=0`;
  * upstream stores the console sid as soon as its OFFER arrives (`holepunch.c:1561`) and sends it back in
  * the same round (`:2760`). The console ignores an OFFER not addressed to its session (PLE-327).
+ *
+ * The OFFER lists STUN, STATIC, LOCAL, or just STATIC, LOCAL when the STUN-mapped port equals the local
+ * one (`:2912-2918`, `:2977`). Upstream's symmetric-NAT port guessing (`stun_port_allocation_test`, the
+ * `stun_allocation_increment != 0` branch at `:2828`) is not ported: a NAT that rewrites ports gets the
+ * plain three candidates and, if none answers, `PsnUnsupportedNatException`.
  */
 class DatagramPsnHolePuncher(
 	private val random: SecureRandom = SecureRandom(),
@@ -177,9 +182,17 @@ class DatagramPsnHolePuncher(
 			val localAddress = socket.localAddress.takeUnless { it.isAnyLocalAddress } as? Inet4Address
 				?: routeAddress(resolve(stunServers.first()))
 			val stun = PsnCandidate("STUN", mapping.address.hostAddress ?: "0.0.0.0", port = mapping.port)
+			val static = PsnCandidate("STATIC", stun.addr, port = socket.localPort)
 			val local = PsnCandidate("LOCAL", localAddress.hostAddress ?: "0.0.0.0", port = socket.localPort)
-			// Upstream's order: the STUN candidate first, so a console behind a symmetric NAT tries it first.
-			val candidates = listOf(stun, PsnCandidate("STATIC", stun.addr, port = socket.localPort), local)
+			// Upstream offers STUN, STATIC, LOCAL (holepunch.c:2977, STUN first so a console behind a
+			// symmetric NAT tries it first) unless the NAT kept our local port as the external one: then
+			// STUN would duplicate STATIC, so upstream drops it and offers STATIC, LOCAL (:2912-2918, "don't
+			// make duplicate STUN candidate"). That is the shape the console itself offers on such a network
+			// (its STATIC and LOCAL both :9303 in the PLE-327 captures), and it is the shape our S25 captures
+			// broke: local port 53637, STUN-mapped port 53637, three candidates with a duplicate.
+			val natKeptOurPort = stun.port == socket.localPort
+			val remote = if(natKeptOurPort) static else stun
+			val candidates = if(natKeptOurPort) listOf(static, local) else listOf(stun, static, local)
 			val offer = PsnConnectionRequest(
 				sid = localSid,
 				// Upstream stores the console's sid the moment its OFFER arrives and sends it straight
@@ -192,7 +205,7 @@ class DatagramPsnHolePuncher(
 				localPeerAddr = PsnPeerAddress(accountId, "REMOTE_PLAY"),
 				localHashedId = Base64.Default.encode(localHash)
 			)
-			Preparation(socket, offer, peer, localHash, random, local, stun)
+			Preparation(socket, offer, peer, localHash, random, local, remote)
 		}
 		catch(error: Throwable)
 		{

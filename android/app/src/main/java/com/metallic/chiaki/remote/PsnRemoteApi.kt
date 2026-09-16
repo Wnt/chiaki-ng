@@ -213,7 +213,8 @@ class PsnRemoteApi(
 		val body = buildJsonObject {
 			put("commandDetail", buildJsonObject {
 				put("commandType", "remotePlay")
-				put("duid", device.duid)
+				// Upstream re-hexes the duid bytes, so it is always lowercase (holepunch.c:126, :144).
+				put("duid", device.duid.lowercase())
 				put("messageDestination", "SQS")
 				put("parameters", buildJsonObject { put("initialParams", initialParams) })
 				put("platform", device.platform)
@@ -224,17 +225,28 @@ class PsnRemoteApi(
 
 	suspend fun sendSignal(session: PsnSession, device: PsnDevice, message: PsnSignalMessage)
 	{
+		authorized(Request.Builder()
+			.url(apiUrl("sessionManager/v1/remotePlaySessions/${session.sessionId}/sessionMessage"))
+			.post(signalEnvelope(session, device, message).toRequestBody(jsonMediaType)))
+	}
+
+	/**
+	 * The exact bytes [sendSignal] posts, so the controller can log what went on the wire (PLE-327).
+	 * Upstream `session_message_envelope_fmt` (holepunch.c:139-145): channel, the payload with the message
+	 * JSON embedded after `body=`, and one recipient whose deviceUniqueId is lowercase hex (:144).
+	 */
+	internal fun signalEnvelope(session: PsnSession, device: PsnDevice, message: PsnSignalMessage): String
+	{
 		val messageJson = signalJson(message)
-		val body = buildJsonObject {
+		return buildJsonObject {
 			put("channel", "remote_play:1")
 			put("payload", "ver=1.0, type=text, body=$messageJson")
 			put("to", buildJsonArray { add(buildJsonObject {
 				put("accountId", session.accountId)
-				put("deviceUniqueId", device.duid)
+				put("deviceUniqueId", device.duid.lowercase())
 				put("platform", device.platform)
 			}) })
-		}
-		authorized(jsonRequest("sessionManager/v1/remotePlaySessions/${session.sessionId}/sessionMessage", body))
+		}.toString()
 	}
 
 	suspend fun deleteSession(sessionId: String)

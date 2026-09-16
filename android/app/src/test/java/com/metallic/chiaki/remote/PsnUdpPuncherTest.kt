@@ -40,7 +40,7 @@ class PsnUdpPuncherTest
 				val request = packet.data.copyOf(packet.length)
 				val transactionId = request.copyOfRange(8, 20)
 				val source = packet.socketAddress as InetSocketAddress
-				stun.send(DatagramPacket(bindingResponse(transactionId, source), 32, source))
+				stun.send(DatagramPacket(bindingResponse(transactionId), 32, source))
 			}
 		}
 		val puncher = DatagramPsnHolePuncher(
@@ -76,10 +76,11 @@ class PsnUdpPuncherTest
 	}
 
 	/**
-	 * PLE-327: upstream keeps one sid and hashed id per PSN session, lists STUN, STATIC, LOCAL, and names
-	 * in each OFFER the sid of the console OFFER that round is answering (`holepunch.c:1561` then `:2760`).
-	 * PLE-313 staged that value by a round, which sent the control OFFER with `peerSid=0`; the console then
-	 * ignores it, re-offers, and the session times out after 30 s (seen on the S25, PLE-327).
+	 * PLE-327: upstream keeps one sid and hashed id per PSN session, lists STUN, STATIC, LOCAL when the NAT
+	 * rewrote our port (`holepunch.c:2977`), and names in each OFFER the sid of the console OFFER that round
+	 * is answering (`:1561` then `:2760`). PLE-313 staged that value by a round, which sent the control OFFER
+	 * with `peerSid=0`; the console then ignores it, re-offers, and the session times out after 30 s (seen on
+	 * the S25, PLE-327).
 	 */
 	@Test fun offersShareTheSessionIdentityAndNameTheAnsweredConsoleSid() = runBlocking {
 		val stun = fakeStun(answers = 2)
@@ -93,7 +94,30 @@ class PsnUdpPuncherTest
 			assertEquals(control.sid, data.sid)
 			assertEquals(control.localHashedId, data.localHashedId)
 			assertEquals(listOf("STUN", "STATIC", "LOCAL"), control.candidate.map { it.type })
+			assertEquals(45678, control.candidate.first { it.type == "STUN" }.port)
+			assertTrue(control.candidate.first { it.type == "STATIC" }.port != 45678)
 			assertEquals(2, control.natType)
+		}
+		finally { stun.first.close(); stun.second.join(2_000) }
+	}
+
+	/**
+	 * PLE-327: when the NAT keeps our local port as the external one, upstream drops the STUN candidate
+	 * because it would duplicate STATIC (`holepunch.c:2912-2918`) and offers STATIC, LOCAL, the same shape the
+	 * console offers on such a network. Both S25 captures sent the duplicate (STUN :53637, STATIC :53637).
+	 */
+	@Test fun dropsTheStunCandidateWhenTheNatKeptOurPort() = runBlocking {
+		val stun = fakeStun(answers = 1, keepPort = true)
+		try
+		{
+			val puncher = DatagramPsnHolePuncher(stunServers = listOf(InetSocketAddress("127.0.0.1", stun.first.localPort)))
+			val offer = puncher.prepare(consoleOffer(sid = 4567, port = 1), "12345678901234567").use { it.offer }
+			assertEquals(listOf("STATIC", "LOCAL"), offer.candidate.map { it.type })
+			val static = offer.candidate.first()
+			val local = offer.candidate.last()
+			assertEquals("127.0.0.1", static.addr)
+			assertEquals(local.port, static.port)
+			assertEquals(listOf("0.0.0.0", 0), listOf(static.mappedAddress, static.mappedPort))
 		}
 		finally { stun.first.close(); stun.second.join(2_000) }
 	}
@@ -157,7 +181,8 @@ class PsnUdpPuncherTest
 		localHashedId = Base64.Default.encode(hash)
 	)
 
-	private fun fakeStun(answers: Int): Pair<DatagramSocket, Thread>
+	/** A STUN server mapping every request to 127.0.0.1:45678, or to the port it came from with [keepPort]. */
+	private fun fakeStun(answers: Int, keepPort: Boolean = false): Pair<DatagramSocket, Thread>
 	{
 		val stun = DatagramSocket(0, InetAddress.getByName("127.0.0.1"))
 		return stun to thread(name = "fake-stun", isDaemon = true) {
@@ -167,14 +192,15 @@ class PsnUdpPuncherTest
 					stun.receive(packet)
 					val transactionId = packet.data.copyOfRange(8, 20)
 					val source = packet.socketAddress as InetSocketAddress
-					stun.send(DatagramPacket(bindingResponse(transactionId, source), 32, source))
+					val mappedPort = if(keepPort) source.port else 45678
+					stun.send(DatagramPacket(bindingResponse(transactionId, mappedPort), 32, source))
 				}
 			}
 		}
 	}
 
-	/** A STUN binding success with one XOR-MAPPED-ADDRESS of 127.0.0.1:45678, whatever the request came from. */
-	private fun bindingResponse(transactionId: ByteArray, @Suppress("UNUSED_PARAMETER") source: InetSocketAddress): ByteArray =
+	/** A STUN binding success with one XOR-MAPPED-ADDRESS of 127.0.0.1:[mappedPort]. */
+	private fun bindingResponse(transactionId: ByteArray, mappedPort: Int = 45678): ByteArray =
 		ByteBuffer.allocate(32).order(ByteOrder.BIG_ENDIAN).apply {
 			putShort(0x0101)
 			putShort(12)
@@ -184,7 +210,7 @@ class PsnUdpPuncherTest
 			putShort(8)
 			put(0)
 			put(1)
-			putShort((45678 xor 0x2112).toShort())
+			putShort((mappedPort xor 0x2112).toShort())
 			put(byteArrayOf((127 xor 0x21).toByte(), 0x12, 0xa4.toByte(), (1 xor 0x42).toByte()))
 		}.array()
 }

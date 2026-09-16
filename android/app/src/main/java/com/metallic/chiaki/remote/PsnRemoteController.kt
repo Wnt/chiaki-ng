@@ -236,15 +236,20 @@ class PsnRemoteController(
 		val preparation = holePuncher.prepare(peer, session.accountId)
 		try
 		{
+			// Upstream's request ids: `local_req_id` starts at 1 (holepunch.c:783), building the offer
+			// consumes one (:2740-2741) and sending it takes the next (:1596-1598), then ACCEPT takes one
+			// more (:1647, :1663). Its OFFERs therefore carry 2 and 5 and its ACCEPTs 3 and 6; mirror that
+			// so a device capture compares like for like (PLE-327).
+			requestId++
 			val offerRequestId = requestId++
 			send(session, device, PsnSignalMessage("OFFER", offerRequestId, connRequest = preparation.offer))
-			awaitSignal("RESULT", offerRequestId, session, device)
+			awaitSignal("RESULT", offerRequestId)
 			current = if(isData) PsnRemoteState.DataProbing else PsnRemoteState.ControlProbing
 			val punched = preparation.punch()
 			trace("punched ${describe(punched.candidate)}")
 			val acceptRequestId = requestId++
 			send(session, device, PsnSignalMessage("ACCEPT", acceptRequestId, connRequest = acceptRequest(preparation.offer, peer, punched.candidate)))
-			val consoleAccept = awaitSignal("ACCEPT", session = session, device = device)
+			val consoleAccept = awaitSignal("ACCEPT")
 			send(session, device, PsnSignalMessage("RESULT", consoleAccept.reqId))
 			preparation.settle()
 			return punched
@@ -252,29 +257,28 @@ class PsnRemoteController(
 		finally { preparation.close() }
 	}
 
-	private suspend fun awaitSignal(
-		action: String,
-		reqId: Int? = null,
-		session: PsnSession? = null,
-		device: PsnDevice? = null
-	): PsnSignalMessage = withTimeout(30_000) {
+	/**
+	 * Upstream `wait_for_session_message` (holepunch.c:5387-5447): a TERMINATE ends the exchange, any
+	 * other action than the awaited one is logged and dropped (:5433-5440), and `wait_for_session_message_ack`
+	 * (:5457-5500) drops a RESULT for another request id the same way. The console re-sends its OFFER about
+	 * a second after the first while PSN is still delivering our RESULT (both PLE-327 captures); upstream
+	 * never answers that repeat, so neither do we (PLE-313 answered it with a second RESULT).
+	 */
+	private suspend fun awaitSignal(action: String, reqId: Int? = null): PsnSignalMessage = withTimeout(30_000) {
 		while(true)
 		{
 			val notification = queue().take { it.dataType() == SESSION_MESSAGE }
 			val payload = notification.path("body", "data", "sessionMessage", "payload")?.jsonPrimitive?.contentOrNull
 				?: throw PsnRemoteProtocolException("PSN signaling notification did not contain payload")
+			trace("received raw ${redact(payload)}")
 			val message = decodeSignal(json, payload)
 			trace("received ${describe(message)}")
 			if(message.action == "TERMINATE")
 				throw PsnRemoteProtocolException(
 					"Console terminated PSN candidate exchange while ${current::class.simpleName} awaited $action (error ${message.error})"
 				)
-			if(message.action == "OFFER" && action != "OFFER" && session != null && device != null)
-			{
-				send(session, device, PsnSignalMessage("RESULT", message.reqId))
-				continue
-			}
 			if(message.action == action && (reqId == null || message.reqId == reqId)) return@withTimeout message
+			trace("ignoring ${describe(message)} while awaiting $action" + (reqId?.let { " reqId=$it" } ?: ""))
 		}
 		@Suppress("UNREACHABLE_CODE")
 		error("unreachable")
@@ -283,6 +287,7 @@ class PsnRemoteController(
 	private suspend fun send(session: PsnSession, device: PsnDevice, message: PsnSignalMessage)
 	{
 		trace("sending ${describe(message)}")
+		trace("sending raw ${redact(api.signalEnvelope(session, device, message))}")
 		api.sendSignal(session, device, message)
 	}
 
@@ -396,6 +401,18 @@ class PsnRemoteController(
 			return runCatching { json.decodeFromString<PsnSignalMessage>(body) }
 				.getOrElse { throw PsnRemoteProtocolException("Invalid PSN signaling message", it) }
 		}
+
+		private val quotedAccountId = Regex("""("accountId\\?"\s*:\s*\\?")[^"\\]*""")
+		private val bareAccountId = Regex("""("accountId\\?"\s*:\s*)-?\d+""")
+
+		/**
+		 * A signaling envelope or payload with every `accountId` value blanked, whether quoted, bare or
+		 * inside the JSON-escaped `body=`. Tokens, `rp_regist_key` and `rp_key` never travel in these
+		 * messages (upstream `session_message_envelope_fmt`, `session_connrequest_fmt`), so the account id
+		 * is the one secret to strip before the raw JSON goes to logcat (PLE-327).
+		 */
+		internal fun redact(raw: String): String =
+			bareAccountId.replace(quotedAccountId.replace(raw, "$1<redacted>"), "$1\"<redacted>\"")
 
 		private fun JsonObject.dataType(): String? = this["dataType"]?.jsonPrimitive?.contentOrNull
 
