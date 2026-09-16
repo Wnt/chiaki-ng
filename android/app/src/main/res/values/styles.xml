@@ -3,9 +3,9 @@
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
         <item name="colorAccent">@color/accent</item>
-        <item name="colorOnPrimary">#ffffff</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
         <item name="colorSecondary">@color/accent</item>
-        <item name="colorOnSecondary">#000000</item>
+        <item name="colorOnSecondary">@color/on_secondary</item>
         <item name="android:statusBarColor">?attr/colorPrimarySurface</item>
         <item name="android:navigationBarColor">?attr/colorPrimarySurface</item>
         <item name="materialAlertDialogTheme">@style/AppTheme.AlertDialog</item>
@@ -15,7 +15,7 @@
     </style>
 
     <style name="AppTheme.Toolbar" parent="AppTheme">
-        <item name="android:textColorSecondary">#fff</item>
+        <item name="android:textColorSecondary">@color/on_primary</item>
     </style>
 
     <style name="AppTheme.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
@@ -32,68 +32,12 @@
         <item name="android:textColor">?attr/colorPrimary</item>
     </style>
 
-    <style name="MageTheme" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorPrimaryDark">@color/primary_dark</item>
-        <item name="colorAccent">@color/accent</item>
-        <item name="colorOnPrimary">#ffffff</item>
-        <item name="colorSecondary">@color/accent</item>
-        <item name="colorOnSecondary">#000000</item>
-        <item name="colorPrimarySurface">@color/primary</item>
-        <item name="android:windowBackground">@color/primary</item>
-        <item name="android:statusBarColor">?attr/colorPrimarySurface</item>
-        <item name="android:navigationBarColor">?attr/colorPrimarySurface</item>
-        <item name="colorControlNormal">@color/accent</item>
-        <item name="colorButtonNormal">@color/accent</item>
-        <item name="android:textAppearanceButton">@style/MageTheme.TextAppearanceButton</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
-
-        <item name="textAppearanceHeadline1">@style/MageTheme.TextAppearanceHeadline1</item>
-
-        <item name="android:colorControlActivated">?attr/colorAccent</item>
-        <item name="android:colorControlHighlight">?attr/colorAccent</item>
-
-        <item name="textInputStyle">@style/MageTheme.TextInputStyle</item>
-
-        <item name="android:windowActivityTransitions">true</item>
-        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-
-        <item name="materialAlertDialogTheme">@style/AppTheme.AlertDialog</item>
-    </style>
-
-    <style name="MageTheme.Translucent" parent="MageTheme">
-        <item name="android:windowIsTranslucent">true</item>
-    </style>
-
-    <style name="MageTheme.TextAppearanceHeadline1" parent="TextAppearance.Material3.DisplayLarge">
-        <item name="fontFamily">sans-serif-condensed-light</item>
-    </style>
-
-    <style name="MageTheme.TextInputStyle" parent="Widget.Material3.TextInputLayout.FilledBox">
-        <item name="hintTextColor">?attr/colorAccent</item>
-        <item name="boxCornerRadiusTopStart">16dp</item>
-        <item name="boxCornerRadiusTopEnd">16dp</item>
-        <item name="boxStrokeColor">@color/mage_text_input_box_stroke</item>
-        <item name="boxBackgroundColor">?attr/colorPrimaryDark</item>
-    </style>
-
+    <!-- Temporary names retained for layouts owned by PLE-245. Both now use
+         the same Material 3 components and color tokens as AppTheme. -->
     <style name="MageTheme.TextInputStyle.ExposedDropdownMenu" parent="Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu">
-        <item name="hintTextColor">?attr/colorAccent</item>
-        <item name="boxCornerRadiusTopStart">16dp</item>
-        <item name="boxCornerRadiusTopEnd">16dp</item>
-        <item name="boxStrokeColor">@color/mage_text_input_box_stroke</item>
-        <item name="boxBackgroundColor">?attr/colorPrimaryDark</item>
     </style>
 
     <style name="MageTheme.Button" parent="Widget.Material3.Button">
-        <item name="tint">?attr/colorOnSecondary</item>
-        <item name="android:backgroundTint">?attr/colorSecondary</item>
-        <item name="android:textColor">?attr/colorOnSecondary</item>
-        <item name="iconTint">?attr/colorOnSecondary</item>
-    </style>
-
-    <style name="MageTheme.TextAppearanceButton" parent="TextAppearance.Material3.LabelLarge">
-        <item name="android:textColor">?attr/colorOnSecondary</item>
     </style>
 
     <style name="StreamTheme" parent="Theme.Material3.Dark.NoActionBar">
