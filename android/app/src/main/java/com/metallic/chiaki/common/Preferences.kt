@@ -136,11 +136,6 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(psnLoginInAppBrowserKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(psnLoginInAppBrowserKey, value).apply() }
 
-	val psnReliableRedirectEnabledKey get() = resources.getString(R.string.preferences_psn_reliable_redirect_enabled_key)
-	var psnReliableRedirectEnabled
-		get() = sharedPreferences.getBoolean(psnReliableRedirectEnabledKey, false)
-		set(value) { sharedPreferences.edit().putBoolean(psnReliableRedirectEnabledKey, value).apply() }
-
 	val psnRemotePlayEnabledKey get() = resources.getString(R.string.preferences_psn_remote_play_enabled_key)
 	var psnRemotePlayEnabled
 		get() = sharedPreferences.getBoolean(psnRemotePlayEnabledKey, false)

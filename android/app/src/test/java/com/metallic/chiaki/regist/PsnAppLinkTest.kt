@@ -34,28 +34,30 @@ class PsnAppLinkTest
 		assertFalse(isPsnRedirectDomainAllowed(linkHandlingAllowed = false, hostState = 2))
 	}
 
+	// PLE-260: this must hold with no preference set, i.e. on a fresh install. The redirect
+	// recovery this exercises was previously gated behind a default-off preference, so a
+	// fresh install dead-ended on Sony's blank redirect page.
 	@Test
-	fun pausedExternalLogin_returnIsHandled()
+	fun freshInstall_pausedExternalLogin_returnIsHandled()
 	{
-		assertTrue(shouldHandlePsnBrowserReturn(true, false, false, true, true))
+		assertTrue(shouldHandlePsnBrowserReturn(false, false, true, true))
 	}
 
 	@Test
 	fun initialResume_isNotMistakenForBrowserReturn()
 	{
-		assertFalse(shouldHandlePsnBrowserReturn(true, false, false, true, false))
+		assertFalse(shouldHandlePsnBrowserReturn(false, false, true, false))
 	}
 
 	@Test
 	fun redirectDelivery_isNotMistakenForStranding()
 	{
-		assertFalse(shouldHandlePsnBrowserReturn(true, false, true, true, true))
+		assertFalse(shouldHandlePsnBrowserReturn(false, true, true, true))
 	}
 
 	@Test
-	fun legacyAndEmbeddedFlows_doNotHandleBrowserReturn()
+	fun embeddedFlow_doesNotHandleBrowserReturn()
 	{
-		assertFalse(shouldHandlePsnBrowserReturn(false, false, false, true, true))
-		assertFalse(shouldHandlePsnBrowserReturn(true, true, false, true, true))
+		assertFalse(shouldHandlePsnBrowserReturn(true, false, true, true))
 	}
 }
