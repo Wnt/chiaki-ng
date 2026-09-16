@@ -28,6 +28,10 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 		const val EXTRA_BROADCAST = "regist_broadcast"
 		const val EXTRA_ASSIGN_MANUAL_HOST_ID = "assign_manual_host_id"
 		const val EXTRA_CONSOLE_IS_PS5 = "regist_console_is_ps5"
+		const val EXTRA_CONSOLE_NAME = "regist_console_name"
+		const val EXTRA_GUIDED = "regist_guided"
+		const val EXTRA_PREVIEW = "regist_preview"
+		const val EXTRA_REGISTERED_HOST = "registered_host"
 
 		private const val PIN_LENGTH = 8
 
@@ -40,6 +44,7 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 	private lateinit var preferences: Preferences
 	private var manualAccountIdVisible = false
 	private var currentAccountId: String? = null
+	private var guided = false
 
 	override val revealWindow: Window get() = window
 	override val revealIntent: Intent get() = intent
@@ -56,7 +61,8 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 
 		viewModel = ViewModelProvider(this).get(RegistViewModel::class.java)
 		preferences = Preferences(this)
-		if(preferences.psnSignInEnabled && intent.hasExtra(EXTRA_CONSOLE_IS_PS5))
+		guided = intent.getBooleanExtra(EXTRA_GUIDED, false)
+		if(intent.hasExtra(EXTRA_CONSOLE_IS_PS5))
 		{
 			viewModel.ps4Version.value = if(intent.getBooleanExtra(EXTRA_CONSOLE_IS_PS5, false))
 				RegistViewModel.ConsoleVersion.PS5
@@ -77,9 +83,11 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 			if(manualAccountIdVisible)
 				binding.psnIdEditText.requestFocus()
 		}
-		if(preferences.psnSignInEnabled)
+		if(preferences.psnSignInEnabled || guided)
 		{
 			currentAccountId = preferences.psnAccountId
+			if(currentAccountId.isNullOrBlank() && intent.getBooleanExtra(EXTRA_PREVIEW, false))
+				currentAccountId = Base64.encodeToString(ByteArray(RegistInfo.ACCOUNT_ID_SIZE), Base64.NO_WRAP)
 			binding.psnIdEditText.setText(currentAccountId)
 		}
 
@@ -123,6 +131,29 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 			binding.pinHelpBeforeTextView.setText(if(it.isPS5) R.string.regist_pin_instructions_ps5_before else R.string.regist_pin_instructions_ps4_before)
 			binding.pinHelpNavigationTextView.setText(if(it.isPS5) R.string.regist_pin_instructions_ps5_navigation else R.string.regist_pin_instructions_ps4_navigation)
 		})
+		if(guided)
+			showGuidedPinEntry()
+	}
+
+	private fun showGuidedPinEntry()
+	{
+		val consoleName = intent.getStringExtra(EXTRA_CONSOLE_NAME)
+			?.takeIf { it.isNotBlank() }
+			?: getString(if(intent.getBooleanExtra(EXTRA_CONSOLE_IS_PS5, true)) R.string.regist_option_ps5 else R.string.regist_option_ps4_ge_8)
+		binding.titleTextView.text = getString(R.string.link_console_title, consoleName)
+		binding.hostTextInputLayout.visibility = View.GONE
+		binding.broadcastCheckBox.visibility = View.GONE
+		binding.ps4VersionRadioGroup.visibility = View.GONE
+		binding.psnSignInButton.visibility = View.GONE
+		binding.psnAccountIdStatusTextView.visibility = View.GONE
+		binding.psnManualEntryButton.visibility = View.GONE
+		binding.psnAccountIdHelpGroup.visibility = View.GONE
+		binding.psnIdTextInputLayout.visibility = View.GONE
+		binding.pinHelpBeforeTextView.visibility = View.GONE
+		binding.pinHelpAfterTextView.visibility = View.GONE
+		binding.pinHelpNavigationTextView.alpha = 1f
+		binding.registButton.setText(R.string.action_link_console)
+		binding.pinEditText.requestFocus()
 	}
 
 	private fun updatePsnControls(version: RegistViewModel.ConsoleVersion)
@@ -196,6 +227,10 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 
 		Intent(this, RegistExecuteActivity::class.java).also {
 			it.putExtra(RegistExecuteActivity.EXTRA_REGIST_INFO, registInfo)
+			it.putExtra(RegistExecuteActivity.EXTRA_CONSOLE_NAME, intent.getStringExtra(EXTRA_CONSOLE_NAME))
+			it.putExtra(RegistExecuteActivity.EXTRA_GUIDED, guided)
+			if(intent.getBooleanExtra(EXTRA_PREVIEW, false))
+				it.putExtra(RegistExecuteActivity.EXTRA_PREVIEW_STATE, RegistExecuteActivity.PREVIEW_RUNNING)
 			if(intent.hasExtra(EXTRA_ASSIGN_MANUAL_HOST_ID))
 				it.putExtra(RegistExecuteActivity.EXTRA_ASSIGN_MANUAL_HOST_ID, intent.getLongExtra(EXTRA_ASSIGN_MANUAL_HOST_ID, 0L))
 			startActivityForResult(it, REQUEST_REGIST)
@@ -206,7 +241,10 @@ class RegistActivity: AppCompatActivity(), RevealActivity
 	{
 		super.onActivityResult(requestCode, resultCode, data)
 		if(requestCode == REQUEST_REGIST && resultCode == RESULT_OK)
+		{
+			setResult(RESULT_OK, Intent().putExtra(EXTRA_REGISTERED_HOST, binding.hostEditText.text.toString().trim()))
 			finish()
+		}
 		else if(requestCode == REQUEST_PSN_LOGIN && resultCode == RESULT_OK)
 		{
 			val accountId = data?.getStringExtra(PsnLoginActivity.EXTRA_ACCOUNT_ID) ?: preferences.psnAccountId

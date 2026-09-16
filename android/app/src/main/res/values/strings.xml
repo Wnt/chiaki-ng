@@ -25,12 +25,16 @@
     <string name="action_discover">Discover Consoles Automatically</string>
     <string name="action_register">Register Console</string>
     <string name="action_add_manual">Add Console Manually</string>
+    <string name="action_add_by_address">Add by address</string>
+    <string name="onboarding_title">PlayStation Remote Play</string>
     <string name="regist_pin_instructions_ps4_before">On the PS4, navigate to</string>
     <string name="regist_pin_instructions_ps4_navigation">Settings →\nRemote Play Connection Settings →\nAdd Device</string>
     <string name="regist_pin_instructions_ps5_before">On the PS5, navigate to</string>
     <string name="regist_pin_instructions_ps5_navigation">Settings →\nSystem → Remote Play →\nLink Device</string>
     <string name="regist_pin_instructions_after">to obtain the PIN</string>
     <string name="title_regist">Register Console</string>
+    <string name="link_console_title">Link %s</string>
+    <string name="action_link_console">Link console</string>
     <string name="hint_regist_host">Host</string>
     <string name="regist_broadcast">Broadcast</string>
     <string name="regist_option_ps4_lt_7">PS4 &lt; 7.0</string>
@@ -63,6 +67,9 @@
     <string name="action_export_settings">Export Settings</string>
     <string name="regist_info_success">Regist successful.</string>
     <string name="regist_info_failed">Regist failed.</string>
+    <string name="linking_console">Linking %s</string>
+    <string name="link_console_failed">Couldn\'t link %s</string>
+    <string name="console_ready">%s is ready</string>
     <string name="alert_regist_duplicate">The console with MAC %s has already been registered. Should the previous record be overwritten?</string>
     <string name="action_regist_overwrite">Overwrite</string>
     <string name="action_regist_discard">Cancel</string>
@@ -242,6 +249,7 @@
     <string name="network_quality_poor">Poor</string>
     <string name="network_quality_unknown">—</string>
     <string name="alert_message_psn_remote_error">PSN remote connection failed:\n%s</string>
+    <string name="psn_play_failed">Couldn\'t start Remote Play: %s</string>
     <string name="stream_on_screen_controls">On-Screen Controls</string>
     <string name="stream_touchpad_only">Touchpad only</string>
 

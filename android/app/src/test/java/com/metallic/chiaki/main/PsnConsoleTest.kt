@@ -36,4 +36,16 @@ class PsnConsoleTest
 		assertEquals(registered, result[0].registeredHost)
 		assertNull(result[1].registeredHost)
 	}
+
+	@Test fun firstLaunchShowsWelcomeUntilPsnIsChosen()
+	{
+		assertEquals(OnboardingHomeState.WELCOME, onboardingHomeState(0, false))
+		assertEquals(OnboardingHomeState.ACCOUNT_CONSOLES, onboardingHomeState(0, true))
+	}
+
+	@Test fun configuredConsoleAlwaysReturnsHome()
+	{
+		assertEquals(OnboardingHomeState.HOME, onboardingHomeState(1, false))
+		assertEquals(OnboardingHomeState.HOME, onboardingHomeState(1, true))
+	}
 }
