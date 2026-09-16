@@ -78,6 +78,8 @@ data class ConnectInfo(
 	val takionVideoPacketReorderingDisabled: Boolean,
 	val feedbackStateMinIntervalMs: Int = 0,
 	val feedbackStatsLogIntervalMs: Int = 0,
+	val audioBufferBursts: Int = 0,
+	val audioFifoMs: Int = 171,
 	val autoRegister: Boolean = false,
 	val performanceModeEnabled: Boolean = false
 ): Parcelable

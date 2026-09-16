@@ -66,6 +66,8 @@ class Preferences(context: Context)
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 		const val packetLossMaxPercentDefault = 5
+		const val audioBufferBurstsDefault = 0
+		const val audioFifoMsDefault = 171
 	}
 
 	internal val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -163,6 +165,18 @@ class Preferences(context: Context)
 
 	/** PLE-57: window of the feedback packet-rate line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
+
+	fun validateAudioBufferBursts(bursts: Int) = max(0, min(16, bursts))
+	val audioBufferBurstsKey get() = resources.getString(R.string.preferences_audio_buffer_bursts_key)
+	var audioBufferBursts
+		get() = validateAudioBufferBursts(sharedPreferences.getInt(audioBufferBurstsKey, audioBufferBurstsDefault))
+		set(value) { sharedPreferences.edit().putInt(audioBufferBurstsKey, validateAudioBufferBursts(value)).apply() }
+
+	fun validateAudioFifoMs(fifoMs: Int) = max(20, min(1000, fifoMs))
+	val audioFifoMsKey get() = resources.getString(R.string.preferences_audio_fifo_ms_key)
+	var audioFifoMs
+		get() = validateAudioFifoMs(sharedPreferences.getInt(audioFifoMsKey, audioFifoMsDefault))
+		set(value) { sharedPreferences.edit().putInt(audioFifoMsKey, validateAudioFifoMs(value)).apply() }
 
 	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
 	var decoderInputThreadEnabled
