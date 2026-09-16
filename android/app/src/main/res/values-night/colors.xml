@@ -3,4 +3,8 @@
     <!-- Readable on the dark AppTheme surface. Light default lives in
          values/colors.xml. See attr colorTextLink. -->
     <color name="text_link">@color/text_link_dark</color>
+
+    <!-- Readable on the dark AppTheme surface. Light default lives in
+         values/colors.xml. See attr colorLinkedIndicator. -->
+    <color name="linked_indicator">#81C995</color>
 </resources>

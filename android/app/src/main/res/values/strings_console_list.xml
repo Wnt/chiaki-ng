@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PLE-338: main-view console list strings. Kept out of strings.xml, which
+     another ticket is editing concurrently, to avoid a merge conflict; the
+     coordinator folds this file in when landing. -->
+<resources>
+    <!-- Heading shown above the consoles found on the network that are not
+         linked to this app yet. -->
+    <plurals name="console_list_discovered_heading">
+        <item quantity="one">Network discovered PlayStation</item>
+        <item quantity="other">Network discovered PlayStations</item>
+    </plurals>
+
+    <!-- Button on an unlinked console: tapping it signs in if needed and
+         registers the console with no PIN, then streams. -->
+    <string name="action_link">Link</string>
+    <!-- Button on an already-linked console: tapping it streams directly.
+         Reuses the existing @string/action_connect ("Connect") from
+         strings.xml rather than duplicating it here. -->
+
+    <!-- Tag shown on a linked console, next to a green check icon. -->
+    <string name="console_linked_tag">Linked</string>
+</resources>

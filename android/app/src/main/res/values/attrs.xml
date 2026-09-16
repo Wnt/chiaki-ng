@@ -8,6 +8,11 @@
          cannot regress to a static color that only reads in one mode. -->
     <attr name="colorTextLink" format="color" />
 
+    <!-- Semantic "linked console" green for the main console list (PLE-338), with
+         explicit light/dark values in colors.xml / values-night/colors.xml so it
+         cannot regress to a static color that only reads in one mode. -->
+    <attr name="colorLinkedIndicator" format="color" />
+
     <declare-styleable name="ButtonView">
         <attr name="drawableIdle" />
         <attr name="drawablePressed" />
