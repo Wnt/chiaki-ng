@@ -101,6 +101,10 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
 		uint32_t max_queue_age_periods, bool nonblocking_producer);
+void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
+		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
+		uint32_t max_queue_age_periods, bool nonblocking_producer);
 void android_chiaki_video_decoder_set_pacing_mode(AndroidChiakiVideoDecoder *decoder,
 		AndroidChiakiVideoPacingMode pacing_mode);
 bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size,

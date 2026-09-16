@@ -68,4 +68,15 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("stage0 D 6.0 target 5.0 | err p50 1.0 p99 3.0 ms | decode-ewma 8.5 | drops 9"))
 		assertEquals(9, text.lines().size)
 	}
+
+	@Test
+	fun performanceFlagsOnlyNameLiveLegs()
+	{
+		assertEquals(emptyList<String>(), StreamActivity.performanceModeDiagnosticFlags(false, false, false))
+		assertEquals(listOf("perf-oprate"), StreamActivity.performanceModeDiagnosticFlags(true, false, false))
+		assertEquals(
+			listOf("perf-oprate", "perf-sustained", "perf-adpf"),
+			StreamActivity.performanceModeDiagnosticFlags(true, true, true)
+		)
+	}
 }

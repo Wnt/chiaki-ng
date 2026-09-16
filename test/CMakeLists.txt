@@ -25,6 +25,7 @@ set(CHIAKI_UNIT_SOURCES
 				../android/app/src/main/cpp/video-presenter-age.c
 				../android/app/src/main/cpp/video-presenter-histogram.c
 				../android/app/src/main/cpp/video-presenter-cadence.c
+				../android/app/src/main/cpp/video-presenter-timing.c
 				regist.c)
 
 if(NOT CHIAKI_LIB_ENABLE_MBEDTLS)

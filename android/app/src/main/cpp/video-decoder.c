@@ -418,6 +418,19 @@ beach:
 	chiaki_mutex_unlock(&decoder->codec_mutex);
 }
 
+void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
+		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
+{
+	chiaki_mutex_lock(&decoder->codec_mutex);
+	if(decoder->codec)
+		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
+				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+				nonblocking_producer);
+	chiaki_mutex_unlock(&decoder->codec_mutex);
+}
+
 static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder,
 		uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index,
 		uint64_t frame_ready_time_us)
