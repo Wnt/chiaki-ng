@@ -32,14 +32,6 @@
         <item name="android:textColor">?attr/colorPrimary</item>
     </style>
 
-    <!-- Temporary names retained for layouts owned by PLE-245. Both now use
-         the same Material 3 components and color tokens as AppTheme. -->
-    <style name="MageTheme.TextInputStyle.ExposedDropdownMenu" parent="Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu">
-    </style>
-
-    <style name="MageTheme.Button" parent="Widget.Material3.Button">
-    </style>
-
     <style name="StreamTheme" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryDark">@color/primary_dark</item>
