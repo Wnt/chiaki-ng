@@ -173,7 +173,7 @@
                 android:textSize="12sp"
                 android:gravity="center_horizontal"
                 android:autoLink="web"
-                android:textColorLink="?attr/colorOnSurface"
+                android:textColorLink="?attr/colorTextLink"
                 android:textAppearance="?attr/textAppearanceBody1"
                 android:textColor="?attr/colorOnSurface"/>
 

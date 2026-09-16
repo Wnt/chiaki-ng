@@ -3,6 +3,11 @@
     <attr name="drawableIdle" format="reference" />
     <attr name="drawablePressed" format="reference" />
 
+    <!-- Text-safe role for links and text buttons on AppTheme, with explicit
+         light/dark values in colors.xml / values-night/colors.xml so it
+         cannot regress to a static color that only reads in one mode. -->
+    <attr name="colorTextLink" format="color" />
+
     <declare-styleable name="ButtonView">
         <attr name="drawableIdle" />
         <attr name="drawablePressed" />
