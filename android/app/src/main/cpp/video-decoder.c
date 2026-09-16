@@ -48,6 +48,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->timestamp_cur = 0;
 	decoder->fps = target_fps > 0 ? (unsigned int)target_fps : 60;
 	decoder->real_pts_enabled = real_pts_enabled;
+	decoder->stats_log_enabled = stats_log_enabled;
 	// PLE-75 experiment: the PTS timeline may run at a rate other than the stream fps
 	// (0 = stream fps, today's behaviour) to test whether the codec keys off timestamp spacing.
 	decoder->pts_rate_hz = pts_rate_hz > 0 ? pts_rate_hz : decoder->fps;
@@ -454,7 +455,13 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 	uint64_t presentation_time_us = decoder->timestamp_cur;
 	if(decoder->real_pts_enabled)
 	{
+		uint64_t previous_unwrapped_frame_index = decoder->frame_index_unwrapper.value;
 		uint64_t unwrapped_frame_index = chiaki_seq_num_16_unwrap(&decoder->frame_index_unwrapper, frame_index);
+		// PLE-73: PS5 frame index is 16-bit and wraps every 65536 frames (~18.2 min at 60 fps);
+		// default-off log to verify the unwrapper keeps counting across the wrap during a soak.
+		if(decoder->stats_log_enabled && (previous_unwrapped_frame_index >> 16) != (unwrapped_frame_index >> 16))
+			CHIAKI_LOGI(decoder->log, "Frame-index unwrapper wrap: raw=%u unwrapped=%" PRIu64,
+					frame_index, unwrapped_frame_index);
 		presentation_time_us = unwrapped_frame_index * 1000000ULL / decoder->pts_rate_hz;
 	}
 
