@@ -267,6 +267,7 @@ static void adjust_dejitter_buffer_locked(AndroidChiakiVideoPresenter *presenter
 static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 		const AndroidChiakiVideoPresenterFrame *frame)
 {
+	bool half_rate_before = presenter->cadence.half_rate_detected;
 	if(frame->input_metadata_valid && android_chiaki_video_cadence_record_frame(
 			&presenter->cadence, frame->frame_index, frame->frame_ready_time_us,
 			presenter->stream_fps))
@@ -287,6 +288,11 @@ static void record_arrival_locked(AndroidChiakiVideoPresenter *presenter,
 					(double)presenter->cadence.decode_ewma_ns / 1000000.0,
 					(unsigned long long)presenter->cadence_window_dropped_frames);
 	}
+	if(presenter->stats_log_enabled && half_rate_before != presenter->cadence.half_rate_detected)
+		CHIAKI_LOGI(presenter->log,
+				"Video presenter source cadence: %s (half-rate adaptation %s)",
+				presenter->cadence.half_rate_detected ? "30-in-60" : "60 fps",
+				presenter->config.dejitter_half_rate_enabled ? "enabled" : "disabled");
 	if(presenter->dejitter_enabled)
 		return;
 
@@ -862,7 +868,8 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	uint32_t floor_ms = sanitize_dejitter_floor_ms(presenter->config.dejitter_floor_ms);
 	uint32_t cap_ms = sanitize_dejitter_cap_ms(presenter->config.dejitter_cap_ms, floor_ms);
 	android_chiaki_video_cadence_reset(&presenter->cadence,
-			(uint64_t)floor_ms * 1000000ULL, (uint64_t)cap_ms * 1000000ULL);
+			(uint64_t)floor_ms * 1000000ULL, (uint64_t)cap_ms * 1000000ULL,
+			presenter->config.dejitter_half_rate_enabled);
 	presenter->cadence_last_dropped_frames = 0;
 	presenter->cadence_window_dropped_frames = 0;
 	memset(presenter->input_metadata, 0, sizeof(presenter->input_metadata));
@@ -875,14 +882,15 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 		CHIAKI_LOGW(presenter->log, "Video presenter: pacing requested but immediate release in effect (vsync %.2f Hz >= gate)",
 				presenter->refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: policy=%s stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s depth=%u..%u ms",
+		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: policy=%s stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s recovery=%s depth=%u..%u ms half_rate_adaptation=%s",
 				mode_name(mode), use_dejitter ? "dejitter" : "timeline",
 				presenter->stream_fps, presenter->refresh_hz,
 				presenter->timestamped_release_enabled ? "enabled" : "disabled",
 				(double)presenter->app_vsync_offset_ns / 1000000.0,
 				(double)presenter_lead_ns(presenter) / 1000000.0,
 				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled",
-				recovery_name(recovery_strategy), floor_ms, cap_ms);
+				recovery_name(recovery_strategy), floor_ms, cap_ms,
+				presenter->config.dejitter_half_rate_enabled ? "enabled" : "disabled");
 
 	start_vsync_thread_if_needed(presenter);
 	ChiakiErrorCode err = chiaki_thread_create(&presenter->output_thread, output_thread_func, presenter);
@@ -1078,6 +1086,7 @@ void android_chiaki_video_presenter_get_diagnostics(AndroidChiakiVideoPresenter 
 	diagnostics->cadence_err_p99_ns = presenter->cadence.err_p99_ns;
 	diagnostics->decode_ewma_ns = presenter->cadence.decode_ewma_ns;
 	diagnostics->cadence_window_dropped_frames = presenter->cadence_window_dropped_frames;
+	diagnostics->cadence_half_rate_detected = presenter->cadence.half_rate_detected;
 	diagnostics->vsync_period_ns = presenter->vsync_period_ns > 0
 			? (uint64_t)presenter->vsync_period_ns : 0;
 	diagnostics->queue_depth = presenter->queue_size;

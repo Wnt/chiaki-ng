@@ -12,10 +12,15 @@
 
 #define ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW 120
 #define ANDROID_CHIAKI_VIDEO_DECODE_HIGH_WINDOWS 4
+#define ANDROID_CHIAKI_VIDEO_HALF_RATE_CONFIRM_FRAMES 8
 
 typedef struct android_chiaki_video_cadence_t
 {
 	ChiakiSeqNum16Unwrapper frame_index_unwrapper;
+	bool half_rate_adaptation_enabled;
+	bool half_rate_detected;
+	uint8_t half_rate_streak;
+	uint8_t full_rate_streak;
 	bool clock_valid;
 	uint64_t base_frame_index;
 	uint64_t last_frame_index;
@@ -42,7 +47,7 @@ typedef struct android_chiaki_video_cadence_t
 } AndroidChiakiVideoCadence;
 
 void android_chiaki_video_cadence_reset(AndroidChiakiVideoCadence *cadence,
-		uint64_t depth_floor_ns, uint64_t depth_cap_ns);
+		uint64_t depth_floor_ns, uint64_t depth_cap_ns, bool half_rate_adaptation_enabled);
 void android_chiaki_video_cadence_record_decode(AndroidChiakiVideoCadence *cadence,
 		uint64_t decode_ns);
 bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadence,

@@ -30,6 +30,8 @@ static uint64_t sorted_percentile(uint64_t *samples, uint32_t count,
 
 static void assert_cadence_persistent_phase_step_relocks(void);
 static void assert_cadence_clock_drift_stays_in_range(void);
+static void assert_half_rate_detector_30_in_60(void);
+static void assert_half_rate_detector_switch(void);
 static void assert_dejitter_release_time(void);
 
 static MunitResult test_histogram_matches_sorted_percentile(const MunitParameter params[], void *user)
@@ -97,7 +99,7 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	(void)user;
 
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence, 12000000ULL, 32000000ULL);
+	android_chiaki_video_cadence_reset(&cadence, 12000000ULL, 32000000ULL, false);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -114,8 +116,11 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	munit_assert_uint64(cadence.decode_ewma_ns, ==, 8000000);
 	munit_assert_uint64(cadence.target_ns, ==, 12000000);
 	munit_assert_uint64(cadence.depth_ns, ==, 12000000);
+	munit_assert_false(cadence.half_rate_detected);
 	assert_cadence_persistent_phase_step_relocks();
 	assert_cadence_clock_drift_stays_in_range();
+	assert_half_rate_detector_30_in_60();
+	assert_half_rate_detector_switch();
 	assert_dejitter_release_time();
 	return MUNIT_OK;
 }
@@ -126,7 +131,7 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 	(void)user;
 
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL, false);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -148,7 +153,7 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 static void assert_cadence_persistent_phase_step_relocks(void)
 {
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL, false);
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
@@ -167,7 +172,7 @@ static void assert_cadence_persistent_phase_step_relocks(void)
 static void assert_cadence_clock_drift_stays_in_range(void)
 {
 	AndroidChiakiVideoCadence cadence;
-	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL);
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL, false);
 	// Deliberately exaggerate source/nominal clock drift to 8,000 ppm. The
 	// recovered error must remain a measured low tail rather than run into the
 	// histogram ceiling or the depth cap over successive windows.
@@ -182,6 +187,74 @@ static void assert_cadence_clock_drift_stays_in_range(void)
 	munit_assert_uint64(cadence.err_p99_ns, <=, 4000000);
 	munit_assert_uint64(cadence.target_ns, <, 8000000);
 	munit_assert_uint64(cadence.depth_ns, <, 8000000);
+}
+
+static void assert_half_rate_detector_30_in_60(void)
+{
+	AndroidChiakiVideoCadence detector_only;
+	android_chiaki_video_cadence_reset(&detector_only, 4000000ULL, 32000000ULL, false);
+	const uint64_t half_rate_period_us = 2 * (1000000 / 60);
+	uint64_t ready_us = 5000000;
+	for(uint32_t i = 0; i <= ANDROID_CHIAKI_VIDEO_HALF_RATE_CONFIRM_FRAMES; i++)
+	{
+		android_chiaki_video_cadence_record_frame(&detector_only, (ChiakiSeqNum16)i,
+				ready_us, 60);
+		ready_us += half_rate_period_us;
+	}
+	// Detection is diagnostic and unconditional; only adapting the cadence clock
+	// is controlled by the default-off setting.
+	munit_assert_true(detector_only.half_rate_detected);
+
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL, true);
+	ready_us = 5000000;
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW
+			+ ANDROID_CHIAKI_VIDEO_HALF_RATE_CONFIRM_FRAMES; i++)
+	{
+		android_chiaki_video_cadence_record_frame(&cadence, (ChiakiSeqNum16)i,
+				ready_us, 60);
+		ready_us += half_rate_period_us;
+	}
+	munit_assert_true(cadence.half_rate_detected);
+	munit_assert_uint64(cadence.generation, ==, 1);
+	munit_assert_uint64(cadence.err_p99_ns, <, 1000000);
+	munit_assert_uint64(cadence.target_ns, ==, 4000000);
+}
+
+static void assert_half_rate_detector_switch(void)
+{
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence, 4000000ULL, 32000000ULL, true);
+	const uint64_t period_us = 1000000 / 60;
+	uint64_t ready_us = 6000000;
+	ChiakiSeqNum16 frame_index = 0;
+
+	// A stable 60 fps prefix must remain nominal.
+	for(uint32_t i = 0; i < 16; i++, frame_index++)
+	{
+		android_chiaki_video_cadence_record_frame(&cadence, frame_index, ready_us, 60);
+		ready_us += period_us;
+	}
+	munit_assert_false(cadence.half_rate_detected);
+
+	// Eight adjacent frame-index intervals near 2T confirm 30-in-60.
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_HALF_RATE_CONFIRM_FRAMES;
+			i++, frame_index++)
+	{
+		ready_us += period_us;
+		android_chiaki_video_cadence_record_frame(&cadence, frame_index, ready_us, 60);
+		ready_us += period_us;
+	}
+	munit_assert_true(cadence.half_rate_detected);
+
+	// The same hysteresis returns to nominal after a sustained 60 fps cadence.
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_HALF_RATE_CONFIRM_FRAMES;
+			i++, frame_index++)
+	{
+		android_chiaki_video_cadence_record_frame(&cadence, frame_index, ready_us, 60);
+		ready_us += period_us;
+	}
+	munit_assert_false(cadence.half_rate_detected);
 }
 
 static void assert_dejitter_release_time(void)

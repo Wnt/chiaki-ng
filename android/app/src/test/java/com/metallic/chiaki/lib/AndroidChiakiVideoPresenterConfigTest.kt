@@ -25,5 +25,6 @@ class AndroidChiakiVideoPresenterConfigTest
 		assertEquals(12, config.dejitterFloorMs)
 		assertEquals(32, config.dejitterCapMs)
 		assertEquals(2, config.dejitterQueueAgeFrames)
+		assertFalse(config.dejitterHalfRateEnabled)
 	}
 }

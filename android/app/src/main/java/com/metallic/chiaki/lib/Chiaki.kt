@@ -77,7 +77,8 @@ data class AndroidChiakiVideoPresenterConfig(
 	val dejitterEnabled: Boolean = false,
 	val dejitterFloorMs: Int = 12,
 	val dejitterCapMs: Int = 32,
-	val dejitterQueueAgeFrames: Int = 2
+	val dejitterQueueAgeFrames: Int = 2,
+	val dejitterHalfRateEnabled: Boolean = false
 ): Parcelable
 
 @Parcelize
@@ -416,7 +417,8 @@ data class StreamStatsEvent(
 	val liveRttMicros: Long = 0,
 	val serverLoss: Long = 0,
 	val congestionMeasuredLoss: Double = 0.0,
-	val congestionReportedLoss: Double = 0.0
+	val congestionReportedLoss: Double = 0.0,
+	val cadenceHalfRateDetected: Boolean = false
 ): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
@@ -566,7 +568,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		liveRttMicros: Long,
 		serverLoss: Long,
 		congestionMeasuredLoss: Double,
-		congestionReportedLoss: Double
+		congestionReportedLoss: Double,
+		cadenceHalfRateDetected: Boolean
 	)
 	{
 		event(StreamStatsEvent(
@@ -603,7 +606,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			liveRttMicros = liveRttMicros,
 			serverLoss = serverLoss,
 			congestionMeasuredLoss = congestionMeasuredLoss,
-			congestionReportedLoss = congestionReportedLoss
+			congestionReportedLoss = congestionReportedLoss,
+			cadenceHalfRateDetected = cadenceHalfRateDetected
 		))
 	}
 

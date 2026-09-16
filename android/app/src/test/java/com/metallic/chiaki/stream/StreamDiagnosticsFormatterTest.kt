@@ -60,7 +60,8 @@ class StreamDiagnosticsFormatterTest
 			presenterQueueDepth = 1,
 			audioLatencyMicros = 12_500,
 			audioXruns = 7,
-			audioUnderruns = 8
+			audioUnderruns = 8,
+			cadenceHalfRateDetected = true
 		)
 		val text = StreamDiagnosticsFormatter.format(stats, ui)
 		assertTrue(text.contains("stream 60.0 fps | decoder 59.0 fps"))
@@ -71,7 +72,7 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
 		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
 		assertTrue(text.contains("vsync 8.333 ms | miss 4 | DJB 8.0 ms"))
-		assertTrue(text.contains("stage0 D 6.0 target 5.0 | err p50 1.0 p99 3.0 ms | decode-ewma 8.5 | drops 9"))
+		assertTrue(text.contains("stage0 D 6.0 target 5.0 | err p50 1.0 p99 3.0 ms | decode-ewma 8.5 | drops 9 | source 30-in-60"))
 		assertEquals(11, text.lines().size)
 	}
 
