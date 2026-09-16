@@ -149,7 +149,7 @@ static MunitResult test_period_observation(const MunitParameter params[], void *
 	return MUNIT_OK;
 }
 
-static MunitResult test_recovery_action(const MunitParameter params[], void *user)
+static MunitResult test_recovery_release_decision(const MunitParameter params[], void *user)
 {
 	(void)params;
 	(void)user;
@@ -164,15 +164,14 @@ static MunitResult test_recovery_action(const MunitParameter params[], void *use
 	munit_assert_int(android_chiaki_video_recovery_sanitize_strategy(1), ==,
 			ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH);
 
-	// timeline_shift keeps the split the presenter has today: balanced drops the
-	// head frame, every other pacing mode shifts the timeline.
+	// The strategy name controls the late-frame release decision in every mode.
+	// In particular, balanced is the high-refresh paced mode used by PLE-128: a
+	// timeline shift must not turn into a releaseOutputBuffer(render=false) drop.
 	for(int mode = 0; mode <= 3; mode++)
 	{
-		AndroidChiakiVideoRecoveryAction expected = mode == 2
-				? ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_DROP_HEAD
-				: ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE;
 		munit_assert_int(android_chiaki_video_recovery_action(
-				ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, mode), ==, expected);
+				ANDROID_CHIAKI_VIDEO_RECOVERY_TIMELINE_SHIFT, mode), ==,
+				ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_SHIFT_TIMELINE);
 		munit_assert_int(android_chiaki_video_recovery_action(
 				ANDROID_CHIAKI_VIDEO_RECOVERY_FLUSH, mode), ==,
 				ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_FLUSH_QUEUE);
@@ -285,7 +284,7 @@ MunitTest tests_video_presenter[] = {
 	},
 	{
 		"/recovery_action",
-		test_recovery_action,
+		test_recovery_release_decision,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

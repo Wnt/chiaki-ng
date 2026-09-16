@@ -428,13 +428,6 @@ static void on_vsync(AndroidChiakiVideoPresenter *presenter, int64_t app_vsync_n
 						next_vsync_ns - presenter_lead_ns(presenter));
 				break;
 			}
-			if(action == ANDROID_CHIAKI_VIDEO_RECOVERY_ACTION_DROP_HEAD)
-			{
-				AndroidChiakiVideoPresenterFrame dropped;
-				queue_pop(presenter, &dropped);
-				release_frame_locked(presenter, &dropped, false, 0);
-				continue;
-			}
 			int64_t shift_ns = android_chiaki_video_recovery_shift_ns(
 					next_vsync_ns - target_vsync_ns, presenter->vsync_period_ns);
 			presenter->timeline_offset_ns += shift_ns;
