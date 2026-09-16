@@ -24,7 +24,8 @@ internal data class StreamDiagnosticsUiState(
 	val display: StreamDiagnosticsDisplay,
 	val viewMode: String,
 	val flags: List<String>,
-	val presenterMode: String?
+	val presenterMode: String?,
+	val networkLink: NetworkLinkSample = NetworkLinkSample(NetworkLinkType.UNKNOWN)
 )
 
 internal object StreamDiagnosticsFormatter
@@ -32,7 +33,8 @@ internal object StreamDiagnosticsFormatter
 	private fun rate(count: Long, intervalMillis: Long): Double =
 		if(intervalMillis > 0) count * 1000.0 / intervalMillis else 0.0
 
-	fun format(stats: StreamStatsEvent?, ui: StreamDiagnosticsUiState): String
+	fun format(stats: StreamStatsEvent?, ui: StreamDiagnosticsUiState,
+		quality: NetworkQualitySnapshot = NetworkQualitySnapshot.UNKNOWN): String
 	{
 		val interval = stats?.intervalMillis ?: 1000L
 		val received = stats?.takionPacketsReceived ?: 0L
@@ -41,13 +43,27 @@ internal object StreamDiagnosticsFormatter
 		val lossPercent = if(packetTotal > 0) lost * 100.0 / packetTotal else 0.0
 		val flags = ui.flags.ifEmpty { listOf("none") }.joinToString(" ")
 		val presenter = ui.presenterMode?.let { " | presenter=$it" }.orEmpty()
+		val measuredLoss = (stats?.congestionMeasuredLoss ?: 0.0) * 100.0
+		val reportedLoss = (stats?.congestionReportedLoss ?: 0.0) * 100.0
+		val rttMicros = if(stats?.connectionQualityValid == true && stats.liveRttMicros > 0L)
+			stats.liveRttMicros else stats?.rttMicros ?: 0L
+		val rttSource = if(stats?.connectionQualityValid == true && stats.liveRttMicros > 0L) "live" else "startup"
+		val cause = when(quality.cause)
+		{
+			NetworkQualityCause.WIFI_LINK -> "Wi-Fi link"
+			NetworkQualityCause.LAN -> "LAN"
+			NetworkQualityCause.CONSOLE -> "console"
+			NetworkQualityCause.NONE -> "none"
+		}
 
 		return String.format(
 			Locale.US,
 			"stream %.1f fps | decoder %.1f fps\n" +
 				"decode %.2f ms mean | %.2f ms p95 | q %d\n" +
 				"drop-in %d | late %d | lost %d | reorder %d\n" +
-				"Takion %.1f pkt/s | loss %.2f%% | jitter %.2f ms | feedback %.1f pkt/s | RTT %.2f ms\n" +
+				"network %s (%s) | %.2f/%.2f Mbps actual/target\n" +
+				"loss %.2f/%.2f%% measured/reported | RTT %.2f ms %s | jitter %.2f ms\n" +
+				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | server-loss %d\n" +
 				"audio %.2f ms | xruns %d | underruns %d\n" +
 				"vsync %.3f ms | miss %d | DJB %.1f ms\n" +
 				"stage0 D %.1f target %.1f | err p50 %.1f p99 %.1f ms | decode-ewma %.1f | drops %d\n" +
@@ -62,11 +78,19 @@ internal object StreamDiagnosticsFormatter
 			stats?.presenterFramesDropped ?: 0L,
 			stats?.videoFramesLost ?: 0L,
 			stats?.reorderQueueTimeouts ?: 0L,
+			quality.level.name,
+			cause,
+			(stats?.measuredThroughputBps ?: 0L) / 1_000_000.0,
+			(stats?.targetBitrateBps ?: 0L) / 1_000_000.0,
+			measuredLoss,
+			reportedLoss,
+			rttMicros / 1000.0,
+			rttSource,
+			(stats?.videoPacketJitterMicros ?: 0L) / 1000.0,
 			rate(received, interval),
 			lossPercent,
-			(stats?.videoPacketJitterMicros ?: 0L) / 1000.0,
 			rate(stats?.feedbackPackets ?: 0L, interval),
-			(stats?.rttMicros ?: 0L) / 1000.0,
+			stats?.serverLoss ?: 0L,
 			(stats?.audioLatencyMicros ?: 0L) / 1000.0,
 			stats?.audioXruns ?: 0L,
 			stats?.audioUnderruns ?: 0L,
@@ -112,6 +136,8 @@ internal class StreamDiagnosticsOverlay(
 		importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
 	}
 	private var latestStats: StreamStatsEvent? = null
+	private var latestQuality = NetworkQualitySnapshot.UNKNOWN
+	private val qualityClassifier = NetworkQualityClassifier()
 	private var attached = false
 	private var destroyed = false
 	private val redraw = object: Runnable
@@ -120,7 +146,7 @@ internal class StreamDiagnosticsOverlay(
 		{
 			if(destroyed || !attached)
 				return
-			textView.text = StreamDiagnosticsFormatter.format(latestStats, uiState())
+			textView.text = StreamDiagnosticsFormatter.format(latestStats, uiState(), latestQuality)
 			textView.postDelayed(this, REDRAW_INTERVAL_MS)
 		}
 	}
@@ -128,6 +154,7 @@ internal class StreamDiagnosticsOverlay(
 	fun update(stats: StreamStatsEvent)
 	{
 		latestStats = stats
+		latestQuality = qualityClassifier.update(stats, uiState().networkLink)
 	}
 
 	fun show(anchor: View)
@@ -153,7 +180,7 @@ internal class StreamDiagnosticsOverlay(
 			x = margin
 			y = margin
 		}
-		textView.text = StreamDiagnosticsFormatter.format(latestStats, uiState())
+		textView.text = StreamDiagnosticsFormatter.format(latestStats, uiState(), latestQuality)
 		activity.windowManager.addView(textView, params)
 		attached = true
 		textView.postDelayed(redraw, REDRAW_INTERVAL_MS)
