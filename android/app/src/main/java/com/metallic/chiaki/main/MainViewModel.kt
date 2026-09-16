@@ -128,7 +128,8 @@ class MainViewModel(
 		audioBufferBursts = preferences.audioBufferBursts,
 		audioFifoMs = preferences.audioFifoMs,
 		autoRegister = autoRegister,
-		performanceModeEnabled = preferences.performanceModeEnabled
+		performanceModeEnabled = preferences.performanceModeEnabled,
+		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 	)
 
 	fun registerPsnConsole(console: PsnConsole)

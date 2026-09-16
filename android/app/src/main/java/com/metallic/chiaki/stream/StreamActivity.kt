@@ -31,6 +31,7 @@ import com.metallic.chiaki.R
 import com.metallic.chiaki.common.Preferences
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.databinding.ActivityStreamBinding
+import com.metallic.chiaki.lib.Codec
 import com.metallic.chiaki.lib.ConnectInfo
 import com.metallic.chiaki.lib.ConnectVideoProfile
 import com.metallic.chiaki.remote.PsnDevice
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -63,6 +65,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		const val EXTRA_CONNECT_INFO = "connect_info"
 		const val EXTRA_PSN_DEVICE = "psn_device"
+		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		private const val HIDE_UI_TIMEOUT_MS = 2000L
 
 		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
@@ -80,6 +83,7 @@ class StreamActivity : AppCompatActivity()
 	private var performanceModeRequested = false
 	private var sustainedPerformanceModeEnabled = false
 	private var wifiLock: WifiManager.WifiLock? = null
+	private var diagnosticsOverlay: StreamDiagnosticsOverlay? = null
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -87,7 +91,9 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onCreate(savedInstanceState)
 
+		val diagnosticsPreview = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DIAGNOSTICS_PREVIEW, false)
 		val connectInfo = IntentCompat.getParcelableExtra(intent, EXTRA_CONNECT_INFO, ConnectInfo::class.java)
+			?: if(diagnosticsPreview) diagnosticsPreviewConnectInfo() else null
 		val psnDevice = IntentCompat.getParcelableExtra(intent, EXTRA_PSN_DEVICE, PsnDevice::class.java)
 		if(connectInfo == null)
 		{
@@ -96,7 +102,7 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel = ViewModelProvider(this, viewModelFactory {
-			StreamViewModel(application, connectInfo, psnDevice)
+			StreamViewModel(application, connectInfo, psnDevice, diagnosticsPreview)
 		})[StreamViewModel::class.java]
 
 		viewModel.input.observe(this)
@@ -154,6 +160,20 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
+		if(connectInfo.streamDiagnosticsEnabled)
+		{
+			val overlay = StreamDiagnosticsOverlay(this) {
+				diagnosticsUiState(preferences, connectInfo)
+			}
+			diagnosticsOverlay = overlay
+			viewModel.session.streamStats.observe(this, Observer(overlay::update))
+			binding.root.post { overlay.show(binding.root) }
+			Log.i("StreamActivity", "Stream diagnostics overlay enabled; redraw interval 1000 ms")
+		}
+		else
+		{
+			Log.i("StreamActivity", "Stream diagnostics overlay disabled; no stats observer")
+		}
 		adjustStreamViewAspect()
 
 		if(Preferences(this).rumbleEnabled)
@@ -171,6 +191,20 @@ class StreamActivity : AppCompatActivity()
 			})
 		}
 	}
+
+	private fun diagnosticsPreviewConnectInfo() = ConnectInfo(
+		ps5 = true,
+		host = "diagnostics-preview",
+		registKey = byteArrayOf(),
+		morning = byteArrayOf(),
+		videoProfile = ConnectVideoProfile(1920, 1080, 60, 15_000, Codec.CODEC_H265),
+		decoderLowLatencyEnabled = false,
+		threadPriorityBoostEnabled = false,
+		decoderLateFrameRecoveryEnabled = false,
+		packetLossMax = 0.0,
+		takionVideoPacketReorderingDisabled = false,
+		streamDiagnosticsEnabled = true
+	)
 
 	private var controlsJob: Job? = null
 	private var debandRenderer: DebandRenderer? = null
@@ -416,6 +450,8 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		diagnosticsOverlay?.destroy()
+		diagnosticsOverlay = null
 		configureWifiLock(false)
 		configurePerformanceMode(false)
 		restoreDisplayRefreshRate()
@@ -429,6 +465,49 @@ class StreamActivity : AppCompatActivity()
 		debandRenderer = null
 		eglRenderer?.release()
 		eglRenderer = null
+	}
+
+	@Suppress("DEPRECATION")
+	private fun diagnosticsUiState(preferences: Preferences, connectInfo: ConnectInfo): StreamDiagnosticsUiState
+	{
+		val display = binding.root.display ?: windowManager.defaultDisplay
+		val mode = display.mode
+		val flags = buildList {
+			if(connectInfo.decoderLowLatencyEnabled) add("lowlat")
+			if(preferences.wifiLowLatencyLockEnabled) add("wifi-lowlat")
+			if(preferences.realVideoTimestamps) add("pts")
+			if(preferences.decoderInputThreadEnabled) add("in-thread")
+			if(connectInfo.decoderLateFrameRecoveryEnabled) add("late-drop")
+			if(preferences.videoPacingEnabled) add("pacing")
+			if(connectInfo.takionVideoPacketReorderingDisabled) add("reorder-off")
+			if(preferences.feedbackReducedIntervalEnabled) add("fb4ms")
+			if(preferences.feedbackStatsLogEnabled) add("fb-log")
+			if(connectInfo.threadPriorityBoostEnabled) add("prio")
+			if(connectInfo.performanceModeEnabled) add("perf")
+			if(preferences.debandingEnabled) add("deband")
+			if(preferences.debandRenderWhenDirtyEnabled) add("dirty")
+			if(preferences.streamWindowOptimizationsEnabled) add("window")
+			if(preferences.controllerInputCoalescingEnabled) add("input-coal")
+			if(preferences.gamepadUnbufferedDispatchEnabled) add("gamepad-unbuf")
+			when(preferences.displayRefreshRateMode)
+			{
+				Preferences.DisplayRefreshRateMode.MATCH_STREAM -> add("hz-match")
+				Preferences.DisplayRefreshRateMode.HIGHEST -> add("hz-max")
+				Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT -> Unit
+			}
+		}
+		return StreamDiagnosticsUiState(
+			display = StreamDiagnosticsDisplay(
+				width = mode.physicalWidth,
+				height = mode.physicalHeight,
+				refreshRate = mode.refreshRate,
+				modeId = mode.modeId
+			),
+			viewMode = TransformMode.fromButton(binding.displayModeToggle.checkedButtonId)
+				.name.lowercase(Locale.US),
+			flags = flags,
+			presenterMode = if(preferences.videoPacingEnabled) preferences.videoPacingMode.value else null
+		)
 	}
 
 	private fun reconnect()

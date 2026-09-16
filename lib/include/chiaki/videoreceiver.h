@@ -33,6 +33,7 @@ typedef struct chiaki_video_receiver_t
 
 	int32_t frames_lost;
 	int32_t frames_lost_total;
+	uint64_t frames_received_total;
 	int32_t reference_frames[16];
 	ChiakiBitstream bitstream;
 	ChiakiMutex waiting_for_idr_mutex;
@@ -56,6 +57,7 @@ CHIAKI_EXPORT void chiaki_video_receiver_av_packet(ChiakiVideoReceiver *video_re
 CHIAKI_EXPORT void chiaki_video_receiver_set_waiting_for_idr(ChiakiVideoReceiver *video_receiver, bool waiting_for_idr);
 CHIAKI_EXPORT bool chiaki_video_receiver_get_waiting_for_idr(ChiakiVideoReceiver *video_receiver);
 CHIAKI_EXPORT int32_t chiaki_video_receiver_get_frames_lost_total(ChiakiVideoReceiver *video_receiver);
+CHIAKI_EXPORT uint64_t chiaki_video_receiver_get_frames_received_total(ChiakiVideoReceiver *video_receiver);
 
 static inline ChiakiVideoReceiver *chiaki_video_receiver_new(struct chiaki_session_t *session, ChiakiPacketStats *packet_stats)
 {

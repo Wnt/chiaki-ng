@@ -81,7 +81,8 @@ data class ConnectInfo(
 	val audioBufferBursts: Int = 0,
 	val audioFifoMs: Int = 171,
 	val autoRegister: Boolean = false,
-	val performanceModeEnabled: Boolean = false
+	val performanceModeEnabled: Boolean = false,
+	val streamDiagnosticsEnabled: Boolean = false
 ): Parcelable
 
 data class NativeRemoteConnection(
@@ -356,6 +357,23 @@ data class QuitEvent(val reason: QuitReason, val reasonString: String?): Event()
 data class RumbleEvent(val left: UByte, val right: UByte): Event()
 object RemoteDataSocketNeededEvent: Event()
 data class RegistrationEvent(val host: RegistHost): Event()
+data class StreamStatsEvent(
+	val intervalMillis: Long,
+	val streamFrames: Long,
+	val decoderFrames: Long,
+	val decodeMeanMicros: Long,
+	val decodeP95Micros: Long,
+	val decoderInputFramesDropped: Long,
+	val presenterFramesDropped: Long,
+	val missedVsyncs: Long,
+	val videoFramesLost: Long,
+	val reorderQueueTimeouts: Long,
+	val takionPacketsReceived: Long,
+	val takionPacketsLost: Long,
+	val feedbackPackets: Long,
+	val dejitterBufferNanos: Long,
+	val presenterQueueDepth: Long
+): Event()
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
@@ -452,6 +470,44 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 	private fun eventRegistrationSuccess(host: RegistHost)
 	{
 		event(RegistrationEvent(host))
+	}
+
+	@Suppress("LongParameterList", "unused") // Called from the single native 1 Hz stats event.
+	private fun eventStreamStats(
+		intervalMillis: Long,
+		streamFrames: Long,
+		decoderFrames: Long,
+		decodeMeanMicros: Long,
+		decodeP95Micros: Long,
+		decoderInputFramesDropped: Long,
+		presenterFramesDropped: Long,
+		missedVsyncs: Long,
+		videoFramesLost: Long,
+		reorderQueueTimeouts: Long,
+		takionPacketsReceived: Long,
+		takionPacketsLost: Long,
+		feedbackPackets: Long,
+		dejitterBufferNanos: Long,
+		presenterQueueDepth: Long
+	)
+	{
+		event(StreamStatsEvent(
+			intervalMillis = intervalMillis,
+			streamFrames = streamFrames,
+			decoderFrames = decoderFrames,
+			decodeMeanMicros = decodeMeanMicros,
+			decodeP95Micros = decodeP95Micros,
+			decoderInputFramesDropped = decoderInputFramesDropped,
+			presenterFramesDropped = presenterFramesDropped,
+			missedVsyncs = missedVsyncs,
+			videoFramesLost = videoFramesLost,
+			reorderQueueTimeouts = reorderQueueTimeouts,
+			takionPacketsReceived = takionPacketsReceived,
+			takionPacketsLost = takionPacketsLost,
+			feedbackPackets = feedbackPackets,
+			dejitterBufferNanos = dejitterBufferNanos,
+			presenterQueueDepth = presenterQueueDepth
+		))
 	}
 
 	/** Native takes ownership of fd only when the returned error is successful. */

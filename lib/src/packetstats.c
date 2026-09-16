@@ -13,6 +13,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_packet_stats_init(ChiakiPacketStats *stats)
 	assert(err == CHIAKI_ERR_SUCCESS);
 	stats->gen_received = 0;
 	stats->gen_lost = 0;
+	stats->gen_received_total = 0;
+	stats->gen_lost_total = 0;
 	stats->seq_min = 0;
 	stats->seq_max = 0;
 	stats->seq_received = 0;
@@ -45,6 +47,16 @@ CHIAKI_EXPORT void chiaki_packet_stats_push_generation(ChiakiPacketStats *stats,
 	chiaki_mutex_lock(&stats->mutex);
 	stats->gen_received += received;
 	stats->gen_lost += lost;
+	stats->gen_received_total += received;
+	stats->gen_lost_total += lost;
+	chiaki_mutex_unlock(&stats->mutex);
+}
+
+CHIAKI_EXPORT void chiaki_packet_stats_get_generation_totals(ChiakiPacketStats *stats, uint64_t *received, uint64_t *lost)
+{
+	chiaki_mutex_lock(&stats->mutex);
+	*received = stats->gen_received_total;
+	*lost = stats->gen_lost_total;
 	chiaki_mutex_unlock(&stats->mutex);
 }
 

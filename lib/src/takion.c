@@ -290,6 +290,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->version = info->protocol_version;
 	takion->disable_audio_video = info->disable_audio_video;
 	takion->disable_video_packet_reordering = info->disable_video_packet_reordering;
+	takion->diagnostics_enabled = info->diagnostics_enabled;
+	takion->video_reorder_timeouts = 0;
 
 	switch(takion->version)
 	{
@@ -313,6 +315,12 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 		return ret;
 	takion->key_pos_local = 0;
 	takion->gkcrypt_remote = NULL;
+	if(takion->diagnostics_enabled)
+	{
+		ret = chiaki_mutex_init(&takion->diagnostics_mutex, false);
+		if(ret != CHIAKI_ERR_SUCCESS)
+			goto error_gkcrypt_local_mutex;
+	}
 	takion->cb = info->cb;
 	takion->cb_user = info->cb_user;
 	takion->a_rwnd = TAKION_A_RWND;
@@ -321,7 +329,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->seq_num_local = takion->tag_local;
 	ret = chiaki_mutex_init(&takion->seq_num_local_mutex, false);
 	if(ret != CHIAKI_ERR_SUCCESS)
-		goto error_gkcrypt_local_mutex;
+		goto error_diagnostics_mutex;
 	takion->tag_remote = 0;
 
 	takion->enable_crypt = info->enable_crypt;
@@ -553,6 +561,9 @@ error_pipe:
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
 error_seq_num_local_mutex:
 	chiaki_mutex_fini(&takion->seq_num_local_mutex);
+error_diagnostics_mutex:
+	if(takion->diagnostics_enabled)
+		chiaki_mutex_fini(&takion->diagnostics_mutex);
 error_gkcrypt_local_mutex:
 	chiaki_mutex_fini(&takion->gkcrypt_local_mutex);
 	return ret;
@@ -564,7 +575,19 @@ CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion)
 	chiaki_thread_join(&takion->thread, NULL);
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
 	chiaki_mutex_fini(&takion->seq_num_local_mutex);
+	if(takion->diagnostics_enabled)
+		chiaki_mutex_fini(&takion->diagnostics_mutex);
 	chiaki_mutex_fini(&takion->gkcrypt_local_mutex);
+}
+
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *takion)
+{
+	if(!takion->diagnostics_enabled)
+		return 0;
+	chiaki_mutex_lock(&takion->diagnostics_mutex);
+	uint64_t total = takion->video_reorder_timeouts;
+	chiaki_mutex_unlock(&takion->diagnostics_mutex);
+	return total;
 }
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_crypt_advance_key_pos(ChiakiTakion *takion, size_t data_size, uint64_t *key_pos)
@@ -1155,6 +1178,12 @@ static void takion_av_queue_flush_with_timeout(ChiakiTakion *takion, ChiakiReord
 		CHIAKI_LOGD(takion->log, "Takion AV reorder timeout: skipping %llu missing packet(s) before %#llx",
 			(unsigned long long)skipped,
 			(unsigned long long)queue->seq_num_add(queue->begin, skipped));
+		if(takion->diagnostics_enabled)
+		{
+			chiaki_mutex_lock(&takion->diagnostics_mutex);
+			takion->video_reorder_timeouts++;
+			chiaki_mutex_unlock(&takion->diagnostics_mutex);
+		}
 		queue->begin = queue->seq_num_add(queue->begin, skipped);
 		queue->count -= skipped;
 		*head_wait_start_us = 0;

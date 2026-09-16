@@ -166,6 +166,11 @@ class Preferences(context: Context)
 	/** PLE-57: window of the feedback packet-rate line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
 
+	val streamDiagnosticsOverlayEnabledKey get() = resources.getString(R.string.preferences_stream_diagnostics_overlay_enabled_key)
+	var streamDiagnosticsOverlayEnabled
+		get() = sharedPreferences.getBoolean(streamDiagnosticsOverlayEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(streamDiagnosticsOverlayEnabledKey, value).apply() }
+
 	fun validateAudioBufferBursts(bursts: Int) = max(0, min(16, bursts))
 	val audioBufferBurstsKey get() = resources.getString(R.string.preferences_audio_buffer_bursts_key)
 	var audioBufferBursts

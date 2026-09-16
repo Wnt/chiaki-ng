@@ -178,6 +178,7 @@ typedef struct android_chiaki_session_t
 	jmethodID java_session_event_rumble_meth;
 	jmethodID java_session_event_remote_data_socket_needed_meth;
 	jmethodID java_session_event_registration_success_meth;
+	jmethodID java_session_event_stream_stats_meth;
 	jmethodID java_session_performance_hint_thread_started_meth;
 	jmethodID java_session_performance_hint_report_meth;
 	jmethodID java_session_performance_hint_thread_stopped_meth;
@@ -328,6 +329,29 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					session->java_session_event_registration_success_meth, java_host);
 			break;
 		}
+		case CHIAKI_EVENT_STREAM_STATS:
+		{
+			AndroidChiakiVideoDiagnostics diagnostics;
+			android_chiaki_video_decoder_get_diagnostics(&session->video_decoder, &diagnostics);
+			E->CallVoidMethod(env, session->java_session,
+					session->java_session_event_stream_stats_meth,
+					(jlong)event->stream_stats.interval_ms,
+					(jlong)event->stream_stats.stream_frames,
+					(jlong)diagnostics.output_frames,
+					(jlong)diagnostics.decode_mean_us,
+					(jlong)diagnostics.decode_p95_us,
+					(jlong)diagnostics.input_frames_dropped,
+					(jlong)diagnostics.presenter_frames_dropped,
+					(jlong)diagnostics.missed_vsyncs,
+					(jlong)event->stream_stats.video_frames_lost,
+					(jlong)event->stream_stats.video_reorder_timeouts,
+					(jlong)event->stream_stats.takion_packets_received,
+					(jlong)event->stream_stats.takion_packets_lost,
+					(jlong)event->stream_stats.feedback_packets,
+					(jlong)diagnostics.dejitter_buffer_ns,
+					(jlong)diagnostics.presenter_queue_depth);
+			break;
+		}
 		default:
 			break;
 	}
@@ -366,6 +390,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
 	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
 	jint feedback_stats_log_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStatsLogIntervalMs", "I"));
+	jboolean stream_diagnostics_enabled = E->GetBooleanField(env, connect_info_obj,
+			E->GetFieldID(env, connect_info_class, "streamDiagnosticsEnabled", "Z"));
 	jint audio_buffer_bursts = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioBufferBursts", "I"));
 	jint audio_fifo_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioFifoMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
@@ -381,6 +407,10 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	connect_info.auto_regist = auto_register;
 	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
 	connect_info.feedback_stats_log_interval_ms = feedback_stats_log_interval_ms > 0 ? (uint32_t)feedback_stats_log_interval_ms : 0;
+	connect_info.stream_diagnostics_enabled = stream_diagnostics_enabled;
+	CHIAKI_LOGI(log, "Stream diagnostics overlay %s (%s)",
+			stream_diagnostics_enabled ? "enabled" : "disabled",
+			stream_diagnostics_enabled ? "1 Hz stats event" : "no stats event or periodic JNI traffic");
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
 	if(remote_ctrl_fd >= 0)
 	{
@@ -470,7 +500,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
-			performance_mode);
+			performance_mode, stream_diagnostics_enabled);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -515,6 +545,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_rumble_meth = E->GetMethodID(env, session->java_session_class, "eventRumble", "(II)V");
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
+	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
+			"eventStreamStats", "(JJJJJJJJJJJJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

@@ -32,6 +32,8 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	val state: LiveData<StreamState> get() = _state
 	private val _rumbleState = MutableLiveData<RumbleEvent>(RumbleEvent(0U, 0U))
 	val rumbleState: LiveData<RumbleEvent> get() = _rumbleState
+	private val _streamStats = MutableLiveData<StreamStatsEvent>()
+	val streamStats: LiveData<StreamStatsEvent> get() = _streamStats
 
 	private var surfaceTexture: SurfaceTexture? = null
 	private var surface: Surface? = null
@@ -129,6 +131,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			is RumbleEvent -> _rumbleState.postValue(event)
 			is RemoteDataSocketNeededEvent -> Unit // handled by the PSN control-plane bridge
 			is RegistrationEvent -> Unit // handled by the PSN control-plane bridge
+			is StreamStatsEvent -> _streamStats.postValue(event)
 		}
 	}
 

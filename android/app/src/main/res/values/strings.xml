@@ -116,6 +116,8 @@
     <string name="preferences_feedback_reduced_interval_enabled_summary">Send controller feedback state at most every 4ms instead of 8ms; untested on PS5, revert if it causes disconnects or dropped input (applies to the next stream)</string>
     <string name="preferences_feedback_stats_log_enabled_title">Log stream latency statistics (diagnostic)</string>
     <string name="preferences_feedback_stats_log_enabled_summary">Write one line per second to the session log with controller feedback packet rates and Oboe audio latency/xruns (applies to the next stream)</string>
+    <string name="preferences_stream_diagnostics_overlay_enabled_title">In-stream diagnostics overlay</string>
+    <string name="preferences_stream_diagnostics_overlay_enabled_summary">Show decoder, network, display, and pacing statistics over the stream at 1 Hz (applies to the next stream)</string>
 	<string name="preferences_audio_buffer_bursts_title">Audio output buffer bursts</string>
 	<string name="preferences_audio_buffer_bursts_summary">Oboe output buffer depth in hardware bursts (0 keeps the device default; 0–16; applies to the next stream)</string>
 	<string name="preferences_audio_buffer_bursts_default">Device default</string>
@@ -202,6 +204,7 @@
     <string name="preferences_gamepad_unbuffered_dispatch_enabled_key">stream_gamepad_unbuffered</string>
     <string name="preferences_feedback_reduced_interval_enabled_key">stream_feedback_reduced_interval</string>
     <string name="preferences_feedback_stats_log_enabled_key">stream_feedback_stats_log</string>
+    <string name="preferences_stream_diagnostics_overlay_enabled_key">stream_diagnostics_overlay</string>
 	<string name="preferences_audio_buffer_bursts_key">stream_audio_buffer_bursts</string>
 	<string name="preferences_audio_fifo_ms_key">stream_audio_fifo_ms</string>
     <string name="preferences_debanding_key">stream_debanding</string>

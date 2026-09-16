@@ -224,6 +224,13 @@
             app:defaultValue="false"
             app:icon="@drawable/ic_gamepad" />
 
+        <SwitchPreference
+            app:key="@string/preferences_stream_diagnostics_overlay_enabled_key"
+            app:title="@string/preferences_stream_diagnostics_overlay_enabled_title"
+            app:summary="@string/preferences_stream_diagnostics_overlay_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_fps" />
+
 		<EditTextPreference
 			app:key="@string/preferences_audio_buffer_bursts_key"
 			app:title="@string/preferences_audio_buffer_bursts_title"
