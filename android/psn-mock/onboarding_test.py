@@ -139,6 +139,11 @@ def reset_app(device: Device) -> None:
     """First-run state without uninstalling: the adb wrapper refuses any uninstall. Only the mock package."""
     assert PKG.endswith(".psnmock")
     device.shell(f"am force-stop {PKG}")
+    # A sign-in tab left over from the last run would sit above the app (PLE-279 saw it crash Firefox).
+    installed = device.shell("pm list packages", check=False)
+    for browser in BROWSERS:
+        if f"package:{browser}" in installed:
+            device.shell(f"am force-stop {browser}", check=False)
     device.shell(f"run-as {PKG} sh -c 'rm -rf shared_prefs databases files no_backup cache code_cache app_webview'", check=False)
 
 
@@ -222,8 +227,13 @@ def main(argv: list[str] | None = None) -> int:
     play_failures = 0
     seen_signatures: set[str] = set()
 
-    def play_failure_count() -> int:
-        return device.shell("logcat -d -s PsnConsoles", check=False).count("PSN play failed")
+    def row_play_button(name: str) -> Node | None:
+        """The Play button of the console row named [name]: the first one below the row's name."""
+        row = next((n for n in mine if n.rid.endswith("nameTextView") and n.text == name), None)
+        if row is None:
+            return None
+        below = [n for n in mine if n.rid.endswith("playButton") and n.bounds[1] >= row.bounds[1]]
+        return min(below, key=lambda n: n.bounds[1], default=None)
 
     while True:
         now = time.monotonic()
@@ -265,10 +275,10 @@ def main(argv: list[str] | None = None) -> int:
                 return finish("PASS", f"signed in; console list shows {names}")
             # PLE-312: the link runs the PSN play path. The mock answers the push lookup with 501, so the
             # honest outcome is an error with a live Retry, and never NetworkOnMainThreadException.
-            play = [n for n in mine if n.rid.endswith("playButton")]
-            if not play:
+            play = row_play_button("PS5 mock")
+            if play is None:
                 return finish("FAIL", "console list shows PS5 mock but no Play button")
-            device.tap(play[0])
+            device.tap(play)
             summary["taps"] += 1
             play_phase = "tapped"
             continue
@@ -293,6 +303,22 @@ def main(argv: list[str] | None = None) -> int:
             summary["taps"] += 1
             signed_in_tapped = True
             continue
+        # A PS5 on the same network is listed before any sign-in (PLE-264); tapping it signs in first.
+        local = next((n.text for n in mine if n.rid.endswith("nameTextView") and n.text != "PS5 mock"), None)
+        if foreground == PKG and not signed_in_tapped and local and row_play_button(local) is not None:
+            device.tap(row_play_button(local))
+            summary["taps"] += 1
+            summary["local_console"] = local
+            signed_in_tapped = True
+            continue
+        # The account does not list the discovered console (the mock's is "PS5 mock"), so the app
+        # offers the PIN screen for it. Back out to the list, where the account's console has Play.
+        if foreground == PKG and signed_in_tapped and "registButton" in by_id and not play_phase:
+            summary["pin_screen_for"] = local or summary.get("local_console")
+            device.shell("input keyevent KEYCODE_BACK")
+            summary["taps"] += 1
+            time.sleep(1)
+            continue
         if foreground in BROWSERS and {"account", "password", "sign-in"} <= by_id.keys() and not submitted:
             device.type_into(by_id["account"], account)
             device.type_into(by_id["password"], "mockpass")
@@ -303,6 +329,13 @@ def main(argv: list[str] | None = None) -> int:
             device.tap(button)
             summary["taps"] += 3
             submitted = True
+            continue
+        # Firefox offers to save the password over the redirect page; a user declines it the same way.
+        if foreground in BROWSERS and "save_cancel" in by_id:
+            device.tap(by_id["save_cancel"])
+            summary["taps"] += 1
+            summary["browser_prompts"] = summary.get("browser_prompts", 0) + 1
+            time.sleep(1)
             continue
         # On the blank redirect page the tab's action button hands the address back (PLE-279). A press
         # before the redirect does nothing, so the driver presses it until the app is in front again.
