@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark counterparts of values/colors_signin_explainer.xml (PLE-339). -->
+<resources>
+	<color name="signin_explainer_mock_surface">#2B2930</color>
+	<color name="signin_explainer_mock_stroke">#48454E</color>
+	<color name="signin_explainer_mock_line">#3F3D45</color>
+	<color name="signin_explainer_highlight">#82B1FF</color>
+</resources>

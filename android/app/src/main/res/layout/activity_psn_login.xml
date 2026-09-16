@@ -71,5 +71,11 @@
                 android:text="@string/action_psn_link_with_pin"
                 android:visibility="gone" />
         </LinearLayout>
+
+        <include
+            android:id="@+id/signInExplainer"
+            layout="@layout/view_psn_signin_explainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
     </FrameLayout>
 </LinearLayout>

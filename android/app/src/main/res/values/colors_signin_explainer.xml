@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colours of the drawn browser-toolbar mock-up (PLE-339); dark in values-night. -->
+<resources>
+	<color name="signin_explainer_mock_surface">#FFFFFF</color>
+	<color name="signin_explainer_mock_stroke">#C9C5D0</color>
+	<color name="signin_explainer_mock_line">#DAD6E0</color>
+	<!-- Picks the ✓ out of the toolbar; the same hue as colorTextLink, vetted for both themes. -->
+	<color name="signin_explainer_highlight">#0D47A1</color>
+</resources>

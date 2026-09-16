@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A stand-in for a line of the page under the toolbar; carries no text of its own (PLE-339). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+	<solid android:color="@color/signin_explainer_mock_line" />
+	<corners android:radius="4dp" />
+</shape>
