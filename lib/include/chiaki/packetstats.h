@@ -19,6 +19,8 @@ typedef struct chiaki_packet_stats_t
 	uint64_t gen_lost;
 	uint64_t gen_received_total;
 	uint64_t gen_lost_total;
+	uint64_t fec_recovered_total;
+	uint64_t unrecoverable_total;
 
 	// For sequential packets, i.e. where packets are identified by a sequence number
 	ChiakiSeqNum16 seq_min; // sequence number that was max at the last reset
@@ -30,9 +32,11 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_packet_stats_init(ChiakiPacketStats *stats)
 CHIAKI_EXPORT void chiaki_packet_stats_fini(ChiakiPacketStats *stats);
 CHIAKI_EXPORT void chiaki_packet_stats_reset(ChiakiPacketStats *stats);
 CHIAKI_EXPORT void chiaki_packet_stats_push_generation(ChiakiPacketStats *stats, uint64_t received, uint64_t lost);
+CHIAKI_EXPORT void chiaki_packet_stats_push_recovery(ChiakiPacketStats *stats, uint64_t recovered, uint64_t unrecoverable);
 CHIAKI_EXPORT void chiaki_packet_stats_push_seq(ChiakiPacketStats *stats, ChiakiSeqNum16 seq_num);
 CHIAKI_EXPORT void chiaki_packet_stats_get(ChiakiPacketStats *stats, bool reset, uint64_t *received, uint64_t *lost);
 CHIAKI_EXPORT void chiaki_packet_stats_get_generation_totals(ChiakiPacketStats *stats, uint64_t *received, uint64_t *lost);
+CHIAKI_EXPORT void chiaki_packet_stats_get_recovery_totals(ChiakiPacketStats *stats, uint64_t *recovered, uint64_t *unrecoverable);
 
 #ifdef __cplusplus
 }

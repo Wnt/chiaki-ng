@@ -15,6 +15,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_packet_stats_init(ChiakiPacketStats *stats)
 	stats->gen_lost = 0;
 	stats->gen_received_total = 0;
 	stats->gen_lost_total = 0;
+	stats->fec_recovered_total = 0;
+	stats->unrecoverable_total = 0;
 	stats->seq_min = 0;
 	stats->seq_max = 0;
 	stats->seq_received = 0;
@@ -22,9 +24,25 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_packet_stats_init(ChiakiPacketStats *stats)
 	return err;
 }
 
+CHIAKI_EXPORT void chiaki_packet_stats_push_recovery(ChiakiPacketStats *stats, uint64_t recovered, uint64_t unrecoverable)
+{
+	chiaki_mutex_lock(&stats->mutex);
+	stats->fec_recovered_total += recovered;
+	stats->unrecoverable_total += unrecoverable;
+	chiaki_mutex_unlock(&stats->mutex);
+}
+
 CHIAKI_EXPORT void chiaki_packet_stats_fini(ChiakiPacketStats *stats)
 {
 	chiaki_mutex_fini(&stats->mutex);
+}
+
+CHIAKI_EXPORT void chiaki_packet_stats_get_recovery_totals(ChiakiPacketStats *stats, uint64_t *recovered, uint64_t *unrecoverable)
+{
+	chiaki_mutex_lock(&stats->mutex);
+	*recovered = stats->fec_recovered_total;
+	*unrecoverable = stats->unrecoverable_total;
+	chiaki_mutex_unlock(&stats->mutex);
 }
 
 static void reset_stats(ChiakiPacketStats *stats)

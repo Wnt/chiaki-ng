@@ -27,6 +27,11 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *
 	feedback_sender->stats_state_packets = 0;
 	feedback_sender->stats_history_packets = 0;
 	feedback_sender->stats_packets_total = 0;
+	feedback_sender->stats_last_send_ms = 0;
+	feedback_sender->stats_gap_sum_ms = 0;
+	feedback_sender->stats_gap_count = 0;
+	feedback_sender->stats_gap_max_ms = 0;
+	feedback_sender->stats_gaps_over_50_ms = 0;
 
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_prev);
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_history_prev);
@@ -110,6 +115,40 @@ CHIAKI_EXPORT uint64_t chiaki_feedback_sender_get_packets_total(ChiakiFeedbackSe
 	uint64_t total = feedback_sender->stats_packets_total;
 	chiaki_mutex_unlock(&feedback_sender->state_mutex);
 	return total;
+}
+
+CHIAKI_EXPORT void chiaki_feedback_sender_record_send(ChiakiFeedbackSender *feedback_sender, uint64_t now_ms)
+{
+	if(feedback_sender->stats_last_send_ms)
+	{
+		uint64_t gap_ms = now_ms - feedback_sender->stats_last_send_ms;
+		feedback_sender->stats_gap_sum_ms += gap_ms;
+		feedback_sender->stats_gap_count++;
+		if(gap_ms > feedback_sender->stats_gap_max_ms)
+			feedback_sender->stats_gap_max_ms = gap_ms;
+		if(gap_ms > CHIAKI_FEEDBACK_GAP_WARN_MS)
+			feedback_sender->stats_gaps_over_50_ms++;
+	}
+	feedback_sender->stats_last_send_ms = now_ms;
+	feedback_sender->stats_packets_total++;
+}
+
+CHIAKI_EXPORT void chiaki_feedback_sender_get_stats(ChiakiFeedbackSender *feedback_sender, ChiakiFeedbackSenderStats *stats, bool reset_gaps)
+{
+	chiaki_mutex_lock(&feedback_sender->state_mutex);
+	stats->packets_total = feedback_sender->stats_packets_total;
+	stats->gap_sum_ms = feedback_sender->stats_gap_sum_ms;
+	stats->gap_count = feedback_sender->stats_gap_count;
+	stats->gap_max_ms = feedback_sender->stats_gap_max_ms;
+	stats->gaps_over_50_ms = feedback_sender->stats_gaps_over_50_ms;
+	if(reset_gaps)
+	{
+		feedback_sender->stats_gap_sum_ms = 0;
+		feedback_sender->stats_gap_count = 0;
+		feedback_sender->stats_gap_max_ms = 0;
+		feedback_sender->stats_gaps_over_50_ms = 0;
+	}
+	chiaki_mutex_unlock(&feedback_sender->state_mutex);
 }
 
 static bool controller_state_equals_for_feedback_state(ChiakiControllerState *a, ChiakiControllerState *b)
@@ -365,7 +404,10 @@ static void *feedback_sender_thread_func(void *user)
 		err = chiaki_mutex_lock(&feedback_sender->state_mutex);
 		if(err != CHIAKI_ERR_SUCCESS)
 			return NULL;
-		feedback_sender->stats_packets_total += (uint64_t)send_feedback_state + (uint64_t)send_feedback_history;
+		if(send_feedback_state)
+			chiaki_feedback_sender_record_send(feedback_sender, chiaki_time_now_monotonic_ms());
+		if(send_feedback_history)
+			chiaki_feedback_sender_record_send(feedback_sender, chiaki_time_now_monotonic_ms());
 		if(send_feedback_state)
 		{
 			feedback_sender->controller_state_prev = state_now;

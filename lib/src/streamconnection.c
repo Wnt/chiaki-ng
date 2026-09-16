@@ -335,12 +335,16 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 	uint64_t previous_stream_frames = 0;
 	uint64_t previous_packets_received = 0;
 	uint64_t previous_packets_lost = 0;
+	uint64_t previous_fec_recovered = 0;
+	uint64_t previous_unrecoverable = 0;
 	uint64_t previous_feedback_packets = 0;
 	if(stream_stats_enabled)
 	{
 		previous_stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
 		chiaki_packet_stats_get_generation_totals(&stream_connection->packet_stats,
 			&previous_packets_received, &previous_packets_lost);
+		chiaki_packet_stats_get_recovery_totals(&stream_connection->packet_stats,
+			&previous_fec_recovered, &previous_unrecoverable);
 		previous_feedback_packets = chiaki_feedback_sender_get_packets_total(&stream_connection->feedback_sender);
 	}
 
@@ -365,6 +369,12 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			chiaki_packet_stats_get_generation_totals(&stream_connection->packet_stats,
 				&packets_received, &packets_lost);
 			uint64_t feedback_packets = chiaki_feedback_sender_get_packets_total(&stream_connection->feedback_sender);
+			uint64_t fec_recovered;
+			uint64_t unrecoverable;
+			chiaki_packet_stats_get_recovery_totals(&stream_connection->packet_stats,
+				&fec_recovered, &unrecoverable);
+			ChiakiFeedbackSenderStats feedback_stats;
+			chiaki_feedback_sender_get_stats(&stream_connection->feedback_sender, &feedback_stats, true);
 
 			ChiakiEvent stats_event = { 0 };
 			stats_event.type = CHIAKI_EVENT_STREAM_STATS;
@@ -377,6 +387,12 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.takion_packets_received = packets_received - previous_packets_received;
 			stats_event.stream_stats.takion_packets_lost = packets_lost - previous_packets_lost;
 			stats_event.stream_stats.feedback_packets = feedback_packets - previous_feedback_packets;
+			stats_event.stream_stats.fec_recovered_packets = fec_recovered - previous_fec_recovered;
+			stats_event.stream_stats.unrecoverable_packets = unrecoverable - previous_unrecoverable;
+			stats_event.stream_stats.feedback_gap_sum_ms = feedback_stats.gap_sum_ms;
+			stats_event.stream_stats.feedback_gap_count = feedback_stats.gap_count;
+			stats_event.stream_stats.feedback_gap_max_ms = feedback_stats.gap_max_ms;
+			stats_event.stream_stats.feedback_gaps_over_50_ms = feedback_stats.gaps_over_50_ms;
 			ChiakiNetworkStatsSnapshot network_stats;
 			chiaki_network_stats_get_snapshot(&stream_connection->network_stats, &network_stats);
 			stats_event.stream_stats.connection_quality_valid = network_stats.connection_quality_valid;
@@ -392,6 +408,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			previous_packets_received = packets_received;
 			previous_packets_lost = packets_lost;
 			previous_feedback_packets = feedback_packets;
+			previous_fec_recovered = fec_recovered;
+			previous_unrecoverable = unrecoverable;
 
 			// JNI callbacks may call back into the session. Do not hold the stream state lock.
 			chiaki_mutex_unlock(&stream_connection->state_mutex);

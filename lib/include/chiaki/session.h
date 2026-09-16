@@ -183,6 +183,12 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t takion_packets_received;
 	uint64_t takion_packets_lost;
 	uint64_t feedback_packets;
+	uint64_t fec_recovered_packets;
+	uint64_t unrecoverable_packets;
+	uint64_t feedback_gap_sum_ms;
+	uint64_t feedback_gap_count;
+	uint64_t feedback_gap_max_ms;
+	uint64_t feedback_gaps_over_50_ms;
 	bool connection_quality_valid;
 	uint64_t target_bitrate_bps;
 	uint64_t measured_throughput_bps;
