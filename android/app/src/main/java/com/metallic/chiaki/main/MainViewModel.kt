@@ -124,6 +124,7 @@ class MainViewModel(
 		packetLossMax = preferences.packetLossMax,
 		takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 		feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
+		feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
 		autoRegister = autoRegister,
 		performanceModeEnabled = preferences.performanceModeEnabled
 	)

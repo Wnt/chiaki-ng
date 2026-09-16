@@ -244,6 +244,7 @@ class MainActivity : AppCompatActivity()
 					packetLossMax = preferences.packetLossMax,
 					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
+					feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
 					performanceModeEnabled = preferences.performanceModeEnabled
 				)
 				Intent(this, StreamActivity::class.java).let {

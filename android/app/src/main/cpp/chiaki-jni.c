@@ -365,6 +365,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jboolean disable_video_packet_reordering = E->GetBooleanField(env, connect_info_obj,
 			E->GetFieldID(env, connect_info_class, "takionVideoPacketReorderingDisabled", "Z"));
 	jint feedback_state_min_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStateMinIntervalMs", "I"));
+	jint feedback_stats_log_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStatsLogIntervalMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
@@ -377,6 +378,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	connect_info.ps5 = ps5;
 	connect_info.auto_regist = auto_register;
 	connect_info.feedback_state_min_interval_ms = (uint32_t)feedback_state_min_interval_ms;
+	connect_info.feedback_stats_log_interval_ms = feedback_stats_log_interval_ms > 0 ? (uint32_t)feedback_stats_log_interval_ms : 0;
 	connect_info.disable_video_packet_reordering = disable_video_packet_reordering;
 	if(remote_ctrl_fd >= 0)
 	{

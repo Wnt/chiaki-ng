@@ -269,6 +269,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, Chiaki
 	session->connect_info.enable_idr_on_fec_failure = connect_info->enable_idr_on_fec_failure;
 	session->connect_info.disable_video_packet_reordering = connect_info->disable_video_packet_reordering;
 	session->connect_info.feedback_state_min_interval_ms = connect_info->feedback_state_min_interval_ms;
+	session->connect_info.feedback_stats_log_interval_ms = connect_info->feedback_stats_log_interval_ms;
 
 	return CHIAKI_ERR_SUCCESS;
 

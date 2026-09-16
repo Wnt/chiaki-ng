@@ -156,6 +156,14 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(feedbackReducedIntervalEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(feedbackReducedIntervalEnabledKey, value).apply() }
 
+	val feedbackStatsLogEnabledKey get() = resources.getString(R.string.preferences_feedback_stats_log_enabled_key)
+	var feedbackStatsLogEnabled
+		get() = sharedPreferences.getBoolean(feedbackStatsLogEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(feedbackStatsLogEnabledKey, value).apply() }
+
+	/** PLE-57: window of the feedback packet-rate line in the session log; 0 when the setting is off. */
+	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
+
 	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
 	var decoderInputThreadEnabled
 		get() = sharedPreferences.getBoolean(decoderInputThreadEnabledKey, true)
