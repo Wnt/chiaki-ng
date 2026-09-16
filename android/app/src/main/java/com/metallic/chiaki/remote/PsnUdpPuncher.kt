@@ -148,8 +148,10 @@ object PsnCandidateHandshake
  * lookup (PLE-312). Any address given here must be unresolved or literal.
  *
  * One instance serves one PSN session. Like upstream `holepunch.c`, the session keeps one sid and one
- * hashed id for both the control and the data round, and an OFFER names the console sid known when it
- * was built: 0 for control, the control round's console sid for data (PLE-313).
+ * hashed id for both the control and the data round, and an OFFER names the sid of the console OFFER it
+ * is answering. PLE-313 staged that value by one round, so the control OFFER went out with `peerSid=0`;
+ * upstream stores the console sid as soon as its OFFER arrives (`holepunch.c:1561`) and sends it back in
+ * the same round (`:2760`). The console ignores an OFFER not addressed to its session (PLE-327).
  */
 class DatagramPsnHolePuncher(
 	private val random: SecureRandom = SecureRandom(),
@@ -163,7 +165,6 @@ class DatagramPsnHolePuncher(
 {
 	private val localSid by lazy { random.nextInt(0x10000) }
 	private val localHash by lazy { ByteArray(20).also(random::nextBytes) }
-	private var knownConsoleSid = 0
 
 	override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation = withContext(Dispatchers.IO) {
 		val socket = DatagramSocket(null).apply {
@@ -181,13 +182,16 @@ class DatagramPsnHolePuncher(
 			val candidates = listOf(stun, PsnCandidate("STATIC", stun.addr, port = socket.localPort), local)
 			val offer = PsnConnectionRequest(
 				sid = localSid,
-				peerSid = knownConsoleSid,
+				// Upstream stores the console's sid the moment its OFFER arrives and sends it straight
+				// back (holepunch.c:1561 then :2760), per round. Staging it for the *next* round left the
+				// control OFFER with peerSid=0, which the console ignores: it re-offers, and PLE-327 timed
+				// out after 30 s waiting for a RESULT that was never coming.
+				peerSid = peer.sid,
 				skey = Base64.Default.encode(ByteArray(16)),
 				candidate = candidates,
 				localPeerAddr = PsnPeerAddress(accountId, "REMOTE_PLAY"),
 				localHashedId = Base64.Default.encode(localHash)
 			)
-			knownConsoleSid = peer.sid
 			Preparation(socket, offer, peer, localHash, random, local, stun)
 		}
 		catch(error: Throwable)

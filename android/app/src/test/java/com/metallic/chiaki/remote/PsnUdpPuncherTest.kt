@@ -76,18 +76,20 @@ class PsnUdpPuncherTest
 	}
 
 	/**
-	 * PLE-313: upstream keeps one sid and hashed id per PSN session, lists STUN, STATIC, LOCAL, and names
-	 * in each OFFER the console sid it knew when building it: none for control, control's for data.
+	 * PLE-327: upstream keeps one sid and hashed id per PSN session, lists STUN, STATIC, LOCAL, and names
+	 * in each OFFER the sid of the console OFFER that round is answering (`holepunch.c:1561` then `:2760`).
+	 * PLE-313 staged that value by a round, which sent the control OFFER with `peerSid=0`; the console then
+	 * ignores it, re-offers, and the session times out after 30 s (seen on the S25, PLE-327).
 	 */
-	@Test fun offersShareTheSessionIdentityAndNameThePreviousConsoleSid() = runBlocking {
+	@Test fun offersShareTheSessionIdentityAndNameTheAnsweredConsoleSid() = runBlocking {
 		val stun = fakeStun(answers = 2)
 		try
 		{
 			val puncher = DatagramPsnHolePuncher(stunServers = listOf(InetSocketAddress("127.0.0.1", stun.first.localPort)))
 			val control = puncher.prepare(consoleOffer(sid = 4567, port = 1), "12345678901234567").use { it.offer }
 			val data = puncher.prepare(consoleOffer(sid = 5678, port = 1), "12345678901234567").use { it.offer }
-			assertEquals(0, control.peerSid)
-			assertEquals(4567, data.peerSid)
+			assertEquals(4567, control.peerSid)
+			assertEquals(5678, data.peerSid)
 			assertEquals(control.sid, data.sid)
 			assertEquals(control.localHashedId, data.localHashedId)
 			assertEquals(listOf("STUN", "STATIC", "LOCAL"), control.candidate.map { it.type })
