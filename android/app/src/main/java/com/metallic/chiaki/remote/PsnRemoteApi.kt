@@ -25,7 +25,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 interface PsnRefreshTokenStore
@@ -49,6 +48,26 @@ data class PsnRemoteEndpoints(
 		)
 	}
 }
+
+internal class PsnHttpResult(val code: Int, val body: String)
+{
+	val isSuccessful: Boolean get() = code in 200..299
+}
+
+/**
+ * Executes [request] and reads its whole body on [Dispatchers.IO].
+ * OkHttp's execute() returns once the headers arrive; the body is still an open socket, so reading it
+ * on the caller's dispatcher (the main thread for viewModelScope) throws NetworkOnMainThreadException.
+ */
+internal suspend fun OkHttpClient.executeReadingBody(request: Request): PsnHttpResult = withContext(Dispatchers.IO) {
+	newCall(request).execute().use { PsnHttpResult(it.code, it.body?.string().orEmpty()) }
+}
+
+/** A short, single-line excerpt of an error body for logs; PSN error bodies carry codes, not credentials. */
+internal fun errorExcerpt(body: String, limit: Int = 200): String? =
+	body.replace(Regex("\\s+"), " ").trim().takeIf(String::isNotEmpty)?.let {
+		if(it.length > limit) it.take(limit) + "…" else it
+	}
 
 internal class PsnAccessTokenManager(
 	private val client: OkHttpClient,
@@ -88,11 +107,15 @@ internal class PsnAccessTokenManager(
 				.add("redirect_uri", REDIRECT_URL)
 				.build())
 			.build()
-		val response = withContext(Dispatchers.IO) { client.newCall(request).execute() }
-		response.use {
-			val body = it.body?.string().orEmpty()
+		val response = client.executeReadingBody(request)
+		response.let {
+			val body = it.body
 			if(!it.isSuccessful)
-				throw PsnRemoteAuthenticationException("PSN token refresh failed (HTTP ${it.code})")
+				throw PsnRemoteAuthenticationException(
+					"PSN token refresh failed (HTTP ${it.code})",
+					httpCode = it.code,
+					detail = errorExcerpt(body)
+				)
 			val token = runCatching { json.decodeFromString<TokenResponse>(body) }
 				.getOrElse { error -> throw PsnRemoteProtocolException("Invalid PSN token response", error) }
 			if(token.accessToken.isBlank())
@@ -126,7 +149,10 @@ class PsnRemoteApi(
 
 	suspend fun accessToken(forceRefresh: Boolean = false): String = tokens.get(forceRefresh)
 
-	suspend fun listDevices(): List<PsnDevice>
+	suspend fun listDevices(): List<PsnDevice> = listDeviceListing().devices
+
+	/** The remote-play-capable consoles plus how many clients PSN returned before filtering. */
+	suspend fun listDeviceListing(): PsnDeviceListing
 	{
 		val response = authorized(
 			Request.Builder().url(apiUrl("cloudAssistedNavigation/v2/users/me/clients?platform=PS5&includeFields=device&limit=10&offset=0"))
@@ -134,11 +160,12 @@ class PsnRemoteApi(
 			5_000
 		)
 		val body = decode<DeviceListResponse>(response)
-		return body.clients.mapNotNull { client ->
+		val devices = body.clients.mapNotNull { client ->
 			val device = client.device ?: return@mapNotNull null
 			if("remotePlay" !in device.enabledFeatures) return@mapNotNull null
 			PsnDevice(client.duid, device.name)
 		}
+		return PsnDeviceListing(body.clients.size, devices)
 	}
 
 	suspend fun resolvePushWebSocket(): String
@@ -237,9 +264,9 @@ class PsnRemoteApi(
 		repeat(2) { attempt ->
 			val request = builder.header("Authorization", "Bearer $token").header("Accept", "application/json").build()
 			val callClient = client.newBuilder().callTimeout(timeoutMillis, TimeUnit.MILLISECONDS).build()
-			val response = withContext(Dispatchers.IO) { callClient.newCall(request).execute() }
-			response.use {
-				val body = it.body?.string().orEmpty()
+			val response = callClient.executeReadingBody(request)
+			response.let {
+				val body = it.body
 				if(it.isSuccessful) return body
 				if((it.code == 401 || it.code == 403) && attempt == 0)
 				{
@@ -247,8 +274,12 @@ class PsnRemoteApi(
 					return@repeat
 				}
 				if(it.code == 401 || it.code == 403)
-					throw PsnRemoteAuthenticationException("PSN authorization was rejected after refresh")
-				throw IOException("PSN request failed (HTTP ${it.code})")
+					throw PsnRemoteAuthenticationException(
+						"PSN authorization was rejected after refresh (HTTP ${it.code})",
+						httpCode = it.code,
+						detail = errorExcerpt(body)
+					)
+				throw PsnRemoteHttpException("PSN request failed (HTTP ${it.code})", it.code, errorExcerpt(body))
 			}
 		}
 		throw PsnRemoteAuthenticationException("PSN authorization was rejected")

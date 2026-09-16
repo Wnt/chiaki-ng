@@ -22,6 +22,8 @@ class AndroidPsnRemoteClient(context: Context)
 
 	suspend fun listDevices(): List<PsnDevice> = api.listDevices()
 
+	suspend fun listDeviceListing(): PsnDeviceListing = api.listDeviceListing()
+
 	fun controller(nativeBridge: PsnRemoteNativeBridge): PsnRemoteController = PsnRemoteController(
 		api,
 		OkHttpPsnPushTransport(http, json),
