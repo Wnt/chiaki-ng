@@ -18,6 +18,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.*
+import com.metallic.chiaki.common.ext.applySystemBarInsets
+import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.common.ext.putRevealExtra
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.databinding.ActivityMainBinding
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity()
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		enableAppEdgeToEdge()
 		if(BuildConfig.DEBUG && intent.getBooleanExtra(StreamActivity.EXTRA_DIAGNOSTICS_PREVIEW, false))
 		{
 			startActivity(Intent(this, StreamActivity::class.java).apply {
@@ -49,6 +52,8 @@ class MainActivity : AppCompatActivity()
 		}
 		binding = ActivityMainBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		binding.root.applySystemBarInsets(top = false)
+		binding.appBarLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 
 		title = ""
 		setSupportActionBar(binding.toolbar)

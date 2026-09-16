@@ -14,6 +14,8 @@ import androidx.lifecycle.ViewModelProvider
 import com.metallic.chiaki.R
 import com.metallic.chiaki.common.RegisteredHost
 import com.metallic.chiaki.common.ext.RevealActivity
+import com.metallic.chiaki.common.ext.applySystemBarInsets
+import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.common.getDatabase
 import com.metallic.chiaki.databinding.ActivityEditManualBinding
@@ -35,8 +37,10 @@ class EditManualConsoleActivity: AppCompatActivity(), RevealActivity
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		enableAppEdgeToEdge()
 		binding = ActivityEditManualBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		binding.root.applySystemBarInsets()
 		handleReveal()
 
 		viewModel = ViewModelProvider(this, viewModelFactory {

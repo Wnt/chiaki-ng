@@ -9,6 +9,8 @@ import androidx.fragment.app.Fragment
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import com.metallic.chiaki.R
+import com.metallic.chiaki.common.ext.applySystemBarInsets
+import com.metallic.chiaki.common.ext.enableAppEdgeToEdge
 import com.metallic.chiaki.databinding.ActivitySettingsBinding
 
 interface TitleFragment
@@ -23,8 +25,11 @@ class SettingsActivity: AppCompatActivity(), PreferenceFragmentCompat.OnPreferen
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		enableAppEdgeToEdge()
 		binding = ActivitySettingsBinding.inflate(layoutInflater)
 		setContentView(binding.root)
+		binding.root.applySystemBarInsets(top = false)
+		binding.toolbar.applySystemBarInsets(left = false, right = false, bottom = false)
 		title = ""
 		setSupportActionBar(binding.toolbar)
 
