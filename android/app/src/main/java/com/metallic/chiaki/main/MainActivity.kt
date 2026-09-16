@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity()
 	companion object
 	{
 		const val EXTRA_ONBOARDING_PREVIEW = "onboarding_preview"
+		const val EXTRA_UNIFIED_CONSOLE_LIST = "unified_console_list"
 		private const val PREVIEW_WELCOME = "welcome"
 		private const val PREVIEW_CONSOLES = "consoles"
 		private const val PREVIEW_SUMMARY = "summary"
@@ -58,6 +59,13 @@ class MainActivity : AppCompatActivity()
 	private var pendingRegistrationHost: DisplayHost? = null
 	private var pendingAutoPlayAddress: String? = null
 	private var previewState: String? = null
+	private var unifiedConsoleListEnabled = false
+
+	private val psnListAllowed: Boolean get() = shouldLoadPsnConsoleList(
+		preferences.psnRemotePlayEnabled,
+		preferences.psnSignInEnabled,
+		preferences.psnAccountId
+	)
 
 	private val streamLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
 		val summary = result.data?.let {
@@ -72,7 +80,7 @@ class MainActivity : AppCompatActivity()
 			return@registerForActivityResult
 		preferences.psnSignInEnabled = true
 		preferences.psnRemotePlayEnabled = true
-		viewModel.setPsnEnabled(true)
+		viewModel.setPsnEnabled(true, !unifiedConsoleListEnabled || psnListAllowed)
 		pendingRegistrationHost?.also { host ->
 			pendingRegistrationHost = null
 			showGuidedRegistration(host.host, host.name, host.isPS5)
@@ -106,6 +114,8 @@ class MainActivity : AppCompatActivity()
 		binding.appBarLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 		binding.onboardingLayout.applySystemBarInsets(left = false, right = false, bottom = false)
 		preferences = Preferences(this)
+		unifiedConsoleListEnabled = BuildConfig.DEBUG &&
+			intent.getBooleanExtra(EXTRA_UNIFIED_CONSOLE_LIST, false)
 		previewState = intent.getStringExtra(EXTRA_ONBOARDING_PREVIEW)
 			?.takeIf { BuildConfig.DEBUG && it in setOf(PREVIEW_WELCOME, PREVIEW_CONSOLES, PREVIEW_SUMMARY) }
 		setSupportActionBar(binding.toolbar)
@@ -145,7 +155,8 @@ class MainActivity : AppCompatActivity()
 			this::playConsole,
 			this::wakeConsole,
 			this::editConsole,
-			this::deleteConsole
+			this::deleteConsole,
+			unifiedConsoleListEnabled
 		)
 		binding.hostsRecyclerView.adapter = consoleAdapter
 		binding.hostsRecyclerView.layoutManager = LinearLayoutManager(this)
@@ -208,7 +219,10 @@ class MainActivity : AppCompatActivity()
 	{
 		PREVIEW_WELCOME -> OnboardingHomeState.WELCOME
 		PREVIEW_CONSOLES, PREVIEW_SUMMARY -> OnboardingHomeState.ACCOUNT_CONSOLES
-		else -> onboardingHomeState(configuredConsoleCount, preferences.psnRemotePlayEnabled)
+		else -> onboardingHomeState(
+			configuredConsoleCount,
+			if(unifiedConsoleListEnabled) psnListAllowed else preferences.psnRemotePlayEnabled
+		)
 	}
 
 	private fun updateHomeState()
@@ -262,7 +276,10 @@ class MainActivity : AppCompatActivity()
 			return
 		val atTop = binding.hostsRecyclerView.computeVerticalScrollOffset() == 0
 		val hosts = if(currentHomeState() == OnboardingHomeState.ACCOUNT_CONSOLES) emptyList() else localHosts
-		consoleAdapter.consoles = mergeHomeConsoles(hosts, psnConsoles)
+		consoleAdapter.consoles = if(unifiedConsoleListEnabled)
+			mergeHomeConsoles(hosts, psnConsoles)
+		else
+			mergeHomeConsolesLegacy(hosts, psnConsoles)
 		if(atTop)
 			binding.hostsRecyclerView.scrollToPosition(0)
 		val listUnavailable = viewModel.psnListState.value is PsnConsoleListState.Error ||
@@ -335,7 +352,10 @@ class MainActivity : AppCompatActivity()
 	{
 		super.onStart()
 		if(previewState == null)
-			viewModel.setPsnEnabled(preferences.psnRemotePlayEnabled)
+			viewModel.setPsnEnabled(
+				preferences.psnRemotePlayEnabled,
+				!unifiedConsoleListEnabled || psnListAllowed
+			)
 		viewModel.discoveryManager.resume()
 	}
 
@@ -392,7 +412,7 @@ class MainActivity : AppCompatActivity()
 		}
 		preferences.psnSignInEnabled = true
 		preferences.psnRemotePlayEnabled = true
-		viewModel.setPsnEnabled(true)
+		viewModel.setPsnEnabled(true, !unifiedConsoleListEnabled || psnListAllowed)
 		updateHomeState()
 	}
 
@@ -540,7 +560,9 @@ class MainActivity : AppCompatActivity()
 
 	private fun editConsole(console: HomeConsole)
 	{
-		val host = console.displayHost as? ManualDisplayHost ?: return
+		val host = if(unifiedConsoleListEnabled)
+			console.manualDisplayHost else console.displayHost as? ManualDisplayHost
+		host ?: return
 		startActivity(Intent(this, EditManualConsoleActivity::class.java).apply {
 			putExtra(EditManualConsoleActivity.EXTRA_MANUAL_HOST_ID, host.manualHost.id)
 		})
@@ -548,7 +570,9 @@ class MainActivity : AppCompatActivity()
 
 	private fun deleteConsole(console: HomeConsole)
 	{
-		val host = console.displayHost as? ManualDisplayHost ?: return
+		val host = if(unifiedConsoleListEnabled)
+			console.manualDisplayHost else console.displayHost as? ManualDisplayHost
+		host ?: return
 		MaterialAlertDialogBuilder(this)
 			.setMessage(getString(R.string.alert_message_delete_manual_host, host.manualHost.host))
 			.setPositiveButton(R.string.action_delete) { _, _ ->

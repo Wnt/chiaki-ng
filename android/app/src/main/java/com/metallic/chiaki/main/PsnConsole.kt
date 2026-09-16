@@ -53,6 +53,12 @@ internal fun onboardingHomeState(
 	else -> OnboardingHomeState.WELCOME
 }
 
+internal fun shouldLoadPsnConsoleList(
+	psnRemotePlayEnabled: Boolean,
+	psnSignInEnabled: Boolean,
+	psnAccountId: String?
+): Boolean = psnRemotePlayEnabled && psnSignInEnabled && !psnAccountId.isNullOrBlank()
+
 sealed interface PsnConsoleListState
 {
 	data object Hidden : PsnConsoleListState
