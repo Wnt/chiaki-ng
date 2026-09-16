@@ -32,7 +32,9 @@ extern void AMediaCodec_releaseName_weak(AMediaCodec *codec, char *name)
 		__asm__("AMediaCodec_releaseName") __attribute__((weak));
 
 static void *android_chiaki_video_decoder_input_thread_func(void *user);
-static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder, uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index);
+static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder,
+		uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index,
+		uint64_t frame_ready_time_us);
 static void android_chiaki_video_decoder_presenter_release(void *user, bool dropped);
 
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
@@ -83,6 +85,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->input_buf = NULL;
 	decoder->input_buf_size = 0;
 	decoder->input_buf_capacity = 0;
+	decoder->input_frame_ready_time_us = 0;
 	decoder->input_frames_dropped = 0;
 
 	ChiakiErrorCode err = chiaki_mutex_init(&decoder->codec_mutex, false);
@@ -286,7 +289,7 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 
@@ -307,7 +310,8 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		ANativeWindow_release(decoder->window);
 		decoder->window = new_window;
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
-				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods);
+				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+				nonblocking_producer);
 #else
 		CHIAKI_LOGE(decoder->log, "Video Decoder already initialized");
 #endif
@@ -390,7 +394,8 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 			decoder->late_frame_recovery_enabled ? "enabled" : "disabled", OUTPUT_BACKLOG_IDR_THRESHOLD);
 
 	ChiakiErrorCode err = android_chiaki_video_presenter_start(&decoder->presenter, decoder->codec, stream_fps,
-			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods);
+			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+			nonblocking_producer);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(decoder->log, "Failed to start video presenter: %s", chiaki_error_string(err));
@@ -415,16 +420,19 @@ beach:
 void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 	if(decoder->codec)
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
-				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods);
+				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
+				nonblocking_producer);
 	chiaki_mutex_unlock(&decoder->codec_mutex);
 }
 
-static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder, uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index)
+static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder *decoder,
+		uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index,
+		uint64_t frame_ready_time_us)
 {
 	bool r = true;
 	bool request_idr = false;
@@ -447,6 +455,7 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 		presentation_time_us = unwrapped_frame_index * 1000000ULL / decoder->pts_rate_hz;
 	}
 
+	bool first_chunk = true;
 	while(buf_size > 0)
 	{
 		ssize_t codec_buf_index = AMediaCodec_dequeueInputBuffer(decoder->codec, INPUT_BUFFER_TIMEOUT_MS * 1000);
@@ -495,12 +504,14 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 			backlog_recorded = true;
 		}
 
-		int64_t queued_ns = decoder->diagnostics_enabled
+		int64_t queued_ns = first_chunk
 				? (int64_t)chiaki_time_now_monotonic_us() * 1000LL : 0;
 		media_status_t queue_result = AMediaCodec_queueInputBuffer(decoder->codec, (size_t)codec_buf_index, 0, codec_sample_size, presentation_time_us, 0);
-		if(queue_result == AMEDIA_OK && decoder->diagnostics_enabled && codec_sample_size == buf_size)
+		if(queue_result == AMEDIA_OK && first_chunk)
 			android_chiaki_video_presenter_record_input_queued(&decoder->presenter,
-					(int64_t)presentation_time_us, queued_ns);
+					(int64_t)presentation_time_us, queued_ns, frame_index,
+					frame_ready_time_us);
+		first_chunk = false;
 		if(stats_locked)
 		{
 			if(queue_result != AMEDIA_OK && backlog_incremented)
@@ -574,10 +585,12 @@ static void *android_chiaki_video_decoder_input_thread_func(void *user)
 		decoder->input_buf_capacity = swap_capacity;
 		size_t local_buf_size = decoder->input_buf_size;
 		ChiakiSeqNum16 frame_index = decoder->input_frame_index;
+		uint64_t frame_ready_time_us = decoder->input_frame_ready_time_us;
 		decoder->input_pending = false;
 		chiaki_mutex_unlock(&decoder->input_mutex);
 
-		android_chiaki_video_decoder_queue_sample(decoder, local_buf, local_buf_size, frame_index);
+		android_chiaki_video_decoder_queue_sample(decoder, local_buf, local_buf_size,
+				frame_index, frame_ready_time_us);
 	}
 
 	free(local_buf);
@@ -585,13 +598,16 @@ static void *android_chiaki_video_decoder_input_thread_func(void *user)
 	return NULL;
 }
 
-bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, ChiakiSeqNum16 frame_index, int32_t frames_lost, bool frame_recovered, void *user)
+bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size,
+		ChiakiSeqNum16 frame_index, uint64_t frame_ready_time_us, int32_t frames_lost,
+		bool frame_recovered, void *user)
 {
 	(void)frames_lost;
 	(void)frame_recovered;
 	AndroidChiakiVideoDecoder *decoder = user;
 	if(!decoder->input_thread_enabled)
-		return android_chiaki_video_decoder_queue_sample(decoder, buf, buf_size, frame_index);
+		return android_chiaki_video_decoder_queue_sample(decoder, buf, buf_size,
+				frame_index, frame_ready_time_us);
 
 	chiaki_mutex_lock(&decoder->input_mutex);
 	if(decoder->shutdown_input)
@@ -616,6 +632,7 @@ bool android_chiaki_video_decoder_video_sample(uint8_t *buf, size_t buf_size, Ch
 	memcpy(decoder->input_buf, buf, buf_size);
 	decoder->input_buf_size = buf_size;
 	decoder->input_frame_index = frame_index;
+	decoder->input_frame_ready_time_us = frame_ready_time_us;
 	decoder->input_pending = true;
 	chiaki_cond_signal(&decoder->input_cond);
 	chiaki_mutex_unlock(&decoder->input_mutex);

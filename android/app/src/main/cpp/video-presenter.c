@@ -29,25 +29,28 @@ static void frame_callback_legacy(long frame_time_ns, void *user);
 static void drain_immediate_locked(AndroidChiakiVideoPresenter *presenter);
 
 static void record_output_available(AndroidChiakiVideoPresenter *presenter,
-		int64_t presentation_time_us, int64_t available_ns)
+		AndroidChiakiVideoPresenterFrame *frame)
 {
-	if(!presenter->diagnostics_enabled)
-		return;
 	chiaki_mutex_lock(&presenter->mutex);
-	presenter->diagnostics_output_frames++;
-	for(uint32_t offset = 0; offset < ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY; offset++)
+	if(presenter->diagnostics_enabled)
+		presenter->diagnostics_output_frames++;
+	for(uint32_t offset = 0; offset < ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY; offset++)
 	{
-		uint32_t index = (presenter->diagnostics_input_next
-				+ ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY - 1 - offset)
-				% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
-		AndroidChiakiVideoInputTimestamp *input = &presenter->diagnostics_inputs[index];
-		if(!input->valid || input->presentation_time_us != presentation_time_us)
+		uint32_t index = (presenter->input_metadata_next
+				+ ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY - 1 - offset)
+				% ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY;
+		AndroidChiakiVideoInputMetadata *input = &presenter->input_metadata[index];
+		if(!input->valid || input->presentation_time_us != frame->info.presentationTimeUs)
 			continue;
 		input->valid = false;
-		if(available_ns >= input->queued_ns && available_ns - input->queued_ns <= 5000000000LL)
+		frame->frame_index = input->frame_index;
+		frame->frame_ready_time_us = input->frame_ready_time_us;
+		frame->input_metadata_valid = input->frame_ready_time_us != 0;
+		if(presenter->diagnostics_enabled && frame->arrival_ns >= input->queued_ns
+				&& frame->arrival_ns - input->queued_ns <= 5000000000LL)
 		{
 			presenter->diagnostics_decode_ns[presenter->diagnostics_decode_next] =
-					(uint64_t)(available_ns - input->queued_ns);
+					(uint64_t)(frame->arrival_ns - input->queued_ns);
 			presenter->diagnostics_decode_next = (presenter->diagnostics_decode_next + 1)
 					% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
 			if(presenter->diagnostics_decode_count < ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY)
@@ -479,6 +482,7 @@ static bool handle_direct_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 		.info = info,
 		.arrival_ns = monotonic_time_ns(),
 	};
+	record_output_available(presenter, &current);
 	bool drop_stale;
 	bool eos = (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0;
 	chiaki_mutex_lock(&presenter->mutex);
@@ -499,7 +503,7 @@ static bool handle_direct_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 			.arrival_ns = monotonic_time_ns(),
 		};
 		if(newer_info.size != 0)
-			record_output_available(presenter, newer_info.presentationTimeUs, newer.arrival_ns);
+			record_output_available(presenter, &newer);
 		if((newer_info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0)
 			eos = true;
 		bool newer_is_frame = newer_info.size != 0;
@@ -538,9 +542,11 @@ static void enqueue_paced_frame(AndroidChiakiVideoPresenter *presenter, size_t i
 		.info = info,
 		.arrival_ns = monotonic_time_ns(),
 	};
+	record_output_available(presenter, &frame);
 	chiaki_mutex_lock(&presenter->mutex);
 	while(presenter->queue_size == ANDROID_CHIAKI_VIDEO_PRESENTER_QUEUE_CAPACITY
 			&& presenter->mode == ANDROID_CHIAKI_VIDEO_PACING_SMOOTHEST
+			&& !presenter->nonblocking_producer
 			&& presenter->max_queue_age_periods == 0 && !presenter->shutdown)
 		chiaki_cond_wait(&presenter->queue_cond, &presenter->mutex);
 	if(presenter->shutdown)
@@ -594,8 +600,6 @@ static void *output_thread_func(void *user)
 		if(status >= 0)
 		{
 			bool eos = (info.flags & AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM) != 0;
-			if(info.size != 0)
-				record_output_available(presenter, info.presentationTimeUs, monotonic_time_ns());
 			if(presenter->real_pts_enabled && info.size != 0)
 				CHIAKI_LOGV(presenter->log, "Video Decoder output PTS: %" PRId64 " us", info.presentationTimeUs);
 			if(info.size == 0)
@@ -685,7 +689,7 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
@@ -698,6 +702,7 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
+	presenter->nonblocking_producer = nonblocking_producer;
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->shutdown = false;
 	presenter->queue_head = 0;
@@ -715,23 +720,23 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->missed_vsyncs = 0;
 	presenter->dropped_frames = 0;
 	presenter->bounded_age_dropped_frames = 0;
-	presenter->diagnostics_input_next = 0;
+	presenter->input_metadata_next = 0;
 	presenter->diagnostics_decode_count = 0;
 	presenter->diagnostics_decode_next = 0;
 	presenter->diagnostics_output_frames = 0;
-	memset(presenter->diagnostics_inputs, 0, sizeof(presenter->diagnostics_inputs));
+	memset(presenter->input_metadata, 0, sizeof(presenter->input_metadata));
 	chiaki_mutex_unlock(&presenter->mutex);
 
 	if(mode != ANDROID_CHIAKI_VIDEO_PACING_DISABLED && presenter->refresh_hz >= 119.0)
 		CHIAKI_LOGI(presenter->log, "Video presenter %s mode using immediate release: %.2f Hz display (timestamped release disabled at 120 Hz)",
 				mode_name(mode), presenter->refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods",
+		CHIAKI_LOGI(presenter->log, "Video presenter %s mode: stream=%u fps display=%.2f Hz timestamped_release=%s offset=%.3f ms lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s",
 				mode_name(mode), presenter->stream_fps, presenter->refresh_hz,
 				presenter->timestamped_release_enabled ? "enabled" : "disabled",
 				(double)presenter->app_vsync_offset_ns / 1000000.0,
 				(double)presenter_lead_ns(presenter) / 1000000.0,
-				presenter->max_queue_age_periods);
+				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled");
 
 	start_vsync_thread_if_needed(presenter);
 	ChiakiErrorCode err = chiaki_thread_create(&presenter->output_thread, output_thread_func, presenter);
@@ -809,7 +814,7 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods)
+		uint32_t max_queue_age_periods, bool nonblocking_producer)
 {
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
@@ -821,6 +826,7 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
+	presenter->nonblocking_producer = nonblocking_producer;
 	presenter->timestamped_release_enabled = timestamped_release_eligible(mode, presenter->refresh_hz, presenter->stream_fps);
 	presenter->timeline_valid = false;
 	presenter->last_vsync_ns = 0;
@@ -837,10 +843,10 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	if(mode != ANDROID_CHIAKI_VIDEO_PACING_DISABLED && refresh_hz >= 119.0)
 		CHIAKI_LOGI(presenter->log, "Video presenter using immediate release at %.2f Hz; timestamped release is disabled at 120 Hz", refresh_hz);
 	else
-		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods",
+		CHIAKI_LOGI(presenter->log, "Video presenter timing updated: mode=%s stream=%u fps display=%.2f Hz timestamped_release=%s lead=%.3f ms bounded_age=%u periods nonblocking_producer=%s",
 				mode_name(mode), presenter->stream_fps, presenter->refresh_hz, timestamped ? "enabled" : "disabled",
 				(double)presenter_lead_ns(presenter) / 1000000.0,
-				presenter->max_queue_age_periods);
+				presenter->max_queue_age_periods, presenter->nonblocking_producer ? "enabled" : "disabled");
 	start_vsync_thread_if_needed(presenter);
 }
 
@@ -856,18 +862,19 @@ void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *prese
 }
 
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
-		int64_t presentation_time_us, int64_t queued_ns)
+		int64_t presentation_time_us, int64_t queued_ns, ChiakiSeqNum16 frame_index,
+		uint64_t frame_ready_time_us)
 {
-	if(!presenter->diagnostics_enabled)
-		return;
 	chiaki_mutex_lock(&presenter->mutex);
-	AndroidChiakiVideoInputTimestamp *input =
-			&presenter->diagnostics_inputs[presenter->diagnostics_input_next];
+	AndroidChiakiVideoInputMetadata *input =
+			&presenter->input_metadata[presenter->input_metadata_next];
 	input->presentation_time_us = presentation_time_us;
 	input->queued_ns = queued_ns;
+	input->frame_index = frame_index;
+	input->frame_ready_time_us = frame_ready_time_us;
 	input->valid = true;
-	presenter->diagnostics_input_next = (presenter->diagnostics_input_next + 1)
-			% ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY;
+	presenter->input_metadata_next = (presenter->input_metadata_next + 1)
+			% ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY;
 	chiaki_mutex_unlock(&presenter->mutex);
 }
 

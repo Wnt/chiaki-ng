@@ -8,6 +8,7 @@
 #include <media/NdkMediaCodec.h>
 
 #include <chiaki/log.h>
+#include <chiaki/seqnum.h>
 #include <chiaki/thread.h>
 
 #include <stdbool.h>
@@ -15,6 +16,7 @@
 
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_QUEUE_CAPACITY 5
 #define ANDROID_CHIAKI_VIDEO_PRESENTER_JITTER_WINDOW 300
+#define ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY 256
 #define ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY 256
 
 typedef enum android_chiaki_video_pacing_mode_t
@@ -51,12 +53,14 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;
 
-typedef struct android_chiaki_video_input_timestamp_t
+typedef struct android_chiaki_video_input_metadata_t
 {
 	int64_t presentation_time_us;
 	int64_t queued_ns;
+	ChiakiSeqNum16 frame_index;
+	uint64_t frame_ready_time_us;
 	bool valid;
-} AndroidChiakiVideoInputTimestamp;
+} AndroidChiakiVideoInputMetadata;
 
 typedef void (*AndroidChiakiVideoPresenterReleaseCallback)(void *user, bool dropped);
 typedef void (*AndroidChiakiPerformanceHintThreadCallback)(void *user, ChiakiThreadName role);
@@ -68,6 +72,9 @@ typedef struct android_chiaki_video_presenter_frame_t
 	size_t index;
 	AMediaCodecBufferInfo info;
 	int64_t arrival_ns;
+	ChiakiSeqNum16 frame_index;
+	uint64_t frame_ready_time_us;
+	bool input_metadata_valid;
 } AndroidChiakiVideoPresenterFrame;
 
 typedef struct android_chiaki_video_presenter_t
@@ -93,6 +100,7 @@ typedef struct android_chiaki_video_presenter_t
 	bool timestamped_release_enabled;
 	bool late_frame_recovery_enabled;
 	bool real_pts_enabled;
+	bool nonblocking_producer;
 	unsigned int stream_fps;
 	double refresh_hz;
 	int64_t app_vsync_offset_ns;
@@ -114,8 +122,8 @@ typedef struct android_chiaki_video_presenter_t
 	uint64_t bounded_age_dropped_frames;
 	uint32_t max_queue_age_periods;
 	bool diagnostics_enabled;
-	AndroidChiakiVideoInputTimestamp diagnostics_inputs[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
-	uint32_t diagnostics_input_next;
+	AndroidChiakiVideoInputMetadata input_metadata[ANDROID_CHIAKI_VIDEO_INPUT_METADATA_CAPACITY];
+	uint32_t input_metadata_next;
 	uint64_t diagnostics_decode_ns[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];
 	uint32_t diagnostics_decode_count;
 	uint32_t diagnostics_decode_next;
@@ -139,7 +147,7 @@ void android_chiaki_video_presenter_set_performance_hint_callbacks(AndroidChiaki
 ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter *presenter, AMediaCodec *codec,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, bool nonblocking_producer);
 void android_chiaki_video_presenter_request_stop(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_join(AndroidChiakiVideoPresenter *presenter);
 void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presenter,
@@ -147,11 +155,12 @@ void android_chiaki_video_presenter_set_mode(AndroidChiakiVideoPresenter *presen
 void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *presenter,
 		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
 		AndroidChiakiVideoPacingMode mode, AndroidChiakiVideoPresenterLead lead_mode,
-		uint32_t max_queue_age_periods);
+		uint32_t max_queue_age_periods, bool nonblocking_producer);
 void android_chiaki_video_presenter_get_stats(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterStats *stats);
 void android_chiaki_video_presenter_record_input_queued(AndroidChiakiVideoPresenter *presenter,
-		int64_t presentation_time_us, int64_t queued_ns);
+		int64_t presentation_time_us, int64_t queued_ns, ChiakiSeqNum16 frame_index,
+		uint64_t frame_ready_time_us);
 void android_chiaki_video_presenter_get_diagnostics(AndroidChiakiVideoPresenter *presenter,
 		AndroidChiakiVideoPresenterDiagnostics *diagnostics);
 
