@@ -16,12 +16,17 @@ static void feedback_sender_send_state(ChiakiFeedbackSender *feedback_sender, co
 static void feedback_sender_send_history_packet(ChiakiFeedbackSender *feedback_sender, const uint8_t *buf, size_t buf_size);
 static void feedback_sender_flush_history_locked(ChiakiFeedbackSender *feedback_sender);
 static void feedback_sender_record_history(ChiakiFeedbackSender *feedback_sender, const ChiakiControllerState *state_prev, const ChiakiControllerState *state_now);
+static void feedback_sender_stats_tick(ChiakiFeedbackSender *feedback_sender, uint64_t now_ms);
 
-CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion, uint32_t state_min_interval_ms)
+CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *feedback_sender, ChiakiTakion *takion, uint32_t state_min_interval_ms, uint32_t stats_log_interval_ms)
 {
 	feedback_sender->log = takion->log;
 	feedback_sender->takion = takion;
 	feedback_sender->state_min_interval_ms = state_min_interval_ms ? state_min_interval_ms : FEEDBACK_STATE_TIMEOUT_MIN_MS_DEFAULT;
+	feedback_sender->stats_log_interval_ms = stats_log_interval_ms;
+	feedback_sender->stats_window_start_ms = 0;
+	feedback_sender->stats_state_packets = 0;
+	feedback_sender->stats_history_packets = 0;
 
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_prev);
 	chiaki_controller_state_set_idle(&feedback_sender->controller_state_history_prev);
@@ -276,6 +281,43 @@ static bool state_cond_check(void *user)
 	return now_ms - feedback_sender->last_feedback_state_ms >= feedback_sender->state_min_interval_ms;
 }
 
+/**
+ * PLE-57: emit one packet-rate line per stats window, so a long session can be counted
+ * from the session log. Called only from the feedback sender thread. No-op when disabled.
+ */
+static void feedback_sender_stats_tick(ChiakiFeedbackSender *feedback_sender, uint64_t now_ms)
+{
+	if(!feedback_sender->stats_log_interval_ms)
+		return;
+
+	uint64_t elapsed_ms = now_ms - feedback_sender->stats_window_start_ms;
+	if(elapsed_ms < feedback_sender->stats_log_interval_ms)
+		return;
+
+	uint64_t state_packets = feedback_sender->stats_state_packets;
+	uint64_t history_packets = feedback_sender->stats_history_packets;
+	uint64_t total_packets = state_packets + history_packets;
+	// x1000 fixed point to avoid pulling floating point into the send path's log line
+	uint64_t total_per_s_milli = elapsed_ms ? (total_packets * 1000000ULL) / elapsed_ms : 0;
+	uint64_t state_per_s_milli = elapsed_ms ? (state_packets * 1000000ULL) / elapsed_ms : 0;
+	uint64_t history_per_s_milli = elapsed_ms ? (history_packets * 1000000ULL) / elapsed_ms : 0;
+
+	CHIAKI_LOGI(feedback_sender->log,
+		"Feedback stats: window %llu ms state %llu history %llu total %llu"
+		" | per_s total %llu.%03llu state %llu.%03llu history %llu.%03llu",
+		(unsigned long long)elapsed_ms,
+		(unsigned long long)state_packets,
+		(unsigned long long)history_packets,
+		(unsigned long long)total_packets,
+		(unsigned long long)(total_per_s_milli / 1000), (unsigned long long)(total_per_s_milli % 1000),
+		(unsigned long long)(state_per_s_milli / 1000), (unsigned long long)(state_per_s_milli % 1000),
+		(unsigned long long)(history_per_s_milli / 1000), (unsigned long long)(history_per_s_milli % 1000));
+
+	feedback_sender->stats_window_start_ms = now_ms;
+	feedback_sender->stats_state_packets = 0;
+	feedback_sender->stats_history_packets = 0;
+}
+
 static void *feedback_sender_thread_func(void *user)
 {
 	ChiakiFeedbackSender *feedback_sender = user;
@@ -286,6 +328,12 @@ static void *feedback_sender_thread_func(void *user)
 		return NULL;
 
 	feedback_sender->last_feedback_state_ms = chiaki_time_now_monotonic_ms();
+	feedback_sender->stats_window_start_ms = feedback_sender->last_feedback_state_ms;
+	if(feedback_sender->stats_log_interval_ms)
+	{
+		CHIAKI_LOGI(feedback_sender->log, "Feedback Sender stats enabled: window %u ms, state_min_interval %u ms",
+			(unsigned int)feedback_sender->stats_log_interval_ms, (unsigned int)feedback_sender->state_min_interval_ms);
+	}
 	while(true)
 	{
 		if(feedback_sender->history_packet_len == 0)
@@ -344,10 +392,19 @@ static void *feedback_sender_thread_func(void *user)
 		chiaki_mutex_unlock(&feedback_sender->state_mutex);
 
 		if(send_feedback_state)
+		{
 			feedback_sender_send_state(feedback_sender, &state_now);
+			feedback_sender->stats_state_packets++;
+		}
 
 		if(send_feedback_history)
+		{
 			feedback_sender_send_history_packet(feedback_sender, history_buf, history_buf_size);
+			feedback_sender->stats_history_packets++;
+		}
+
+		// counters are only touched by this thread, so this is safe outside the state mutex
+		feedback_sender_stats_tick(feedback_sender, chiaki_time_now_monotonic_ms());
 
 		err = chiaki_mutex_lock(&feedback_sender->state_mutex);
 		if(err != CHIAKI_ERR_SUCCESS)

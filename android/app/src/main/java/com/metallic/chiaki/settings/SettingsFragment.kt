@@ -32,6 +32,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
 		preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled
+		preferences.feedbackStatsLogEnabledKey -> preferences.feedbackStatsLogEnabled
 		preferences.decoderInputThreadEnabledKey -> preferences.decoderInputThreadEnabled
 		preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
@@ -57,6 +58,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
 			preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled = value
+			preferences.feedbackStatsLogEnabledKey -> preferences.feedbackStatsLogEnabled = value
 			preferences.decoderInputThreadEnabledKey -> preferences.decoderInputThreadEnabled = value
 			preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled = value
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value

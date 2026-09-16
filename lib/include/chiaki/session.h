@@ -105,6 +105,7 @@ typedef struct chiaki_connect_info_t
 	bool enable_idr_on_fec_failure;
 	bool disable_video_packet_reordering;
 	uint32_t feedback_state_min_interval_ms; // 0 = default (8ms), minimum time between controller feedback state sends
+	uint32_t feedback_stats_log_interval_ms; // 0 = off (default), else log a feedback packet-rate line this often
 } ChiakiConnectInfo;
 
 
@@ -247,6 +248,7 @@ typedef struct chiaki_session_t
 		bool enable_idr_on_fec_failure;
 		bool disable_video_packet_reordering;
 		uint32_t feedback_state_min_interval_ms;
+		uint32_t feedback_stats_log_interval_ms;
 	} connect_info;
 
 	ChiakiTarget target;
