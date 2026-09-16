@@ -83,6 +83,15 @@ class MainActivity : AppCompatActivity()
 	}
 
 	private val psnLoginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+		if(result.resultCode == PsnLoginActivity.RESULT_LINK_WITH_PIN)
+		{
+			// PLE-323: sign-in did not finish and the user took the PIN link for the console here instead.
+			val host = pendingRegistrationHost ?: pinLinkCandidate()
+			pendingRegistrationHost = null
+			if(host != null)
+				showGuidedRegistration(host.host, host.name)
+			return@registerForActivityResult
+		}
 		if(result.resultCode != Activity.RESULT_OK)
 			return@registerForActivityResult
 		preferences.psnSignInEnabled = true
@@ -552,8 +561,15 @@ class MainActivity : AppCompatActivity()
 			updateHomeState()
 			return
 		}
-		psnLoginLauncher.launch(Intent(this, PsnLoginActivity::class.java))
+		psnLoginLauncher.launch(Intent(this, PsnLoginActivity::class.java).apply {
+			putExtra(PsnLoginActivity.EXTRA_OFFER_PIN_LINK, (pendingRegistrationHost ?: pinLinkCandidate()) != null)
+		})
 	}
+
+	/** An unlinked PS5 on this network, which the PIN link can reach without signing in. */
+	private fun pinLinkCandidate(): DisplayHost? = localHosts
+		.filterIsInstance<DiscoveredDisplayHost>()
+		.firstOrNull { it.registeredHost == null && it.isPS5 }
 
 	private fun showPreviewConsoles()
 	{

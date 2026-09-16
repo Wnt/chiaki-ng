@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.metallic.chiaki.main.MainActivity
+import com.metallic.chiaki.regist.PsnBrowserRecovery
 import com.metallic.chiaki.regist.PsnLoginActivity
 import com.metallic.chiaki.regist.PsnRedirectReceiver
 import java.util.WeakHashMap
@@ -37,7 +38,9 @@ internal enum class PsnMockFault(val id: String)
 	/** Coming back from the browser sends the user to Android's link settings (PLE-245, PLE-246). */
 	SETTINGS_REDIRECT("settings-redirect"),
 	/** An instruction paragraph on the sign-in path (PLE-279 removed the last one). */
-	INSTRUCTION_PARAGRAPH("instruction-paragraph");
+	INSTRUCTION_PARAGRAPH("instruction-paragraph"),
+	/** Leaving the tab by its X, back or "Open in browser" strands the user on Continue signing in (PLE-323). */
+	EXIT_LOSES_CODE("exit-loses-code");
 
 	companion object
 	{
@@ -54,6 +57,7 @@ internal enum class PsnMockFault(val id: String)
 				else PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
 				PackageManager.DONT_KILL_APP
 			)
+			PsnBrowserRecovery.enabled = fault != EXIT_LOSES_CODE
 			if(fault == null)
 				return
 			Log.w(TAG, "PSN MOCK FAULT ${fault.id}: this build is deliberately broken for the onboarding driver")
@@ -86,7 +90,7 @@ internal enum class PsnMockFault(val id: String)
 			resumes[activity] = count
 			when(fault)
 			{
-				REDIRECT_DEAD_END -> Unit
+				REDIRECT_DEAD_END, EXIT_LOSES_CODE -> Unit
 				// Resumed after a pause: back from the browser tab.
 				SETTINGS_REDIRECT -> if(activity is PsnLoginActivity && paused[activity] == true)
 					activity.startActivity(linkSettings(activity))

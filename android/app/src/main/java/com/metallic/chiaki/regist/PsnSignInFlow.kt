@@ -72,6 +72,29 @@ internal fun shouldHandlePsnBrowserReturn(
 	browserPauseObserved: Boolean
 ): Boolean = browserSignIn && !handlingRedirect && browserLaunched && browserPauseObserved
 
+/** Silent reopens of the sign-in tab in a row that may end without a code before the app stops (PLE-323). */
+internal const val PSN_SILENT_BROWSER_RECOVERIES = 2
+
+internal enum class PsnBrowserReturnStep { REOPEN_TAB, OFFER_CHOICES }
+
+/**
+ * The user left the sign-in tab without the Finish button: its X, back, the menu's "Open in
+ * browser", or the app switcher. The browser keeps Sony's session cookie, so reopening the sign-in
+ * comes straight back to a fresh redirect; after [PSN_SILENT_BROWSER_RECOVERIES] reopens in a row
+ * that still brought no code, the user is choosing to leave, and gets the choices instead of a loop.
+ */
+internal fun psnBrowserReturnStep(recoveriesInARow: Int): PsnBrowserReturnStep =
+	if(recoveriesInARow < PSN_SILENT_BROWSER_RECOVERIES) PsnBrowserReturnStep.REOPEN_TAB else PsnBrowserReturnStep.OFFER_CHOICES
+
+/**
+ * Off only in a PSN mock build running the PLE-302 fault `exit-loses-code`, which puts back the dead
+ * end this recovery removed so the onboarding driver can show it catches it.
+ */
+internal object PsnBrowserRecovery
+{
+	@Volatile var enabled = true
+}
+
 /**
  * A redirect handed over by the sign-in tab's Finish button. The receiver also opens the app, which
  * Android allows while the tab sits in the app's own task; if a launcher or browser setup places it

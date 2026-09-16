@@ -5,6 +5,14 @@
 #include <chiaki/rpcrypt.h>
 #include <chiaki/regist.h>
 
+#include <string.h>
+
+#ifdef _WIN32
+#include <ws2tcpip.h>
+#else
+#include <netinet/in.h>
+#endif
+
 static const uint8_t ambassador[CHIAKI_RPCRYPT_KEY_SIZE] = { 0x13, 0x37, 0xde, 0xad, 0xbe, 0xef, 0xc0, 0xff, 0xee, 0x42, 0x63, 0x68, 0x69, 0x61, 0x6b, 0x69 };
 static const uint32_t pin = 13374201;
 static const char * const psn_id = "ChiakiNanami1337";
@@ -60,6 +68,108 @@ static MunitResult test_request_payload_ps4_pre10(const MunitParameter params[],
 	return MUNIT_OK;
 }
 
+
+static MunitResult test_local_addr_usable(const MunitParameter params[], void *user)
+{
+	// A wildcard-bound socket reports these, and an Android session with no holepunch info of
+	// its own reports the empty string. None of them is an address the console can reach us at.
+	munit_assert_false(chiaki_regist_local_addr_usable(NULL));
+	munit_assert_false(chiaki_regist_local_addr_usable(""));
+	munit_assert_false(chiaki_regist_local_addr_usable("0.0.0.0"));
+	munit_assert_false(chiaki_regist_local_addr_usable("::"));
+	munit_assert_false(chiaki_regist_local_addr_usable("0:0:0:0:0:0:0:0"));
+	munit_assert_false(chiaki_regist_local_addr_usable("not-an-address"));
+	munit_assert_false(chiaki_regist_local_addr_usable("192.168.1"));
+
+	munit_assert_true(chiaki_regist_local_addr_usable("10.0.2.15"));
+	munit_assert_true(chiaki_regist_local_addr_usable("192.168.1.50"));
+	munit_assert_true(chiaki_regist_local_addr_usable("127.0.0.1"));
+	munit_assert_true(chiaki_regist_local_addr_usable("fe80::1"));
+	return MUNIT_OK;
+}
+
+static MunitResult test_local_addr_for_peer_rejects_bad_args(const MunitParameter params[], void *user)
+{
+	char out[INET6_ADDRSTRLEN];
+	munit_assert_int(chiaki_regist_local_addr_for_peer(NULL, out, sizeof(out)), ==, CHIAKI_ERR_INVALID_DATA);
+	munit_assert_int(chiaki_regist_local_addr_for_peer("", out, sizeof(out)), ==, CHIAKI_ERR_INVALID_DATA);
+	munit_assert_int(chiaki_regist_local_addr_for_peer("127.0.0.1", NULL, sizeof(out)), ==, CHIAKI_ERR_INVALID_DATA);
+	// Must refuse a buffer it could not NUL-terminate an IPv6 address into.
+	munit_assert_int(chiaki_regist_local_addr_for_peer("127.0.0.1", out, INET6_ADDRSTRLEN - 1), ==, CHIAKI_ERR_INVALID_DATA);
+	munit_assert_int(chiaki_regist_local_addr_for_peer("not-an-address", out, sizeof(out)), ==, CHIAKI_ERR_PARSE_ADDR);
+	return MUNIT_OK;
+}
+
+static MunitResult test_local_addr_for_peer_loopback(const MunitParameter params[], void *user)
+{
+	// The route to loopback exists with no network, so this is the one peer we can assert on.
+	char out[INET6_ADDRSTRLEN];
+	ChiakiErrorCode err = chiaki_regist_local_addr_for_peer("127.0.0.1", out, sizeof(out));
+	munit_assert_int(err, ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_string_equal(out, "127.0.0.1");
+	munit_assert_true(chiaki_regist_local_addr_usable(out));
+	return MUNIT_OK;
+}
+
+static MunitResult test_request_payload_psn_uses_session_key_material(const MunitParameter params[], void *user)
+{
+	// Upstream derives the PS5 registration crypt from the PSN session's key material instead of
+	// a PIN when holepunch_info is present (lib/src/regist.c, chiaki_rpcrypt_init_regist_psn).
+	// This is the path an Android remote_connection session takes, so pin the two properties that
+	// matter: the key material is what decides the payload, and the PIN is ignored entirely.
+	ChiakiHolepunchRegistInfo hinfo;
+	memset(&hinfo, 0, sizeof(hinfo));
+	for(size_t i = 0; i < sizeof(hinfo.data1); i++)
+	{
+		hinfo.data1[i] = (uint8_t)(0x10 + i);
+		hinfo.data2[i] = (uint8_t)(0x40 + i);
+		hinfo.custom_data1[i] = (uint8_t)(0x70 + i);
+	}
+	strcpy(hinfo.regist_local_ip, "192.168.1.50");
+
+	const uint8_t account_id[CHIAKI_PSN_ACCOUNT_ID_SIZE] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+	ChiakiRPCrypt psn_crypt;
+	uint8_t psn_payload[0x400];
+	size_t psn_payload_size = sizeof(psn_payload);
+	ChiakiErrorCode err = chiaki_regist_request_payload_format(CHIAKI_TARGET_PS5_1, ambassador,
+			psn_payload, &psn_payload_size, &psn_crypt, NULL, account_id, pin, &hinfo);
+	munit_assert_int(err, ==, CHIAKI_ERR_SUCCESS);
+
+	// The PIN plays no part once key material is present.
+	ChiakiRPCrypt other_pin_crypt;
+	uint8_t other_pin_payload[0x400];
+	size_t other_pin_payload_size = sizeof(other_pin_payload);
+	err = chiaki_regist_request_payload_format(CHIAKI_TARGET_PS5_1, ambassador,
+			other_pin_payload, &other_pin_payload_size, &other_pin_crypt, NULL, account_id,
+			pin + 1, &hinfo);
+	munit_assert_int(err, ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_size(other_pin_payload_size, ==, psn_payload_size);
+	munit_assert_memory_equal(psn_payload_size, other_pin_payload, psn_payload);
+	munit_assert_memory_equal(sizeof(psn_crypt.bright), other_pin_crypt.bright, psn_crypt.bright);
+
+	// One flipped bit of custom_data1 must change the derived crypt, so the material is really used.
+	ChiakiHolepunchRegistInfo changed = hinfo;
+	changed.custom_data1[0] ^= 0x01;
+	ChiakiRPCrypt changed_crypt;
+	uint8_t changed_payload[0x400];
+	size_t changed_payload_size = sizeof(changed_payload);
+	err = chiaki_regist_request_payload_format(CHIAKI_TARGET_PS5_1, ambassador,
+			changed_payload, &changed_payload_size, &changed_crypt, NULL, account_id, pin, &changed);
+	munit_assert_int(err, ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_memory_not_equal(sizeof(changed_crypt.bright), changed_crypt.bright, psn_crypt.bright);
+
+	// And a PIN registration of the same console must not collide with the PSN one.
+	ChiakiRPCrypt pin_crypt;
+	uint8_t pin_payload[0x400];
+	size_t pin_payload_size = sizeof(pin_payload);
+	err = chiaki_regist_request_payload_format(CHIAKI_TARGET_PS5_1, ambassador,
+			pin_payload, &pin_payload_size, &pin_crypt, NULL, account_id, pin, NULL);
+	munit_assert_int(err, ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_memory_not_equal(sizeof(pin_crypt.bright), pin_crypt.bright, psn_crypt.bright);
+	return MUNIT_OK;
+}
+
 MunitTest tests_regist[] = {
 	{
 		"/aeropause_ps4_pre10",
@@ -80,6 +190,38 @@ MunitTest tests_regist[] = {
 	{
 		"/request_payload_ps4_pre10",
 		test_request_payload_ps4_pre10,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/request_payload_psn_uses_session_key_material",
+		test_request_payload_psn_uses_session_key_material,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/local_addr_usable",
+		test_local_addr_usable,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/local_addr_for_peer_rejects_bad_args",
+		test_local_addr_for_peer_rejects_bad_args,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/local_addr_for_peer_loopback",
+		test_local_addr_for_peer_loopback,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

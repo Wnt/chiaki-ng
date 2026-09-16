@@ -128,7 +128,7 @@ sheet, and Android's autofill save sheet (Samsung Pass on the S22, package `andr
 ## Proving the driver is a guard: the suite
 
 ```bash
-android/psn-mock/onboarding_suite.py --build                        # emulator, about 3.5 min
+android/psn-mock/onboarding_suite.py --build                        # emulator, about 12 min
 scripts/dev/device.py run PLE-N -- android/psn-mock/onboarding_suite.py --serial <phone>
 ```
 
@@ -142,6 +142,11 @@ host with the app's link selection explicitly disabled, as production is for a u
 | `redirect-dead-end` | FAIL `dead end: … in the browser`: Finish sign-in does nothing, the user is stuck on the blank redirect page |
 | `settings-redirect` | FAIL `left the app for com.android.settings (Android Settings)`: returning from the tab opens the link settings |
 | `instruction-paragraph` | FAIL `instruction paragraph: …` on the sign-in screen |
+| `exit-x` | PASS: on the redirect page the user presses the tab's close button instead of Finish; the app reopens the tab, which the mock's session cookie takes straight back to a fresh redirect (PLE-323) |
+| `exit-back` | PASS: the same with the back key, pressed until the tab closes |
+| `exit-open-in-browser` | PASS: the tab menu's "Open in <browser>", then the app from its launcher icon. Chrome 133 on the emulator has no such item (only a "Running in Chrome" footer that does nothing), so there the driver emulates it: close the tab, open the redirect page in the full browser, return by the launcher icon (`open_in_browser_item` in summary.json says which ran) |
+| `exit-idle` | PASS: the redirect page left alone for 60 s, then Finish sign-in |
+| `exit-loses-code` | FAIL `dead end: … in com.metallic.chiaki.psnmock`: leaving the tab strands the user on Continue signing in, as before PLE-323 |
 | `clean-after-faults` | PASS again, so no fault leaks into the next run |
 
 A fault case only counts when the driver fails for *that* reason. The faults live in
