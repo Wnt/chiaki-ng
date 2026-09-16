@@ -99,6 +99,8 @@
     <string name="preferences_decoder_late_frame_recovery_enabled_summary">Drop stale ready frames and request an IDR when five frames are backlogged (reconnect required)</string>
 	<string name="preferences_video_pacing_enabled_title">Vsync-paced video presenter</string>
 	<string name="preferences_video_pacing_enabled_summary">Pace decoded frames to display vsync with a dynamic de-jitter buffer (reconnect required)</string>
+	<string name="preferences_video_pacing_high_refresh_enabled_title">Pace on high-refresh displays</string>
+	<string name="preferences_video_pacing_high_refresh_enabled_summary">Allow timestamped frame release at 119 Hz and above (experimental; reconnect required)</string>
 	<string name="preferences_video_pacing_mode_title">Video pacing mode</string>
 	<string name="preferences_video_pacing_mode_title_lowest_latency">Lowest latency</string>
 	<string name="preferences_video_pacing_mode_title_balanced">Balanced</string>
@@ -224,6 +226,7 @@
     <string name="preferences_wifi_low_latency_lock_enabled_key">stream_wifi_low_latency_lock</string>
     <string name="preferences_decoder_late_frame_recovery_enabled_key">stream_decoder_late_frame_recovery</string>
 	<string name="preferences_video_pacing_enabled_key">stream_video_pacing_enabled</string>
+	<string name="preferences_video_pacing_high_refresh_enabled_key">stream_video_pacing_high_refresh</string>
 	<string name="preferences_video_pacing_mode_key">stream_video_pacing_mode</string>
 	<string name="preferences_video_presenter_lead_key">stream_video_presenter_lead</string>
 	<string name="preferences_video_recovery_strategy_key">stream_video_recovery_strategy</string>

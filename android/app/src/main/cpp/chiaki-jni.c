@@ -473,6 +473,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	AndroidChiakiVideoPresenterConfig presenter_config = ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT;
 	presenter_config.pacing_enabled = E->GetBooleanField(env, presenter_config_obj,
 			E->GetFieldID(env, presenter_config_class, "pacingEnabled", "Z"));
+	presenter_config.pacing_high_refresh_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "pacingHighRefreshEnabled", "Z"));
 	presenter_config.pacing_mode = (AndroidChiakiVideoPacingMode)E->GetIntField(env, presenter_config_obj,
 			E->GetFieldID(env, presenter_config_class, "pacingMode", "I"));
 	presenter_config.presenter_lead = (AndroidChiakiVideoPresenterLead)E->GetIntField(env, presenter_config_obj,

@@ -236,6 +236,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(videoPacingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoPacingEnabledKey, value).apply() }
 
+	val videoPacingHighRefreshEnabledKey get() = resources.getString(R.string.preferences_video_pacing_high_refresh_enabled_key)
+	var videoPacingHighRefreshEnabled
+		get() = sharedPreferences.getBoolean(videoPacingHighRefreshEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoPacingHighRefreshEnabledKey, value).apply() }
+
 	val videoPacingBoundedAgeEnabledKey get() = resources.getString(R.string.preferences_video_pacing_bounded_age_enabled_key)
 	var videoPacingBoundedAgeEnabled
 		get() = sharedPreferences.getBoolean(videoPacingBoundedAgeEnabledKey, false)
@@ -400,6 +405,7 @@ class Preferences(context: Context)
 
 	val videoPresenterConfig get() = AndroidChiakiVideoPresenterConfig(
 		pacingEnabled = videoPacingEnabled,
+		pacingHighRefreshEnabled = videoPacingHighRefreshEnabled,
 		pacingMode = videoPacingMode.nativeValue,
 		presenterLead = videoPresenterLead.nativeValue,
 		boundedAgeEnabled = videoPacingBoundedAgeEnabled,
