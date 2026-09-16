@@ -16,9 +16,22 @@ WebAuthn gets a genuine secure origin:
 
 ## Run it
 
+On CT950 the mock is a systemd user service, `pleikkari-psn-mock.service`. It runs
+`serve.sh run` from the shared clone (`/home/wnt/gta6/chiaki-ng`), so it survives
+reboots and the garbage collection of any ticket worktree. Landing a change to the mock
+in the shared clone takes effect on the next restart.
+
+```bash
+systemctl --user restart pleikkari-psn-mock    # restart it, e.g. after a landed mock change
+journalctl --user -u pleikkari-psn-mock        # its output
+android/psn-mock/serve.sh status               # the unit, and assetlinks HTTP status on both hosts
+android/psn-mock/serve.sh install              # (re)install the unit; stops a mock started by hand first
+```
+
+Without the unit, for a mock you are changing in a worktree (stop the unit first, both use port 18284):
+
 ```bash
 android/psn-mock/serve.sh start     # mock on 127.0.0.1:18284 + forwarder-agent, both backgrounded
-android/psn-mock/serve.sh status    # processes, and assetlinks HTTP status on both hosts
 android/psn-mock/serve.sh stop
 ```
 
@@ -29,17 +42,6 @@ android/psn-mock/serve.sh stop
 `~/.config/locator-kiosk/forwarder-agent.env`. The token reaches the agent
 through the environment, never on a command line. Logs and stored passkeys live
 in `~/.local/state/pleikkari-psn-mock/`.
-
-To keep the mock up across reboots, run the foreground form from a systemd user unit:
-
-```ini
-# ~/.config/systemd/user/pleikkari-psn-mock.service
-[Service]
-ExecStart=/home/wnt/gta6/chiaki-ng/android/psn-mock/serve.sh run
-Restart=always
-[Install]
-WantedBy=default.target
-```
 
 The mock's own tests are `python3 -m unittest discover -s android/psn-mock` (about 7 s, no network).
 
@@ -97,16 +99,19 @@ android/psn-mock/onboarding_test.py --build                          # verified 
 android/psn-mock/onboarding_test.py --build --link nolink            # production's situation
 android/psn-mock/onboarding_test.py --link nolink --select-domain    # the user enabled the link
 android/psn-mock/onboarding_test.py --scenario network-drop          # any scenario above
-node android/psn-mock/passkey_check.mjs                              # passkey branch, headless Chrome
+node android/psn-mock/passkey_check.mjs                              # passkey ceremony, headless Chrome
 ```
 
 The driver needs the mock up and the emulator booted (`scripts/dev/emu.sh start`),
-and it takes the emulator reservation. It resets the mock app to a first-run
+and it takes the emulator reservation. `--serial` runs it on a phone instead; wrap that
+in `scripts/dev/device.py run <ticket> --`. An APK already installed with the same hash is
+not sent again, because a 20 MB install over Wi-Fi ADB can take minutes. It resets the mock app to a first-run
 state by clearing the app's own data with `run-as`, because the adb wrapper
 refuses every uninstall. It taps through onboarding and fills the mock's form in
 the browser. It fails on:
 
 - any other app in front, above all Android Settings,
+- any Settings activity resumed at all, read from the `wm_set_resumed_activity` event log, so a Settings screen that comes and goes between two dumps still fails,
 - an app `TextView` of 14 or more words (an instruction paragraph),
 - 40 s with no screen change short of an end state (a dead end),
 - an app crash,
@@ -117,17 +122,57 @@ control. Artifacts go to `build/psn-mock/onboarding-*/` in the workspace:
 `summary.json`, a screenshot and UI dump per distinct screen, and the mock's
 events. One run takes 30–90 s.
 
+The driver declines the browser's own prompts the way a user would: Firefox's save-password
+sheet, and Android's autofill save sheet (Samsung Pass on the S22, package `android`).
+
+## Proving the driver is a guard: the suite
+
+```bash
+android/psn-mock/onboarding_suite.py --build                        # emulator, about 3.5 min
+scripts/dev/device.py run PLE-N -- android/psn-mock/onboarding_suite.py --serial <phone>
+```
+
+This is the one command to run after any change to sign-in or onboarding. It is not a
+gate step: it needs the emulator or a phone, and takes minutes. Every case uses the nolink
+host with the app's link selection explicitly disabled, as production is for a user:
+
+| Case | Expected |
+|---|---|
+| `clean` | PASS: tab, password, Finish sign-in, console list, Play fails honestly with a live Retry |
+| `redirect-dead-end` | FAIL `dead end: … in the browser`: Finish sign-in does nothing, the user is stuck on the blank redirect page |
+| `settings-redirect` | FAIL `left the app for com.android.settings (Android Settings)`: returning from the tab opens the link settings |
+| `instruction-paragraph` | FAIL `instruction paragraph: …` on the sign-in screen |
+| `clean-after-faults` | PASS again, so no fault leaks into the next run |
+
+A fault case only counts when the driver fails for *that* reason. The faults live in
+`app/src/debug/.../PsnMockFault.kt`, run only in a `-PchiakiPsnMock` build, and are
+switched per run with the device property `debug.pleikkari.psnmock.fault`, which the
+driver sets from `--fault` (and resets to `none` otherwise), so one APK serves every case.
+
+## Proving a release build cannot reach the mock
+
+```bash
+android/psn-mock/release_check.py --build --control build/psn-mock/psnmock-verified.apk   # about 1.5 min
+```
+
+It checks that Gradle refuses `-PchiakiPsnMock` for a release task, then builds `assembleRelease`
+and scans every entry of the release APK (dex, manifest, resources, native libraries), as UTF-8 and
+UTF-16LE, for the mock's markers (`madekivi`, `pleikkari-psn`, `psnmock`, `PSN MOCK`, `__mock`).
+It also requires the package to be `com.metallic.chiaki`, and requires Sony's production sign-in host
+to be found, so an empty scan cannot pass. `--control` scans a mock debug APK and requires the markers
+to be found there, which shows the scan would catch a mock build.
+
 ## What the mock cannot reproduce about Sony
 
 This list is where the next surprise will come from.
 
 1. **Sony's page is a multi-step JavaScript app. The mock's is a single form.** Sony asks for the ID and the password on separate steps. It can add 2-step verification, captcha or bot checks, "trust this browser", consent and age screens, account-locked and region errors. The mock models none of these.
 2. **How Sony redirects.** The mock answers the password form with a plain `302` straight after the user's tap. That is the navigation Chrome most readily hands to an app link. Sony's redirect may come from script, after asynchronous steps and after the tap's user activation has expired. Chrome may then show the blank redirect page even for a link it would otherwise open in the app. The mock's passkey branch does navigate from script (`location.assign`), which is the closer model.
-3. **Passkeys.** On the mock, the relying party is the mock host. On Sony it is Sony's domain, whose assetlinks list only Sony's apps. Credential Manager in the app's WebView can never use a Sony passkey. The mock deliberately does not delegate (`handle_all_urls` only). Still, no Android passkey provider was exercised here: the emulator has no Google account, and the check uses a CDP virtual authenticator in desktop Chrome. The S22's Samsung Pass and Google Password Manager are untested.
+3. **Passkeys.** On the mock, the relying party is the mock host. On Sony it is Sony's domain, whose assetlinks list only Sony's apps. Credential Manager in the app's WebView can never use a Sony passkey. The mock deliberately does not delegate (`handle_all_urls` only). Still, no Android passkey provider was exercised here: the emulator has no Google account, and the check uses a CDP virtual authenticator in desktop Chrome. The S22's Samsung Pass and Google Password Manager are untested. Since PLE-312 a passkey sign-in happens in the same browser tab as a password one and returns through the same Finish sign-in action, which the driver does exercise; the driver itself never performs a passkey ceremony.
 4. **The nolink build still carries one verified link.** The mock app declares both hosts, so Android's link settings show "1 verified link". Production has none. What the app does is the same, but the Settings screen text differs.
 5. **A network drop is only a stall.** Through Caddy and the forwarder, the app sees a 20 s stall and a closed connection or a `502`. It does not see a TCP reset, DNS failure, airplane mode, captive portal or a network switch mid-exchange.
 6. **Error bodies, code lifetime and cancel are guesses.** The `invalid_grant` body and `error_code` numbers are unverified against Sony. Sony's real code lifetime is unknown; the mock uses 300 s. What Sony sends back on cancel is also unknown; the mock uses OAuth's `error=access_denied`.
 7. **No sessions or SSO.** Sony may remember a signed-in browser. With `prompt=always` it should still ask, but the mock always shows the form and ignores `duid`, `smcid`, `ui`, `layout_type` and locale.
 8. **Token lifetime and refresh.** The mock's refresh tokens never expire and accept any scope. Sony rotates and expires them.
 9. **Anything after the console list.** Push WebSocket, session creation, wake and remote play commands return `501`. A mock console cannot be registered or streamed.
-10. **Browsers.** The emulator has Chrome only. The S22's default browser, Samsung Internet or Firefox, handles Custom Tabs and app links differently (see PLE-279 on Firefox's blocked background activity start).
+10. **Browsers.** The emulator has Chrome only. The S22's default browser is Firefox (checked 2026-09-16), with Samsung Pass as its autofill service; the suite passes there. Samsung Internet is untested, and handles Custom Tabs and app links differently (see PLE-279 on Firefox's blocked background activity start).

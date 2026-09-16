@@ -31,6 +31,7 @@ class PsnMockBanner : ContentProvider()
 		val host = psnMockHost() ?: return true
 		Log.w("PsnMock", "PSN MOCK BUILD: sign-in and console list go to https://$host, not Sony")
 		(context?.applicationContext as? Application)?.registerActivityLifecycleCallbacks(Callbacks("PSN MOCK · $host"))
+		context?.let(PsnMockFault::install)
 		return true
 	}
 

@@ -6,6 +6,7 @@
     android/psn-mock/onboarding_test.py --link nolink            # what production is: unverifiable link
     android/psn-mock/onboarding_test.py --link nolink --select-domain   # user enabled the link
     android/psn-mock/onboarding_test.py --scenario expired-code  # any scenario from psn_mock.SCENARIOS
+    android/psn-mock/onboarding_test.py --link nolink --fault settings-redirect   # must FAIL (PLE-302)
 
 It starts from a first-run state of com.metallic.chiaki.psnmock (a separate app from the
 real one), taps Sign in, fills the mock's password form in the browser tab, taps the tab's
@@ -14,11 +15,14 @@ listed console: the mock has no push service, so the link fails with HTTP 501, a
 checks that the failure is shown with a live Retry and that no NetworkOnMainThreadException
 was logged (PLE-312). It FAILS if:
   * anything other than the app or the browser comes to the front (Android Settings above all),
+  * a Settings activity is resumed at all, even between two screen dumps (the WindowManager event log),
   * the app shows an instruction paragraph,
   * the screen stops changing without reaching an end state (a dead end),
   * the app crashes,
 and for the `ok` scenario, if the console list never shows the mock's PS5.
 A failure scenario passes when the app ends on one of its own screens the user can act on.
+--fault puts back one of the onboarding defects users found (app/src/debug/.../PsnMockFault.kt),
+and a correct driver FAILS it; onboarding_suite.py runs every fault and checks the reason.
 Artifacts (a screenshot and UI dump per distinct screen, the mock's events, summary.json)
 go to build/psn-mock/onboarding-<time>-<link>-<scenario>/ in the workspace.
 
@@ -45,6 +49,8 @@ WORKSPACE = Path(os.environ.get("PLEIKKARI_WORKSPACE_ROOT", "/home/wnt/gta6"))
 PKG = "com.metallic.chiaki.psnmock"
 HOSTS = {"verified": "pleikkari-psn.lab.madekivi.fi", "nolink": "pleikkari-psn-nolink.lab.madekivi.fi"}
 BROWSERS = {"com.android.chrome", "com.chrome.beta", "com.chrome.dev", "org.mozilla.firefox", "com.sec.android.app.sbrowser"}
+FAULTS = ("redirect-dead-end", "settings-redirect", "instruction-paragraph")  # PsnMockFault.kt
+FAULT_PROPERTY = "debug.pleikkari.psnmock.fault"
 INSTRUCTION_WORDS = 14  # a TextView of the app with this many words is an instruction paragraph
 
 
@@ -135,10 +141,25 @@ def build_apk(link: str) -> Path:
     return target
 
 
+def selected_hosts(links: str) -> set[str]:
+    """Hosts under a `pm get-app-links` selection state other than Disabled."""
+    hosts, state = set(), None
+    for line in links.splitlines():
+        text = line.strip()
+        if text.endswith(":") and text[:-1] in ("Enabled", "Disabled"):
+            state = text[:-1]
+        elif text.endswith(":") or not text:
+            state = None
+        elif state == "Enabled":
+            hosts.add(text)
+    return hosts
+
+
 def reset_app(device: Device) -> None:
     """First-run state without uninstalling: the adb wrapper refuses any uninstall. Only the mock package."""
     assert PKG.endswith(".psnmock")
     device.shell(f"am force-stop {PKG}")
+    device.shell("input keyevent KEYCODE_HOME", check=False)  # nothing left in front from a previous run, Settings included
     # A sign-in tab left over from the last run would sit above the app (PLE-279 saw it crash Firefox).
     installed = device.shell("pm list packages", check=False)
     for browser in BROWSERS:
@@ -158,14 +179,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=float, default=150)
     parser.add_argument("--stall", type=float, default=40, help="seconds without a screen change that count as a dead end")
     parser.add_argument("--play", action="store_true", help="after the console list, tap the console and check Retry stays alive")
+    parser.add_argument("--out", type=Path, help="artifact directory (default: a new one under build/psn-mock)")
+    parser.add_argument("--fault", choices=FAULTS, help="make the mock build reintroduce this defect; the run must then FAIL")
     args = parser.parse_args(argv)
 
     host = HOSTS[args.link]
     run_id = time.strftime("%Y%m%dT%H%M%S")
-    out = WORKSPACE / "build/psn-mock" / f"onboarding-{run_id}-{args.link}-{args.scenario}"
+    out = WORKSPACE / "build/psn-mock" / f"onboarding-{run_id}-{args.link}-{args.scenario}{'-' + args.fault if args.fault else ''}"
+    out = args.out or out
     out.mkdir(parents=True, exist_ok=True)
     account = f"{args.scenario}+{run_id.lower()}@mock"
-    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "play": args.play, "account": account, "taps": 0, "screens": []}
+    summary: dict = {"link": args.link, "scenario": args.scenario, "select_domain": args.select_domain, "play": args.play, "fault": args.fault, "account": account, "taps": 0, "screens": []}
 
     def finish(result: str, reason: str) -> int:
         summary.update(result=result, reason=reason)
@@ -199,8 +223,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     device = Device(args.serial)
     reset_app(device)
-    log(f"installing {apk.name} on {args.serial}")
-    device.adb("install", "-r", "-t", str(apk), timeout=300)
+    # Over Wi-Fi ADB a 20 MB install can take minutes, so an APK already on the device is not sent again.
+    local_sha = hashlib.sha256(apk.read_bytes()).hexdigest()
+    installed_path = device.shell(f"pm path {PKG}", check=False).strip().splitlines()
+    remote_sha = device.shell(f"sha256sum {installed_path[0].split(':', 1)[1]}", check=False).split(" ")[0] if installed_path else ""
+    if remote_sha == local_sha:
+        log(f"{apk.name} is already installed on {args.serial}")
+    else:
+        log(f"installing {apk.name} on {args.serial}")
+        try:
+            device.adb("install", "-r", "-t", str(apk), timeout=600)
+        except (RuntimeError, subprocess.TimeoutExpired) as exc:
+            return finish("ERROR", f"install failed: {exc}")
     reset_app(device)
     if args.select_domain:
         device.shell(f"pm set-app-links-user-selection --user 0 --package {PKG} true {host}")
@@ -217,7 +251,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             return finish("FAIL", f"{host} never verified on the device; is assetlinks.json served?")
 
-    device.shell("logcat -c", check=False)
+    summary["selected_hosts"] = sorted(selected_hosts(links))
+    if not args.select_domain and host in summary["selected_hosts"]:
+        return finish("FAIL", f"precondition: {host} is still selected for the app, not the production situation")
+    # The app reads the fault when its process starts, and reset_app has stopped it.
+    device.shell(f"setprop {FAULT_PROPERTY} {args.fault or 'none'}")
+    device.shell("logcat -b all -c", check=False)
     device.shell(f"am start -W -n {PKG}/com.metallic.chiaki.main.MainActivity")
     started = last_change = time.monotonic()
     last_signature = ""
@@ -243,6 +282,13 @@ def main(argv: list[str] | None = None) -> int:
         if PKG in crash:
             (out / "crash.txt").write_text(crash)
             return finish("FAIL", "the app crashed")
+        # A dump every couple of seconds can miss a Settings screen the app opens and the user leaves at
+        # once; WindowManager logs every resumed activity.
+        resumed = device.shell("logcat -d -b events -s wm_set_resumed_activity", check=False)
+        settings = next((m.group(1) for m in re.finditer(r"wm_set_resumed_activity: \[\d+,([\w.]*settings[\w.]*)/", resumed, re.I)), None)
+        if settings:
+            (out / "resumed-activities.txt").write_text(resumed)
+            return finish("FAIL", f"left the app for {settings} (Android Settings)")
         snapshot = device.dump()
         if snapshot is None:  # uiautomator cannot dump while animating; try again
             time.sleep(1)
@@ -261,6 +307,15 @@ def main(argv: list[str] | None = None) -> int:
                 summary["screens"].append({"at_s": round(now - started, 1), "package": foreground, "texts": [n.text for n in nodes if n.text][:12]})
                 log(f"screen {index}: {foreground}: {[n.text for n in nodes if n.text][:6]}")
 
+        # Android's autofill save sheet (Samsung Pass on the S22) sits over the browser as package
+        # "android" after the password is sent; a user declines it and stays in the flow.
+        autofill_no = next((n for n in nodes if n.package == "android" and n.rid == "android:id/autofill_save_no"), None)
+        if autofill_no is not None:
+            device.tap(autofill_no)
+            summary["taps"] += 1
+            summary["browser_prompts"] = summary.get("browser_prompts", 0) + 1
+            time.sleep(1)
+            continue
         if foreground and foreground not in (PKG, *BROWSERS):
             return finish("FAIL", f"left the app for {foreground}" + (" (Android Settings)" if "settings" in foreground else ""))
         paragraph = next((n.text for n in mine if len(n.text.split()) >= INSTRUCTION_WORDS), None)
