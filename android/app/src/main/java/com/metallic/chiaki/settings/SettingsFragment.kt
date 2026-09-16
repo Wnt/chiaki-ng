@@ -18,6 +18,8 @@ import com.metallic.chiaki.common.exportAndShareAllSettings
 import com.metallic.chiaki.common.ext.viewModelFactory
 import com.metallic.chiaki.common.getDatabase
 import com.metallic.chiaki.common.importSettingsFromUri
+import com.metallic.chiaki.stream.VideoTimestampSource
+import com.metallic.chiaki.stream.videoTimestampSource
 
 class DataStore(val preferences: Preferences): PreferenceDataStore()
 {
@@ -251,6 +253,18 @@ open class SettingsFragment: PreferenceFragmentCompat(), TitleFragment
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_display_refresh_rate_key))?.let {
 			it.entryValues = Preferences.displayRefreshRateModeAll.map { mode -> mode.value }.toTypedArray()
 			it.entries = Preferences.displayRefreshRateModeAll.map { mode -> getString(mode.title) }.toTypedArray()
+		}
+
+		preferenceScreen.findPreference<SwitchPreference>(getString(R.string.preferences_real_video_timestamps_key))?.let {
+			it.summaryProvider = Preference.SummaryProvider<SwitchPreference> {
+				when(videoTimestampSource(preferences.realVideoTimestamps, preferences.videoPacingEnabled))
+				{
+					VideoTimestampSource.FRAME_INDEX ->
+						getString(R.string.preferences_real_video_timestamps_summary_frame_index)
+					VideoTimestampSource.SYNTHETIC_COUNTER ->
+						getString(R.string.preferences_real_video_timestamps_summary_synthetic)
+				}
+			}
 		}
 
 		preferenceScreen.findPreference<ListPreference>(getString(R.string.preferences_video_pacing_mode_key))?.let {

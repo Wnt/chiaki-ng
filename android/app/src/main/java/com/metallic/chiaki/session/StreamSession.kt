@@ -12,6 +12,7 @@ import androidx.lifecycle.MutableLiveData
 import com.metallic.chiaki.common.LogManager
 import com.metallic.chiaki.lib.*
 import com.metallic.chiaki.stream.displayTimingChanged
+import com.metallic.chiaki.stream.useFrameIndexVideoTimestamps
 
 sealed class StreamState
 object StreamStateIdle: StreamState()
@@ -73,7 +74,8 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		try
 		{
 			val session = Session(connectInfo, logManager.createNewFile().file.absolutePath, logVerbose,
-				realVideoTimestamps || connectInfo.videoPresenterConfig.pacingEnabled,
+				useFrameIndexVideoTimestamps(realVideoTimestamps,
+					connectInfo.videoPresenterConfig.pacingEnabled),
 				decoderInputThread, context = context)
 			session.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 			_state.value = StreamStateConnecting
