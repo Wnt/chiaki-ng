@@ -62,4 +62,44 @@ class HomeConsoleTest
 			result.map(HomeConsole::status)
 		)
 	}
+
+	private fun discovered(name: String, hostId: String, registration: RegisteredHost? = null) = DiscoveredDisplayHost(
+		registration,
+		DiscoveryHost(
+			DiscoveryHost.State.READY, 0U, "192.168.1.164", null,
+			"00030010", name, null, hostId, null, null
+		)
+	)
+
+	@Test fun unlinkedNetworkConsoleAndUnlinkedAccountConsoleAreOneRow()
+	{
+		val psn = PsnConsole(PsnDevice("duid", "PS5-466"), null)
+
+		val result = mergeHomeConsoles(listOf(discovered("PS5-466", "C0151B3DD8BC")), listOf(psn))
+
+		assertEquals(1, result.size)
+		assertEquals(HomeConsoleStatus.REGISTRATION_REQUIRED, result.single().status)
+		assertEquals(psn, result.single().psnConsole)
+		assertEquals("192.168.1.164", result.single().displayHost?.host)
+	}
+
+	@Test fun linkedNetworkConsoleIsNotClaimedByAnUnlinkedAccountConsoleOfTheSameName()
+	{
+		val registration = registered(3, "PS5-466")
+		val psn = PsnConsole(PsnDevice("duid", "PS5-466"), null)
+
+		val result = mergeHomeConsoles(listOf(discovered("PS5-466", "000000000003", registration)), listOf(psn))
+
+		assertEquals(2, result.size)
+		assertEquals(null, result.first { it.displayHost != null }.psnConsole)
+	}
+
+	@Test fun differentlyNamedAccountConsoleStaysItsOwnRow()
+	{
+		val psn = PsnConsole(PsnDevice("duid", "Office"), null)
+
+		val result = mergeHomeConsoles(listOf(discovered("PS5-466", "C0151B3DD8BC")), listOf(psn))
+
+		assertEquals(2, result.size)
+	}
 }
