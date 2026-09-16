@@ -8,6 +8,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- PLE-324: a browser-mode WebView asks Credential Manager with the page's origin, which needs this. -->
+    <uses-permission android:name="android.permission.CREDENTIAL_MANAGER_SET_ORIGIN" />
+
     <application
         android:label="PSN MOCK Chiaki"
         tools:replace="android:label">
@@ -16,6 +19,11 @@
             android:name="com.metallic.chiaki.remote.PsnMockBanner"
             android:authorities="${applicationId}.psnmockbanner"
             android:exported="false" />
+
+        <!-- PLE-324: WebAuthn in the app's own WebView; exported so adb can start it. -->
+        <activity
+            android:name="com.metallic.chiaki.regist.PsnMockWebAuthnProbe"
+            android:exported="true" />
 
         <activity android:name=".regist.PsnRedirectActivity">
             <intent-filter android:autoVerify="true">
