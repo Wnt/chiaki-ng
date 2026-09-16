@@ -480,7 +480,9 @@ def make_handler(state: State):
                 return self.send_json(HTTPStatus.NOT_FOUND, {"error": "no assetlinks on this host"})
             state.event("assetlinks", host=self.host, served=True)
             statements = [{
-                "relation": ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
+                # handle_all_urls only. Sony's assetlinks do not delegate its passkeys to this app either, and
+                # get_login_creds would let a WebView use the mock's passkeys where Sony's never work.
+                "relation": ["delegate_permission/common.handle_all_urls"],
                 "target": {"namespace": "android_app", "package_name": package,
                            "sha256_cert_fingerprints": [":".join(DEBUG_CERT_SHA256[i:i + 2] for i in range(0, 64, 2)).upper()]},
             } for package in state.packages]
