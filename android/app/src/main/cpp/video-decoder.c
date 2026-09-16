@@ -678,6 +678,7 @@ void android_chiaki_video_decoder_get_diagnostics(AndroidChiakiVideoDecoder *dec
 	diagnostics->cadence_err_p99_ns = presenter.cadence_err_p99_ns;
 	diagnostics->decode_ewma_ns = presenter.decode_ewma_ns;
 	diagnostics->cadence_window_dropped_frames = presenter.cadence_window_dropped_frames;
+	diagnostics->vsync_period_ns = presenter.vsync_period_ns;
 	diagnostics->presenter_queue_depth = presenter.queue_depth;
 }
 

@@ -414,7 +414,8 @@ class Preferences(context: Context)
 	val packetLossMax get() = packetLossMaxPercent / 100.0
 
 	// PLE-75 decoder experiments; 0 / false = the codec's own defaults (today's behaviour).
-	fun validateDecoderOperatingRate(rate: Int) = max(0, min(1000, rate))
+	// PLE-116: ceiling 4000 so the 960 / 1920 sweep is reachable (1000 silently clamped 1920 before).
+	fun validateDecoderOperatingRate(rate: Int) = max(0, min(4000, rate))
 	val decoderOperatingRateKey get() = resources.getString(R.string.preferences_decoder_operating_rate_key)
 	var decoderOperatingRate
 		get() = validateDecoderOperatingRate(sharedPreferences.getInt(decoderOperatingRateKey, 0))

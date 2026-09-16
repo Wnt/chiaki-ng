@@ -258,11 +258,7 @@ class StreamActivity : AppCompatActivity()
 			viewModel.connectInfo.videoProfile.height,
 			prefs.sharpnessIntensity,
 			onDecoderSurfaceReady = { surface ->
-				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
-					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
-				else
-					null
-				viewModel.session.attachToSurface(surface, binding.surfaceView.display, refreshHz)
+				viewModel.session.attachToSurface(surface, binding.surfaceView.display)
 			},
 			onDecoderSurfaceDestroyed = { viewModel.session.detachSurface() },
 			onUnavailable = { failedRenderer ->
@@ -286,11 +282,7 @@ class StreamActivity : AppCompatActivity()
 		binding.debandSurfaceView.visibility = View.VISIBLE
 		debandRenderer = DebandRenderer(
 			onSurfaceReady = { surface ->
-				val refreshHz = if(prefs.displayRefreshRateMode == Preferences.DisplayRefreshRateMode.MATCH_STREAM)
-					viewModel.connectInfo.videoProfile.maxFPS.toDouble()
-				else
-					null
-				viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display, refreshHz)
+				viewModel.session.attachToSurface(surface, binding.debandSurfaceView.display)
 			},
 			onRequestRender = { binding.debandSurfaceView.requestRender() },
 			renderWhenDirty = renderWhenDirty
@@ -488,6 +480,8 @@ class StreamActivity : AppCompatActivity()
 		displayManager = manager
 		displayListener = listener
 		manager.registerDisplayListener(listener, uiVisibilityHandler)
+		val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
+		updatePresenterDisplayTiming(manager.getDisplay(streamDisplay.displayId) ?: streamDisplay)
 	}
 
 	private fun unregisterDisplayListener()

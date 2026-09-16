@@ -378,17 +378,25 @@ static void on_vsync(AndroidChiakiVideoPresenter *presenter, int64_t app_vsync_n
 	if(presenter->last_vsync_ns > 0)
 	{
 		int64_t observed_period_ns = physical_vsync_ns - presenter->last_vsync_ns;
-		AndroidChiakiVideoPresenterPeriodObservation observation =
-				android_chiaki_video_presenter_classify_period(presenter->vsync_period_ns, observed_period_ns);
-		if(observation == ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_RELOCK)
-			presenter->vsync_period_ns = observed_period_ns;
-		else if(observation == ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_SMOOTH)
-			presenter->vsync_period_ns = (presenter->vsync_period_ns * 7 + observed_period_ns) / 8;
-		else if(observed_period_ns >= presenter->vsync_period_ns * 3 / 2)
+		if(presenter->vsync_period_waiting_for_choreographer)
 		{
-			uint64_t elapsed_vsyncs = (uint64_t)((observed_period_ns + presenter->vsync_period_ns / 2) / presenter->vsync_period_ns);
-			if(elapsed_vsyncs > 1)
-				presenter->missed_vsyncs += elapsed_vsyncs - 1;
+			presenter->vsync_period_ns = android_chiaki_video_presenter_seed_period(
+					0.0, observed_period_ns, presenter->stream_fps);
+			presenter->vsync_period_waiting_for_choreographer = false;
+		}
+		else
+		{
+			AndroidChiakiVideoPresenterPeriodObservation observation =
+					android_chiaki_video_presenter_classify_period(presenter->vsync_period_ns, observed_period_ns);
+			if(observation == ANDROID_CHIAKI_VIDEO_PRESENTER_PERIOD_GAP
+					&& observed_period_ns >= presenter->vsync_period_ns * 3 / 2)
+			{
+				uint64_t elapsed_vsyncs = (uint64_t)((observed_period_ns + presenter->vsync_period_ns / 2) / presenter->vsync_period_ns);
+				if(elapsed_vsyncs > 1)
+					presenter->missed_vsyncs += elapsed_vsyncs - 1;
+			}
+			presenter->vsync_period_ns = android_chiaki_video_presenter_update_period(
+					presenter->vsync_period_ns, observed_period_ns);
 		}
 	}
 	presenter->last_vsync_ns = physical_vsync_ns;
@@ -767,12 +775,17 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	mode = sanitize_mode(mode);
 	lead_mode = sanitize_lead_mode(lead_mode);
 	recovery_strategy = android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy);
+	bool panel_refresh_valid = refresh_hz > 1.0;
+	double seeded_refresh_hz = panel_refresh_valid ? refresh_hz : (stream_fps > 0 ? stream_fps : 60);
+	int64_t seeded_period_ns = android_chiaki_video_presenter_seed_period(
+			panel_refresh_valid ? refresh_hz : 0.0, 0, stream_fps);
 	chiaki_mutex_lock(&presenter->mutex);
 	presenter->codec = codec;
 	presenter->stream_fps = stream_fps > 0 ? stream_fps : 60;
-	presenter->refresh_hz = refresh_hz > 1.0 ? refresh_hz : 60.0;
+	presenter->refresh_hz = seeded_refresh_hz;
 	presenter->app_vsync_offset_ns = app_vsync_offset_ns;
-	presenter->vsync_period_ns = (int64_t)(1000000000.0 / presenter->refresh_hz + 0.5);
+	presenter->vsync_period_ns = seeded_period_ns;
+	presenter->vsync_period_waiting_for_choreographer = !panel_refresh_valid;
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
@@ -806,6 +819,9 @@ ChiakiErrorCode android_chiaki_video_presenter_start(AndroidChiakiVideoPresenter
 	presenter->cadence_window_dropped_frames = 0;
 	memset(presenter->input_metadata, 0, sizeof(presenter->input_metadata));
 	chiaki_mutex_unlock(&presenter->mutex);
+	CHIAKI_LOGI(presenter->log, "Video presenter vsync period seeded: %lld ns (source=%s, %.2f Hz)",
+			(long long)seeded_period_ns, panel_refresh_valid ? "panel" : "stream",
+			seeded_refresh_hz);
 
 	if(mode != ANDROID_CHIAKI_VIDEO_PACING_DISABLED && presenter->refresh_hz >= 119.0)
 		CHIAKI_LOGI(presenter->log, "Video presenter %s mode using immediate release: %.2f Hz display (timestamped release disabled at 120 Hz)",
@@ -905,9 +921,11 @@ void android_chiaki_video_presenter_set_timing(AndroidChiakiVideoPresenter *pres
 	recovery_strategy = android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy);
 	chiaki_mutex_lock(&presenter->mutex);
 	presenter->stream_fps = stream_fps > 0 ? stream_fps : 60;
-	presenter->refresh_hz = refresh_hz > 1.0 ? refresh_hz : 60.0;
+	presenter->refresh_hz = refresh_hz > 1.0 ? refresh_hz : presenter->stream_fps;
 	presenter->app_vsync_offset_ns = app_vsync_offset_ns;
-	presenter->vsync_period_ns = (int64_t)(1000000000.0 / presenter->refresh_hz + 0.5);
+	presenter->vsync_period_ns = android_chiaki_video_presenter_seed_period(
+			refresh_hz, 0, presenter->stream_fps);
+	presenter->vsync_period_waiting_for_choreographer = refresh_hz <= 1.0;
 	presenter->mode = mode;
 	presenter->lead_mode = lead_mode;
 	presenter->max_queue_age_periods = max_queue_age_periods;
@@ -985,6 +1003,8 @@ void android_chiaki_video_presenter_get_diagnostics(AndroidChiakiVideoPresenter 
 	diagnostics->cadence_err_p99_ns = presenter->cadence.err_p99_ns;
 	diagnostics->decode_ewma_ns = presenter->cadence.decode_ewma_ns;
 	diagnostics->cadence_window_dropped_frames = presenter->cadence_window_dropped_frames;
+	diagnostics->vsync_period_ns = presenter->vsync_period_ns > 0
+			? (uint64_t)presenter->vsync_period_ns : 0;
 	diagnostics->queue_depth = presenter->queue_size;
 	uint32_t count = presenter->diagnostics_decode_count;
 	uint64_t samples[ANDROID_CHIAKI_VIDEO_DIAGNOSTICS_CAPACITY];

@@ -62,6 +62,7 @@ typedef struct android_chiaki_video_presenter_diagnostics_t
 	uint64_t cadence_err_p99_ns;
 	uint64_t decode_ewma_ns;
 	uint64_t cadence_window_dropped_frames;
+	uint64_t vsync_period_ns;
 	uint32_t queue_depth;
 } AndroidChiakiVideoPresenterDiagnostics;
 
@@ -118,6 +119,7 @@ typedef struct android_chiaki_video_presenter_t
 	double refresh_hz;
 	int64_t app_vsync_offset_ns;
 	int64_t vsync_period_ns;
+	bool vsync_period_waiting_for_choreographer;
 	int64_t last_vsync_ns;
 
 	bool timeline_valid;
