@@ -37,7 +37,8 @@ import kotlinx.coroutines.launch
 /**
  * Signs in inside a WebView, which reads Sony's redirect itself: no settings, nothing to paste.
  * Only when Sony asks for a passkey, which the WebView cannot provide, does the sign-in move to a
- * browser tab. That tab carries a Finish sign-in button handing the page address back to the app.
+ * browser tab. That tab carries a Finish sign-in button handing the page address back to the app,
+ * directly where the browser allows it and otherwise as soon as the tab is closed.
  */
 class PsnLoginActivity : AppCompatActivity()
 {
@@ -114,7 +115,7 @@ class PsnLoginActivity : AppCompatActivity()
 			return
 		browserLaunched = false
 		browserPauseObserved = false
-		if(!consumeClipboardRedirect())
+		if(PsnPendingRedirect.take()?.let(::handleRedirect) != true && !consumeClipboardRedirect())
 			showBrowserReturnedWithoutCode()
 	}
 
@@ -230,15 +231,19 @@ class PsnLoginActivity : AppCompatActivity()
 		browserLaunched = true
 		browserPauseObserved = false
 		browserOpenedAtMs = System.currentTimeMillis()
+		PsnPendingRedirect.take()
 	}
 
 	private fun customTabIntent(uri: Uri): Intent?
 	{
 		val packageName = findCustomTabsPackage(uri) ?: return null
-		val finishIntent = PendingIntent.getActivity(
+		// A broadcast, not an activity: Android 14 and later drop an activity PendingIntent sent by a
+		// browser that does not opt in to background starts (Firefox 152 does not), while a receiver
+		// may open the app because the tab runs in the app's task.
+		val finishIntent = PendingIntent.getBroadcast(
 			this,
 			0,
-			Intent(this, PsnRedirectActivity::class.java),
+			Intent(this, PsnRedirectReceiver::class.java),
 			// The browser fills in the page address, so the intent has to stay mutable.
 			PendingIntent.FLAG_UPDATE_CURRENT or
 				if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
@@ -311,6 +316,7 @@ class PsnLoginActivity : AppCompatActivity()
 		if(handlingRedirect)
 			return
 		handlingRedirect = true
+		PsnPendingRedirect.take()
 		binding.webView.stopLoading()
 		binding.webView.visibility = View.GONE
 		binding.continueButton.visibility = View.GONE

@@ -2,7 +2,9 @@
 
 package com.metallic.chiaki.regist
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,5 +69,17 @@ class PsnSignInFlowTest
 	fun inAppSignIn_doesNotHandleBrowserReturn()
 	{
 		assertFalse(shouldHandlePsnBrowserReturn(false, false, true, true))
+	}
+
+	@Test
+	fun pendingRedirect_keepsOnlySonyRedirectsAndIsTakenOnce()
+	{
+		PsnPendingRedirect.take()
+		PsnPendingRedirect.offer("https://ca.account.sony.com/signin")
+		assertNull(PsnPendingRedirect.take())
+		val redirect = "https://remoteplay.dl.playstation.net/remoteplay/redirect?code=abc"
+		PsnPendingRedirect.offer(redirect)
+		assertEquals(redirect, PsnPendingRedirect.take())
+		assertNull(PsnPendingRedirect.take())
 	}
 }

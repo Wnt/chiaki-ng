@@ -96,6 +96,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".regist.PsnRedirectReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".regist.RegistExecuteActivity"
             android:theme="@style/AppTheme"

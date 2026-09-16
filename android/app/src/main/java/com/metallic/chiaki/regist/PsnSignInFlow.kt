@@ -64,3 +64,21 @@ internal fun shouldHandlePsnBrowserReturn(
 	browserLaunched: Boolean,
 	browserPauseObserved: Boolean
 ): Boolean = browserSignIn && !handlingRedirect && browserLaunched && browserPauseObserved
+
+/**
+ * A redirect handed over by the sign-in tab's Finish button. The receiver also opens the app, which
+ * Android allows while the tab sits in the app's own task; if a launcher or browser setup places it
+ * elsewhere, the redirect waits here until the sign-in screen is in front again.
+ */
+internal object PsnPendingRedirect
+{
+	@Volatile private var address: String? = null
+
+	fun offer(value: String)
+	{
+		if(parsePsnRedirect(value) != PsnRedirect.NotRedirect)
+			address = value
+	}
+
+	fun take(): String? = synchronized(this) { address.also { address = null } }
+}

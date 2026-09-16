@@ -14,6 +14,7 @@
         android:theme="@style/AppTheme.Toolbar"
         app:navigationContentDescription="@android:string/cancel"
         app:navigationIcon="@drawable/ic_close"
+        app:navigationIconTint="?attr/colorOnPrimary"
         app:title="@string/action_psn_sign_in"
         app:titleTextColor="?attr/colorOnPrimary" />
 
