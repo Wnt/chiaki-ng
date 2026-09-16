@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
+#define _GNU_SOURCE
+
 #include <jni.h>
 
 #include <android/log.h>
@@ -12,6 +14,7 @@
 
 #include <string.h>
 #include <errno.h>
+#include <sched.h>
 #include <unistd.h>
 #include <sys/resource.h>
 #include <linux/in.h>
@@ -83,26 +86,33 @@ JavaVM *global_vm;
 static bool g_thread_priority_boost_enabled = false;
 
 // Registered once at load time with chiaki_thread_set_affinity_cb(); the lib core and the
-// Android decoder output thread call chiaki_thread_set_affinity() from their own thread.
+// Android decoder output and presenter threads call chiaki_thread_set_affinity() themselves.
 static void android_chiaki_thread_affinity_cb(ChiakiThreadName name, void *user)
 {
 	(void)user;
 	if(!g_thread_priority_boost_enabled)
 		return;
 
-	int nice_value;
 	switch(name)
 	{
 		case CHIAKI_THREAD_NAME_TAKION:
 		case CHIAKI_THREAD_NAME_VIDEO_DECODER:
-			nice_value = -10;
+		case CHIAKI_THREAD_NAME_VIDEO_PRESENTER:
 			break;
 		default:
 			return;
 	}
 
+	const int nice_value = -10;
 	if(setpriority(PRIO_PROCESS, gettid(), nice_value) != 0)
 		CHIAKI_LOGW(&global_log, "Failed to set thread priority for thread name %d to nice %d: %s", (int)name, nice_value, strerror(errno));
+
+	cpu_set_t big_cores;
+	CPU_ZERO(&big_cores);
+	for(int cpu = 4; cpu <= 7; cpu++)
+		CPU_SET(cpu, &big_cores);
+	if(sched_setaffinity(0, sizeof(big_cores), &big_cores) != 0)
+		CHIAKI_LOGW(&global_log, "Failed to set big-core affinity for thread name %d to CPUs 4-7: %s", (int)name, strerror(errno));
 }
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *reserved)
