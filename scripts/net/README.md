@@ -81,6 +81,26 @@ Install the script somewhere on root's PATH, for example:
 sudo install -m 0755 scripts/net/impair.sh /usr/local/sbin/impair.sh
 ```
 
+### Guest deployment
+
+The checked-in deployment fragments under `scripts/net/guest/` match the lab
+guest described in `docs/NETWORK-IMPAIRMENT-RUNBOOK.md`:
+
+- `99-pleikkari-netem.conf` enables IPv4 forwarding, disables redirects, and
+  keeps the impairment NIC IPv4-only. Install it in `/etc/sysctl.d/`.
+- `dnsmasq-pleikkari-impair.conf` serves the VLAN 40 DHCP range and forwards
+  DNS to the main-LAN resolver. Install it in `/etc/dnsmasq.d/`.
+- `pleikkari-ifb.conf` belongs on the Proxmox host in
+  `/etc/modules-load.d/`. An LXC can create IFBs after the host loads the
+  module, but cannot load a host kernel module itself.
+- `ct950-impair-route.conf` is the CT950 systemd-networkd drop-in for
+  `/etc/systemd/network/eth0.network.d/`. It keeps ADB/control return traffic
+  on the direct path to the guest instead of depending on a same-interface
+  ICMP redirect from the UniFi gateway.
+
+These fragments intentionally contain routing only. The guest has no NAT
+rule; the UniFi gateway owns the static return route.
+
 ### Profiles
 
 | Profile | Netem parameters in each direction |
