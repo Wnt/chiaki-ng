@@ -8,6 +8,7 @@
 #define VIDEO_CADENCE_EWMA_SHIFT 5
 #define VIDEO_CADENCE_ANCHOR_SLEW_NS 1000000LL
 #define VIDEO_CADENCE_ANCHOR_SLEW_DIVISOR 64
+#define VIDEO_CADENCE_ANCHOR_RELOCK_NS 4000000LL
 #define VIDEO_CADENCE_DEPTH_FLOOR_NS 4000000ULL
 #define VIDEO_CADENCE_DEPTH_CAP_NS 32000000ULL
 #define VIDEO_CADENCE_DEPTH_GUARD_NS 1000000ULL
@@ -88,6 +89,7 @@ bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadenc
 		cadence->base_frame_index = unwrapped;
 		cadence->last_frame_index = unwrapped;
 		cadence->anchor_ns = ready_ns;
+		cadence->previous_positive_err_ns = 0;
 		android_chiaki_video_histogram_add(&cadence->err_histogram, 0);
 	}
 	else
@@ -98,16 +100,34 @@ bool android_chiaki_video_cadence_record_frame(AndroidChiakiVideoCadence *cadenc
 			return false;
 		int64_t expected_ns = cadence->anchor_ns + (int64_t)(frame_delta * period_ns);
 		int64_t err_ns = ready_ns - expected_ns;
-		android_chiaki_video_histogram_add(&cadence->err_histogram,
-				err_ns > 0 ? (uint64_t)err_ns : 0);
 		if(err_ns < 0)
+		{
 			cadence->anchor_ns += err_ns;
+			cadence->previous_positive_err_ns = 0;
+		}
+		else if(err_ns >= VIDEO_CADENCE_ANCHOR_RELOCK_NS
+				&& cadence->previous_positive_err_ns >= VIDEO_CADENCE_ANCHOR_RELOCK_NS)
+		{
+			// One late arrival is jitter. The same positive phase error on the next
+			// frame means the source clock moved, so retaining it would make every
+			// later sample late as well. Fold only the persistent part into the
+			// anchor and leave any residual as the current frame's jitter sample.
+			int64_t correction_ns = cadence->previous_positive_err_ns < err_ns
+					? cadence->previous_positive_err_ns : err_ns;
+			cadence->anchor_ns += correction_ns;
+			err_ns -= correction_ns;
+			cadence->previous_positive_err_ns = err_ns;
+		}
 		else
 		{
 			int64_t correction_ns = err_ns < VIDEO_CADENCE_ANCHOR_SLEW_NS
 					? err_ns : VIDEO_CADENCE_ANCHOR_SLEW_NS;
 			cadence->anchor_ns += correction_ns / VIDEO_CADENCE_ANCHOR_SLEW_DIVISOR;
+			cadence->previous_positive_err_ns = err_ns
+					- correction_ns / VIDEO_CADENCE_ANCHOR_SLEW_DIVISOR;
 		}
+		android_chiaki_video_histogram_add(&cadence->err_histogram,
+				err_ns > 0 ? (uint64_t)err_ns : 0);
 		cadence->last_frame_index = unwrapped;
 	}
 

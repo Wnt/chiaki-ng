@@ -20,6 +20,7 @@ typedef struct android_chiaki_video_cadence_t
 	uint64_t base_frame_index;
 	uint64_t last_frame_index;
 	int64_t anchor_ns;
+	int64_t previous_positive_err_ns;
 	AndroidChiakiVideoHistogram err_histogram;
 	uint64_t decode_ewma_ns;
 	uint64_t decode_window_max_ns;

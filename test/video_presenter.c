@@ -27,6 +27,9 @@ static uint64_t sorted_percentile(uint64_t *samples, uint32_t count,
 	return samples[index];
 }
 
+static void assert_cadence_persistent_phase_step_relocks(void);
+static void assert_cadence_clock_drift_stays_in_range(void);
+
 static MunitResult test_histogram_matches_sorted_percentile(const MunitParameter params[], void *user)
 {
 	(void)params;
@@ -52,6 +55,11 @@ static MunitResult test_histogram_matches_sorted_percentile(const MunitParameter
 		munit_assert_uint64(actual, <=, expected);
 		munit_assert_uint64(expected - actual, <, ANDROID_CHIAKI_VIDEO_HISTOGRAM_BUCKET_NS);
 	}
+
+	android_chiaki_video_histogram_reset(&histogram);
+	android_chiaki_video_histogram_add(&histogram, 200123456ULL);
+	munit_assert_uint64(android_chiaki_video_histogram_percentile(&histogram, 997, 1000), ==,
+			200000000ULL);
 
 	android_chiaki_video_histogram_reset(&histogram);
 	android_chiaki_video_histogram_add(&histogram, ANDROID_CHIAKI_VIDEO_HISTOGRAM_MAX_NS + 1);
@@ -102,6 +110,8 @@ static MunitResult test_cadence_stable_window(const MunitParameter params[], voi
 	munit_assert_uint64(cadence.decode_ewma_ns, ==, 8000000);
 	munit_assert_uint64(cadence.target_ns, ==, 4000000);
 	munit_assert_uint64(cadence.depth_ns, ==, 4000000);
+	assert_cadence_persistent_phase_step_relocks();
+	assert_cadence_clock_drift_stays_in_range();
 	return MUNIT_OK;
 }
 
@@ -115,7 +125,9 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 	const uint64_t period_us = 1000000 / 60;
 	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
 	{
-		uint64_t late_us = i >= 100 ? 10000 : 0;
+		// Repeated isolated late arrivals are jitter, rather than a persistent
+		// source-clock phase change, and must remain visible to the percentile.
+		uint64_t late_us = i >= 100 && (i & 1) == 0 ? 10000 : 0;
 		android_chiaki_video_cadence_record_decode(&cadence, 8000000);
 		android_chiaki_video_cadence_record_frame(&cadence, (ChiakiSeqNum16)i,
 				2000000 + i * period_us + late_us, 60);
@@ -124,6 +136,45 @@ static MunitResult test_cadence_late_tail_raises_target(const MunitParameter par
 	munit_assert_uint64(cadence.target_ns, >=, 9000000);
 	munit_assert_uint64(cadence.depth_ns, ==, cadence.target_ns);
 	return MUNIT_OK;
+}
+
+static void assert_cadence_persistent_phase_step_relocks(void)
+{
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence);
+	const uint64_t period_us = 1000000 / 60;
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW; i++)
+	{
+		// Model a clean encoder cadence pause: after frame 59 every subsequent
+		// frame is one period later. Only the transition is an outlier; the new
+		// source-clock phase must not make the remaining window late.
+		uint64_t phase_us = i >= 60 ? period_us : 0;
+		android_chiaki_video_cadence_record_decode(&cadence, 8000000);
+		android_chiaki_video_cadence_record_frame(&cadence, (ChiakiSeqNum16)i,
+				3000000 + i * period_us + phase_us, 60);
+	}
+	munit_assert_uint64(cadence.err_p99_ns, <, 4000000);
+	munit_assert_uint64(cadence.target_ns, ==, 4000000);
+}
+
+static void assert_cadence_clock_drift_stays_in_range(void)
+{
+	AndroidChiakiVideoCadence cadence;
+	android_chiaki_video_cadence_reset(&cadence);
+	// Deliberately exaggerate source/nominal clock drift to 8,000 ppm. The
+	// recovered error must remain a measured low tail rather than run into the
+	// histogram ceiling or the depth cap over successive windows.
+	const uint64_t source_period_us = 16800;
+	for(uint32_t i = 0; i < ANDROID_CHIAKI_VIDEO_CADENCE_WINDOW * 4; i++)
+	{
+		android_chiaki_video_cadence_record_decode(&cadence, 8000000);
+		android_chiaki_video_cadence_record_frame(&cadence, (ChiakiSeqNum16)i,
+				4000000 + i * source_period_us, 60);
+	}
+	munit_assert_uint64(cadence.generation, ==, 4);
+	munit_assert_uint64(cadence.err_p99_ns, <=, 4000000);
+	munit_assert_uint64(cadence.target_ns, <, 8000000);
+	munit_assert_uint64(cadence.depth_ns, <, 8000000);
 }
 
 static MunitResult test_period_observation(const MunitParameter params[], void *user)
