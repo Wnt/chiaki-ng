@@ -66,6 +66,8 @@ class Preferences(context: Context)
 		val codecDefault = Codec.CODEC_H265
 		val codecAll = Codec.values()
 		const val packetLossMaxPercentDefault = 5
+		const val audioBufferBurstsDefault = 0
+		const val audioFifoMsDefault = 171
 	}
 
 	internal val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
@@ -169,6 +171,18 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(streamDiagnosticsOverlayEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(streamDiagnosticsOverlayEnabledKey, value).apply() }
 
+	fun validateAudioBufferBursts(bursts: Int) = max(0, min(16, bursts))
+	val audioBufferBurstsKey get() = resources.getString(R.string.preferences_audio_buffer_bursts_key)
+	var audioBufferBursts
+		get() = validateAudioBufferBursts(sharedPreferences.getInt(audioBufferBurstsKey, audioBufferBurstsDefault))
+		set(value) { sharedPreferences.edit().putInt(audioBufferBurstsKey, validateAudioBufferBursts(value)).apply() }
+
+	fun validateAudioFifoMs(fifoMs: Int) = max(20, min(1000, fifoMs))
+	val audioFifoMsKey get() = resources.getString(R.string.preferences_audio_fifo_ms_key)
+	var audioFifoMs
+		get() = validateAudioFifoMs(sharedPreferences.getInt(audioFifoMsKey, audioFifoMsDefault))
+		set(value) { sharedPreferences.edit().putInt(audioFifoMsKey, validateAudioFifoMs(value)).apply() }
+
 	val decoderInputThreadEnabledKey get() = resources.getString(R.string.preferences_decoder_input_thread_enabled_key)
 	var decoderInputThreadEnabled
 		get() = sharedPreferences.getBoolean(decoderInputThreadEnabledKey, true)
@@ -183,6 +197,11 @@ class Preferences(context: Context)
 	var performanceModeEnabled
 		get() = sharedPreferences.getBoolean(performanceModeEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(performanceModeEnabledKey, value).apply() }
+
+	val wifiLowLatencyLockEnabledKey get() = resources.getString(R.string.preferences_wifi_low_latency_lock_enabled_key)
+	var wifiLowLatencyLockEnabled
+		get() = sharedPreferences.getBoolean(wifiLowLatencyLockEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(wifiLowLatencyLockEnabledKey, value).apply() }
 
 	val takionVideoPacketReorderingDisabledKey get() = resources.getString(R.string.preferences_takion_video_packet_reordering_disabled_key)
 	var takionVideoPacketReorderingDisabled
@@ -203,6 +222,11 @@ class Preferences(context: Context)
 	var controllerInputCoalescingEnabled
 		get() = sharedPreferences.getBoolean(controllerInputCoalescingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(controllerInputCoalescingEnabledKey, value).apply() }
+
+	val gamepadUnbufferedDispatchEnabledKey get() = resources.getString(R.string.preferences_gamepad_unbuffered_dispatch_enabled_key)
+	var gamepadUnbufferedDispatchEnabled
+		get() = sharedPreferences.getBoolean(gamepadUnbufferedDispatchEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(gamepadUnbufferedDispatchEnabledKey, value).apply() }
 
 	val touchscreenTouchpadEnabledKey get() = "preferences_touchscreen_touchpad_enabled"
 	var touchscreenTouchpadEnabled

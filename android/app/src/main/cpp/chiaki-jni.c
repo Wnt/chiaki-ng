@@ -392,6 +392,8 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jint feedback_stats_log_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStatsLogIntervalMs", "I"));
 	jboolean stream_diagnostics_enabled = E->GetBooleanField(env, connect_info_obj,
 			E->GetFieldID(env, connect_info_class, "streamDiagnosticsEnabled", "Z"));
+	jint audio_buffer_bursts = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioBufferBursts", "I"));
+	jint audio_fifo_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioFifoMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
 	jstring host_string = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "host", "Ljava/lang/String;"));
 	jbyteArray regist_key_array = E->GetObjectField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "registKey", "[B"));
@@ -514,7 +516,10 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 		goto beach;
 	}
 
-	session->audio_output = android_chiaki_audio_output_new(log);
+	session->audio_output = android_chiaki_audio_output_new(log,
+			audio_buffer_bursts > 0 && audio_buffer_bursts <= 16 ? (uint32_t)audio_buffer_bursts : 0,
+			audio_fifo_ms >= 20 && audio_fifo_ms <= 1000 ? (uint32_t)audio_fifo_ms : 171,
+			feedback_stats_log_interval_ms > 0 ? (uint32_t)feedback_stats_log_interval_ms : 0);
 
 	android_chiaki_audio_decoder_set_cb(&session->audio_decoder, android_chiaki_audio_output_settings, android_chiaki_audio_output_frame, session->audio_output);
 

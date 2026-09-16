@@ -148,6 +148,13 @@
             app:icon="@drawable/ic_fps" />
 
         <SwitchPreference
+            app:key="@string/preferences_wifi_low_latency_lock_enabled_key"
+            app:title="@string/preferences_wifi_low_latency_lock_enabled_title"
+            app:summary="@string/preferences_wifi_low_latency_lock_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_bitrate" />
+
+        <SwitchPreference
             app:key="@string/preferences_decoder_late_frame_recovery_enabled_key"
             app:title="@string/preferences_decoder_late_frame_recovery_enabled_title"
             app:summary="@string/preferences_decoder_late_frame_recovery_enabled_summary"
@@ -197,6 +204,13 @@
             app:icon="@drawable/ic_gamepad" />
 
         <SwitchPreference
+            app:key="@string/preferences_gamepad_unbuffered_dispatch_enabled_key"
+            app:title="@string/preferences_gamepad_unbuffered_dispatch_enabled_title"
+            app:summary="@string/preferences_gamepad_unbuffered_dispatch_enabled_summary"
+            app:defaultValue="false"
+            app:icon="@drawable/ic_gamepad" />
+
+        <SwitchPreference
             app:key="@string/preferences_feedback_reduced_interval_enabled_key"
             app:title="@string/preferences_feedback_reduced_interval_enabled_title"
             app:summary="@string/preferences_feedback_reduced_interval_enabled_summary"
@@ -216,6 +230,20 @@
             app:summary="@string/preferences_stream_diagnostics_overlay_enabled_summary"
             app:defaultValue="false"
             app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_audio_buffer_bursts_key"
+			app:title="@string/preferences_audio_buffer_bursts_title"
+			app:summary="@string/preferences_audio_buffer_bursts_summary"
+			app:defaultValue="0"
+			app:icon="@drawable/ic_fps" />
+
+		<EditTextPreference
+			app:key="@string/preferences_audio_fifo_ms_key"
+			app:title="@string/preferences_audio_fifo_ms_title"
+			app:summary="@string/preferences_audio_fifo_ms_summary"
+			app:defaultValue="171"
+			app:icon="@drawable/ic_fps" />
     </PreferenceCategory>
 
     <PreferenceCategory

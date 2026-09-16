@@ -254,6 +254,8 @@ class MainActivity : AppCompatActivity()
 					takionVideoPacketReorderingDisabled = preferences.takionVideoPacketReorderingDisabled,
 					feedbackStateMinIntervalMs = if(preferences.feedbackReducedIntervalEnabled) 4 else 0,
 					feedbackStatsLogIntervalMs = preferences.feedbackStatsLogIntervalMs,
+					audioBufferBursts = preferences.audioBufferBursts,
+					audioFifoMs = preferences.audioFifoMs,
 					performanceModeEnabled = preferences.performanceModeEnabled,
 					streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
 				)

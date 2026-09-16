@@ -10,17 +10,18 @@
 
 #include <android/log.h>
 
-template<size_t ChunksCount, size_t ChunkSize>
+template<size_t MaxChunksCount, size_t ChunkSize>
 class CircularBuffer
 {
-	static_assert(ChunksCount > 0, "ChunksCount > 0");
+	static_assert(MaxChunksCount > 0, "MaxChunksCount > 0");
 	static_assert(ChunkSize > 0, "ChunkSize > 0");
 
 	private:
-		using Queue = memory_relaxed_aquire_release::CircularFifo<uint8_t *, ChunksCount>;
+		using Queue = memory_relaxed_aquire_release::CircularFifo<uint8_t *, MaxChunksCount>;
 		Queue full_queue;
 		Queue free_queue;
 		uint8_t *buffer;
+		size_t chunks_count;
 
 		uint8_t *push_chunk;
 		size_t push_chunk_size; // written bytes from the start of the chunk
@@ -30,7 +31,7 @@ class CircularBuffer
 
 		void FlushChunks()
 		{
-			for(size_t i=1; i<ChunksCount; i++)
+			for(size_t i=1; i<chunks_count; i++)
 				free_queue.push(buffer + i * ChunkSize);
 
 			push_chunk = buffer;
@@ -41,8 +42,10 @@ class CircularBuffer
 		}
 
 	public:
-		CircularBuffer() : buffer(new uint8_t[ChunksCount * ChunkSize])
+		CircularBuffer(size_t chunks_count = MaxChunksCount)
+			: buffer(new uint8_t[MaxChunksCount * ChunkSize]), chunks_count(chunks_count)
 		{
+			assert(chunks_count > 0 && chunks_count <= MaxChunksCount);
 			FlushChunks();
 		}
 
@@ -57,9 +60,20 @@ class CircularBuffer
 		 */
 		void Flush()
 		{
-			full_queue = Queue();
-			free_queue = Queue();
+			full_queue.reset();
+			free_queue.reset();
 			FlushChunks();
+		}
+
+		/**
+		 * Change the active depth while retaining the fixed allocation and lock-free queues.
+		 * WARNING: Like Flush(), call only while producer and consumer are stopped.
+		 */
+		void SetChunksCount(size_t new_chunks_count)
+		{
+			assert(new_chunks_count > 0 && new_chunks_count <= MaxChunksCount);
+			chunks_count = new_chunks_count;
+			Flush();
 		}
 
 		/**
