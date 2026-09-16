@@ -4,8 +4,8 @@ package com.metallic.chiaki.stream
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.app.AlertDialog
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.graphics.Matrix
@@ -18,7 +18,10 @@ import android.os.*
 import android.util.Log
 import android.view.*
 import android.widget.EditText
+import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.core.view.ViewCompat
@@ -27,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
+import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -53,6 +57,7 @@ import kotlin.math.min
 
 private sealed class DialogContents
 private object StreamQuitDialog: DialogContents()
+private object UserQuitDialog: DialogContents()
 private object CreateErrorDialog: DialogContents()
 private object PinRequestDialog: DialogContents()
 
@@ -71,7 +76,7 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_PSN_DEVICE = "psn_device"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		const val EXTRA_STREAM_SUMMARY = "stream_summary"
-		private const val HIDE_UI_TIMEOUT_MS = 2000L
+		private const val HIDE_UI_TIMEOUT_MS = 3500L
 
 		internal fun shouldRequestUnbufferedGamepadDispatch(source: Int, sdkInt: Int, enabled: Boolean): Boolean
 		{
@@ -100,6 +105,10 @@ class StreamActivity : AppCompatActivity()
 	private var displayListener: DisplayManager.DisplayListener? = null
 	private val summaryAccumulator = StreamSummaryAccumulator()
 	private var summaryResultSet = false
+	private val networkQualityClassifier = NetworkQualityClassifier()
+	private var networkQuality = NetworkQualitySnapshot.UNKNOWN
+	private var networkQualityDetailsExpanded = false
+	private var streamTransformMode = TransformMode.FIT
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -141,28 +150,30 @@ class StreamActivity : AppCompatActivity()
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
 		ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
+			applyOverlayInsets(insets)
 			val systemBars = insets.isVisible(WindowInsetsCompat.Type.systemBars())
 			if(systemBars)
 				showOverlay()
-			else
-				hideOverlay()
 			insets
 		}
 
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
-			if(binding.onScreenControlsSwitch.isChecked != it)
-				binding.onScreenControlsSwitch.isChecked = it
+			if(binding.controllerButton.isChecked != it)
+				binding.controllerButton.isChecked = it
 		})
-		binding.onScreenControlsSwitch.setOnCheckedChangeListener { _, isChecked ->
+		binding.controllerButton.addOnCheckedChangeListener { _, isChecked ->
 			viewModel.setOnScreenControlsEnabled(isChecked)
 			showOverlay()
 		}
-
-
-		binding.displayModeToggle.addOnButtonCheckedListener { _, _, _ ->
-			adjustStreamViewAspect()
+		binding.streamMenuButton.setOnClickListener { showDisplayModeMenu() }
+		binding.networkQualityChip.setOnClickListener {
+			if(networkQuality.level != NetworkQualityLevel.UNKNOWN)
+				networkQualityDetailsExpanded = !networkQualityDetailsExpanded
+			updateNetworkQualityChip()
 			showOverlay()
 		}
+		binding.quitButton.setOnClickListener { showQuitConfirmation() }
+		binding.aspectRatioLayout.setOnClickListener { showOverlay() }
 
 // Setup video output based on debanding preference
 		setupVideoOutput()
@@ -188,9 +199,13 @@ class StreamActivity : AppCompatActivity()
 		else
 			Log.i("StreamActivity", "Stream diagnostics overlay disabled")
 		viewModel.session.streamStats.observe(this) { stats ->
-			summaryAccumulator.add(stats, diagnosticsNetworkLink())
+			val link = diagnosticsNetworkLink()
+			summaryAccumulator.add(stats, link)
+			networkQuality = networkQualityClassifier.update(stats, link)
+			updateNetworkQualityChip()
 			diagnosticsOverlay?.update(stats)
 		}
+		updateNetworkQualityChip()
 		adjustStreamViewAspect()
 
 		if(Preferences(this).rumbleEnabled)
@@ -432,6 +447,7 @@ class StreamActivity : AppCompatActivity()
 				.onEach { viewModel.input.touchControllerState = it }
 				.launchIn(lifecycleScope)
 			fragment.onScreenControlsEnabled = viewModel.onScreenControlsEnabled
+			fragment.overlayRevealRequested = ::showOverlay
 		}
 	}
 
@@ -589,8 +605,7 @@ class StreamActivity : AppCompatActivity()
 				refreshRate = mode.refreshRate,
 				modeId = mode.modeId
 			),
-			viewMode = TransformMode.fromButton(binding.displayModeToggle.checkedButtonId)
-				.name.lowercase(Locale.US),
+			viewMode = streamTransformMode.name.lowercase(Locale.US),
 			flags = flags,
 			presenterMode = if(preferences.videoPacingEnabled) preferences.videoPacingMode.value else null,
 			networkLink = diagnosticsNetworkLink()
@@ -622,10 +637,28 @@ class StreamActivity : AppCompatActivity()
 		viewModel.resume()
 	}
 
-	private val hideSystemUIRunnable = Runnable { hideSystemUI() }
+	private val hideSystemUIRunnable = Runnable {
+		hideOverlay()
+		hideSystemUI()
+	}
 
-	private fun showOverlay()
+	private fun applyOverlayInsets(insets: WindowInsetsCompat)
 	{
+		val safe = insets.getInsetsIgnoringVisibility(
+			WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+		)
+		val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
+		val baseMargin = (12 * resources.displayMetrics.density).toInt()
+		binding.streamControlDock.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+			topMargin = baseMargin + maxOf(safe.top, gestures.top)
+			marginEnd = baseMargin + maxOf(safe.right, gestures.right)
+		}
+	}
+
+	internal fun showOverlay()
+	{
+		binding.overlay.animate().setListener(null)
+		binding.overlay.animate().cancel()
 		binding.overlay.isVisible = true
 		binding.overlay.animate()
 			.alpha(1.0f)
@@ -642,6 +675,12 @@ class StreamActivity : AppCompatActivity()
 
 	private fun hideOverlay()
 	{
+		if(!binding.overlay.isVisible)
+			return
+		networkQualityDetailsExpanded = false
+		updateNetworkQualityChip()
+		binding.overlay.animate().setListener(null)
+		binding.overlay.animate().cancel()
 		binding.overlay.animate()
 			.alpha(0.0f)
 			.setListener(object: AnimatorListenerAdapter()
@@ -651,6 +690,84 @@ class StreamActivity : AppCompatActivity()
 					binding.overlay.isGone = true
 				}
 			})
+	}
+
+	private fun showDisplayModeMenu()
+	{
+		PopupMenu(this, binding.streamMenuButton).also { menu ->
+			menu.inflate(R.menu.stream_display_mode)
+			menu.menu.findItem(when(streamTransformMode)
+			{
+				TransformMode.FIT -> R.id.display_mode_normal_button
+				TransformMode.ZOOM -> R.id.display_mode_zoom_button
+				TransformMode.STRETCH -> R.id.display_mode_stretch_button
+			}).isChecked = true
+			menu.setOnMenuItemClickListener { item ->
+				streamTransformMode = TransformMode.fromButton(item.itemId)
+				item.isChecked = true
+				adjustStreamViewAspect()
+				showOverlay()
+				true
+			}
+			menu.show()
+		}
+		showOverlay()
+	}
+
+	private fun updateNetworkQualityChip()
+	{
+		val content = NetworkQualityChipPresenter.content(networkQuality, networkQualityDetailsExpanded)
+		val label = getString(when(content.level)
+		{
+			NetworkQualityLevel.GOOD -> R.string.network_quality_good
+			NetworkQualityLevel.CONSTRAINED -> R.string.network_quality_fair
+			NetworkQualityLevel.POOR -> R.string.network_quality_poor
+			NetworkQualityLevel.UNKNOWN -> R.string.network_quality_unknown
+		})
+		val color = when(content.level)
+		{
+			NetworkQualityLevel.GOOD -> R.color.stream_quality_good
+			NetworkQualityLevel.CONSTRAINED -> R.color.stream_quality_fair
+			NetworkQualityLevel.POOR -> R.color.stream_quality_poor
+			NetworkQualityLevel.UNKNOWN -> R.color.stream_quality_unknown
+		}
+		binding.networkQualityChip.chipBackgroundColor = ColorStateList.valueOf(
+			ContextCompat.getColor(this, color)
+		)
+		val foreground = if(content.level == NetworkQualityLevel.CONSTRAINED)
+			ContextCompat.getColor(this, android.R.color.black)
+		else ContextCompat.getColor(this, R.color.stream_text)
+		binding.networkQualityChip.setTextColor(foreground)
+		binding.networkQualityChip.chipIconTint = ColorStateList.valueOf(foreground)
+		binding.networkQualityChip.text = content.metrics?.let { metrics ->
+			getString(
+				R.string.stream_quality_details,
+				metrics.rttMillis,
+				metrics.jitterMillis,
+				metrics.lossPercent
+			)
+		} ?: label
+		binding.networkQualityChip.contentDescription = if(content.metrics == null)
+			label else "$label, ${binding.networkQualityChip.text}"
+	}
+
+	private fun showQuitConfirmation()
+	{
+		if(dialogContents == UserQuitDialog)
+			return
+		dialog?.dismiss()
+		val confirmation = MaterialAlertDialogBuilder(this)
+			.setTitle(R.string.stream_quit_title)
+			.setNegativeButton(android.R.string.cancel) { _, _ -> dialog = null }
+			.setPositiveButton(R.string.action_quit_session) { _, _ ->
+				dialog = null
+				finish()
+			}
+			.setOnCancelListener { dialog = null }
+			.create()
+		dialogContents = UserQuitDialog
+		dialog = confirmation
+		confirmation.show()
 	}
 
 	override fun onWindowFocusChanged(hasFocus: Boolean)
@@ -803,7 +920,7 @@ class StreamActivity : AppCompatActivity()
 	private fun adjustTextureViewAspect(textureView: TextureView)
 	{
 		val trans = TextureViewTransform(viewModel.session.connectInfo.videoProfile, textureView)
-		val resolution = trans.resolutionFor(TransformMode.fromButton(binding.displayModeToggle.checkedButtonId))
+		val resolution = trans.resolutionFor(streamTransformMode)
 		Matrix().also {
 			textureView.getTransform(it)
 			it.setScale(resolution.width / trans.viewWidth, resolution.height / trans.viewHeight)
@@ -816,7 +933,7 @@ class StreamActivity : AppCompatActivity()
 	{
 		val videoProfile = viewModel.session.connectInfo.videoProfile
 		binding.aspectRatioLayout.aspectRatio = videoProfile.width.toFloat() / videoProfile.height.toFloat()
-		binding.aspectRatioLayout.mode = TransformMode.fromButton(binding.displayModeToggle.checkedButtonId)
+		binding.aspectRatioLayout.mode = streamTransformMode
 	}
 
 	private fun adjustStreamViewAspect() = adjustSurfaceViewAspect()

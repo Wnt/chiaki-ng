@@ -6,23 +6,26 @@
     android:id="@+id/mainStreamLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".stream.StreamActivity"
-    android:keepScreenOn="true">
+    android:keepScreenOn="true"
+    tools:context=".stream.StreamActivity">
 
     <com.metallic.chiaki.stream.AspectRatioFrameLayout
         android:id="@+id/aspectRatioLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center">
+
         <SurfaceView
             android:id="@+id/surfaceView"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content" />
+
         <android.opengl.GLSurfaceView
             android:id="@+id/debandSurfaceView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:visibility="gone"/>
+            android:visibility="gone" />
+
         <com.metallic.chiaki.touchcontrols.TouchpadView
             android:id="@+id/streamTouchpadView"
             android:layout_width="match_parent"
@@ -36,82 +39,84 @@
         android:id="@+id/progressBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"/>
+        android:layout_gravity="center" />
 
     <fragment
         android:id="@+id/controlsFragment"
         android:name="com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
-
+        android:layout_height="match_parent" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
+        android:visibility="gone">
 
-        <androidx.constraintlayout.widget.ConstraintLayout
-            android:layout_width="match_parent"
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/streamControlDock"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            app:layout_constraintBottom_toBottomOf="parent"
-            android:background="@color/stream_overlay_background"
-            android:padding="8dp"
-            android:clickable="true"
-            android:focusable="false">
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="12dp"
+            app:cardBackgroundColor="@color/stream_control_dock_background"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/stream_control_dock_stroke"
+            app:strokeWidth="1dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/onScreenControlsSwitch"
+            <LinearLayout
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintBottom_toBottomOf="parent"
-                android:text="@string/stream_on_screen_controls"
-                app:switchPadding="8dp"
-                android:layout_marginLeft="8dp"
-                android:textColor="@color/stream_text"/>
-
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/displayModeToggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:singleSelection="true"
-                app:selectionRequired="true"
-                app:checkedButton="@id/display_mode_normal_button">
+                android:layout_height="56dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="4dp">
 
                 <com.google.android.material.button.MaterialButton
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:id="@+id/display_mode_normal_button"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    app:icon="@drawable/ic_display_normal"
-                    app:iconTint="@color/stream_material_button_icon_tint"
-                    app:strokeColor="@color/stream_text"/>
-                <com.google.android.material.button.MaterialButton
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:id="@+id/display_mode_zoom_button"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    app:icon="@drawable/ic_display_zoom"
-                    app:iconTint="@color/stream_material_button_icon_tint"
-                    app:strokeColor="@color/stream_text"/>
-                <com.google.android.material.button.MaterialButton
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:id="@+id/display_mode_stretch_button"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    app:icon="@drawable/ic_display_stretch"
-                    app:iconTint="@color/stream_material_button_icon_tint"
-                    app:strokeColor="@color/stream_text"/>
+                    android:id="@+id/streamMenuButton"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/stream_display_menu"
+                    app:icon="@drawable/ic_overflow"
+                    app:iconTint="@color/stream_text" />
 
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/controllerButton"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:checkable="true"
+                    android:contentDescription="@string/stream_on_screen_controls"
+                    app:icon="@drawable/ic_gamepad"
+                    app:iconTint="@color/stream_text" />
 
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/networkQualityChip"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginHorizontal="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:minWidth="72dp"
+                    android:text="@string/network_quality_unknown"
+                    android:textColor="@color/stream_text"
+                    app:chipIcon="@drawable/ic_network_quality"
+                    app:chipIconTint="@color/stream_text"
+                    app:chipMinHeight="40dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/quitButton"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/action_quit_session"
+                    app:icon="@drawable/ic_close"
+                    app:iconTint="@color/stream_quit" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </androidx.constraintlayout.widget.ConstraintLayout>
-
-</androidx.constraintlayout.widget.ConstraintLayout>
-
 </FrameLayout>
