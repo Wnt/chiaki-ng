@@ -361,6 +361,10 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					? event->stream_stats.takion_packets_received * 1000000ULL / interval_ms : 0;
 				uint64_t feedback_per_s_milli = interval_ms
 					? event->stream_stats.feedback_packets * 1000000ULL / interval_ms : 0;
+				uint64_t takion_expected_per_s_milli = interval_ms
+					? (event->stream_stats.takion_packets_received + event->stream_stats.takion_packets_lost) * 1000000ULL / interval_ms : 0;
+				uint64_t feedback_gap_mean_milli = event->stream_stats.feedback_gap_count
+					? event->stream_stats.feedback_gap_sum_ms * 1000ULL / event->stream_stats.feedback_gap_count : 0;
 				CHIAKI_LOGI(session->log,
 					"Feedback stats: window %llu ms video received %llu decoded %llu"
 					" dropped_input %llu dropped_presenter %llu dropped_bounded_age %llu"
@@ -368,6 +372,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" lost %llu reorder_timeouts %llu"
 					" packet_jitter_ms %llu.%03llu"
 					" | per_s takion %llu.%03llu feedback %llu.%03llu"
+					" | takion_raw expected_per_s %llu.%03llu received_per_s %llu.%03llu fec_recovered %llu unrecoverable %llu"
+					" | feedback_gap max_ms %llu mean_ms %llu.%03llu over_50_ms %llu"
 					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
 					" audio_xruns %s%d audio_underruns %llu"
 					" | network target_bps %llu measured_bps %llu live_rtt_ms %llu.%03llu"
@@ -388,6 +394,16 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)(takion_per_s_milli % 1000),
 					(unsigned long long)(feedback_per_s_milli / 1000),
 					(unsigned long long)(feedback_per_s_milli % 1000),
+					(unsigned long long)(takion_expected_per_s_milli / 1000),
+					(unsigned long long)(takion_expected_per_s_milli % 1000),
+					(unsigned long long)(takion_per_s_milli / 1000),
+					(unsigned long long)(takion_per_s_milli % 1000),
+					(unsigned long long)event->stream_stats.fec_recovered_packets,
+					(unsigned long long)event->stream_stats.unrecoverable_packets,
+					(unsigned long long)event->stream_stats.feedback_gap_max_ms,
+					(unsigned long long)(feedback_gap_mean_milli / 1000),
+					(unsigned long long)(feedback_gap_mean_milli % 1000),
+					(unsigned long long)event->stream_stats.feedback_gaps_over_50_ms,
 					(unsigned long long)(event->stream_stats.rtt_us / 1000),
 					(unsigned long long)(event->stream_stats.rtt_us % 1000),
 					audio.latency_valid ? "" : "unavailable/",

@@ -5,6 +5,8 @@
 #include <chiaki/congestioncontrol.h>
 #include <chiaki/networkstats.h>
 #include <chiaki/thread.h>
+#include <chiaki/packetstats.h>
+#include <chiaki/feedbacksender.h>
 
 #include <pb_decode.h>
 #include <takion.pb.h>
@@ -180,6 +182,31 @@ static MunitResult test_snapshot_is_coherent_during_update(const MunitParameter 
 
 MunitResult test_network_stats_all(void)
 {
+	ChiakiPacketStats packet_stats;
+	munit_assert_int(chiaki_packet_stats_init(&packet_stats), ==, CHIAKI_ERR_SUCCESS);
+	chiaki_packet_stats_push_generation(&packet_stats, 90, 10);
+	chiaki_packet_stats_push_generation(&packet_stats, 45, 5);
+	chiaki_packet_stats_push_recovery(&packet_stats, 8, 2);
+	uint64_t received, lost, recovered, unrecoverable;
+	chiaki_packet_stats_get_generation_totals(&packet_stats, &received, &lost);
+	chiaki_packet_stats_get_recovery_totals(&packet_stats, &recovered, &unrecoverable);
+	munit_assert_uint64(received, ==, 135);
+	munit_assert_uint64(received + lost, ==, 150);
+	munit_assert_uint64(recovered, ==, 8);
+	munit_assert_uint64(unrecoverable, ==, 2);
+	chiaki_packet_stats_fini(&packet_stats);
+
+	ChiakiFeedbackSender sender = { 0 };
+	chiaki_feedback_sender_record_send(&sender, 1000);
+	chiaki_feedback_sender_record_send(&sender, 1020);
+	chiaki_feedback_sender_record_send(&sender, 1070);
+	chiaki_feedback_sender_record_send(&sender, 1121);
+	munit_assert_uint64(sender.stats_packets_total, ==, 4);
+	munit_assert_uint64(sender.stats_gap_count, ==, 3);
+	munit_assert_uint64(sender.stats_gap_sum_ms, ==, 121);
+	munit_assert_uint64(sender.stats_gap_max_ms, ==, 51);
+	munit_assert_uint64(sender.stats_gaps_over_50_ms, ==, 1);
+
 	MunitResult result = test_connection_quality_wire_units(NULL, NULL);
 	if(result != MUNIT_OK)
 		return result;

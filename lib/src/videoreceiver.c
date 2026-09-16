@@ -205,6 +205,14 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 	uint8_t *frame;
 	size_t frame_size;
 	ChiakiFrameProcessorFlushResult flush_result = chiaki_frame_processor_flush(&video_receiver->frame_processor, &frame, &frame_size);
+	if(video_receiver->packet_stats)
+	{
+		uint64_t missing_source = video_receiver->frame_processor.units_source_expected
+			- video_receiver->frame_processor.units_source_received;
+		chiaki_packet_stats_push_recovery(video_receiver->packet_stats,
+			flush_result == CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FEC_SUCCESS ? missing_source : 0,
+			flush_result == CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FEC_FAILED ? missing_source : 0);
+	}
 
 	if(flush_result == CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FAILED
 		|| flush_result == CHIAKI_FRAME_PROCESSOR_FLUSH_RESULT_FEC_FAILED)

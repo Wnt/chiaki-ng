@@ -10,6 +10,7 @@
 
 #define CHIAKI_FEEDBACK_HISTORY_PACKET_BUF_SIZE 0x300
 #define CHIAKI_FEEDBACK_HISTORY_PACKET_QUEUE_SIZE 0x40
+#define CHIAKI_FEEDBACK_GAP_WARN_MS 50
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +48,21 @@ typedef struct chiaki_feedback_sender_t
 	uint64_t stats_state_packets;
 	uint64_t stats_history_packets;
 	uint64_t stats_packets_total;
+	uint64_t stats_last_send_ms;
+	uint64_t stats_gap_sum_ms;
+	uint64_t stats_gap_count;
+	uint64_t stats_gap_max_ms;
+	uint64_t stats_gaps_over_50_ms;
 } ChiakiFeedbackSender;
+
+typedef struct chiaki_feedback_sender_stats_t
+{
+	uint64_t packets_total;
+	uint64_t gap_sum_ms;
+	uint64_t gap_count;
+	uint64_t gap_max_ms;
+	uint64_t gaps_over_50_ms;
+} ChiakiFeedbackSenderStats;
 
 /**
  * @param state_min_interval_ms minimum time in ms to wait between sending 2 controller state
@@ -59,6 +74,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_init(ChiakiFeedbackSender *
 CHIAKI_EXPORT void chiaki_feedback_sender_fini(ChiakiFeedbackSender *feedback_sender);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_feedback_sender_set_controller_state(ChiakiFeedbackSender *feedback_sender, ChiakiControllerState *state);
 CHIAKI_EXPORT uint64_t chiaki_feedback_sender_get_packets_total(ChiakiFeedbackSender *feedback_sender);
+CHIAKI_EXPORT void chiaki_feedback_sender_get_stats(ChiakiFeedbackSender *feedback_sender, ChiakiFeedbackSenderStats *stats, bool reset_gaps);
+CHIAKI_EXPORT void chiaki_feedback_sender_record_send(ChiakiFeedbackSender *feedback_sender, uint64_t now_ms);
 
 #ifdef __cplusplus
 }
