@@ -72,6 +72,7 @@ data class ConnectInfo(
 	val videoProfile: ConnectVideoProfile,
 	val decoderLowLatencyEnabled: Boolean,
 	val threadPriorityBoostEnabled: Boolean,
+	val decoderLateFrameRecoveryEnabled: Boolean,
 	val packetLossMax: Double,
 	val takionVideoPacketReorderingDisabled: Boolean
 ): Parcelable

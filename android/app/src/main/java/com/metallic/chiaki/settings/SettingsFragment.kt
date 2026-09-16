@@ -33,6 +33,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
 		preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
+		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled
 		preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled
 		else -> defValue
@@ -53,6 +54,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
 			preferences.threadPriorityBoostEnabledKey -> preferences.threadPriorityBoostEnabled = value
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
+			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.touchscreenTouchpadEnabledKey -> preferences.touchscreenTouchpadEnabled = value
 			preferences.psnSignInEnabledKey -> preferences.psnSignInEnabled = value
 		}
