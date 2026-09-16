@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import androidx.annotation.StringRes
 import androidx.preference.PreferenceManager
 import com.metallic.chiaki.R
+import com.metallic.chiaki.lib.AndroidChiakiVideoPresenterConfig
 import com.metallic.chiaki.lib.Codec
 import com.metallic.chiaki.lib.ConnectVideoProfile
 import com.metallic.chiaki.lib.VideoFPSPreset
@@ -235,6 +236,11 @@ class Preferences(context: Context)
 		get() = sharedPreferences.getBoolean(videoPacingEnabledKey, false)
 		set(value) { sharedPreferences.edit().putBoolean(videoPacingEnabledKey, value).apply() }
 
+	val videoPacingHighRefreshEnabledKey get() = resources.getString(R.string.preferences_video_pacing_high_refresh_enabled_key)
+	var videoPacingHighRefreshEnabled
+		get() = sharedPreferences.getBoolean(videoPacingHighRefreshEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(videoPacingHighRefreshEnabledKey, value).apply() }
+
 	val videoPacingBoundedAgeEnabledKey get() = resources.getString(R.string.preferences_video_pacing_bounded_age_enabled_key)
 	var videoPacingBoundedAgeEnabled
 		get() = sharedPreferences.getBoolean(videoPacingBoundedAgeEnabledKey, false)
@@ -397,6 +403,17 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(videoPacingMaxFrameAgePeriodsKey,
 			validateVideoPacingMaxFrameAgePeriods(value)).apply() }
 
+	val videoPresenterConfig get() = AndroidChiakiVideoPresenterConfig(
+		pacingEnabled = videoPacingEnabled,
+		pacingHighRefreshEnabled = videoPacingHighRefreshEnabled,
+		pacingMode = videoPacingMode.nativeValue,
+		presenterLead = videoPresenterLead.nativeValue,
+		boundedAgeEnabled = videoPacingBoundedAgeEnabled,
+		maxFrameAgePeriods = videoPacingMaxFrameAgePeriods,
+		nonblockingProducer = videoPresenterNonblockingProducer,
+		recoveryStrategy = videoRecoveryStrategy.nativeValue
+	)
+
 	fun validateBitrate(bitrate: Int) = max(2000, min(100000, bitrate))
 	val bitrateKey get() = resources.getString(R.string.preferences_bitrate_key)
 	var bitrate
@@ -413,7 +430,7 @@ class Preferences(context: Context)
 		set(value) { sharedPreferences.edit().putInt(packetLossMaxPercentKey, validatePacketLossMaxPercent(value)).apply() }
 	val packetLossMax get() = packetLossMaxPercent / 100.0
 
-	// PLE-75 decoder experiments; 0 / false = the codec's own defaults (today's behaviour).
+	// PLE-75 / PLE-167 decoder experiments; 0 / false = the codec's own defaults.
 	// PLE-116: ceiling 4000 so the 960 / 1920 sweep is reachable (1000 silently clamped 1920 before).
 	fun validateDecoderOperatingRate(rate: Int) = max(0, min(4000, rate))
 	val decoderOperatingRateKey get() = resources.getString(R.string.preferences_decoder_operating_rate_key)
@@ -421,7 +438,12 @@ class Preferences(context: Context)
 		get() = validateDecoderOperatingRate(sharedPreferences.getInt(decoderOperatingRateKey, 0))
 		set(value) { sharedPreferences.edit().putInt(decoderOperatingRateKey, validateDecoderOperatingRate(value)).apply() }
 
-	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 480 (default on;
+	val decoderOperatingRateDefaultKey get() = resources.getString(R.string.preferences_decoder_operating_rate_default_key)
+	var decoderOperatingRateDefault
+		get() = sharedPreferences.getBoolean(decoderOperatingRateDefaultKey, true)
+		set(value) { sharedPreferences.edit().putBoolean(decoderOperatingRateDefaultKey, value).apply() }
+
+	// PLE-75: with frame-index timestamps on and no explicit operating rate, request 960 (default on;
 	// off reproduces the 14 ms decode latency of AB round 2).
 	val decoderOperatingRateAutoKey get() = resources.getString(R.string.preferences_decoder_operating_rate_auto_key)
 	var decoderOperatingRateAuto

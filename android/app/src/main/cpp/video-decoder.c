@@ -21,9 +21,10 @@
 #define DECODER_CONFIGURE_PERFORMANCE_FALLBACK_TIER 4
 // PLE-75: with real 60 fps timestamps the Exynos MFC decoder clocks itself for 60 fps and takes
 // 14 ms per frame (p95 30 ms) instead of the 8 ms it takes when the timestamps are 1 us apart.
-// An explicit operating-rate of 480 restores 8 ms (120 and 240 only get part of the way back);
-// see docs/verification/PTS-decode-latency.md.
-#define DECODER_REAL_PTS_OPERATING_RATE 480
+// An explicit operating-rate of 960 reaches the fastest measured decoder level (480 leaves about
+// 1 ms on the table, while 1920 adds nothing); see docs/verification/PLE-116.md.
+#define DECODER_REAL_PTS_OPERATING_RATE 960
+#define DECODER_DEFAULT_PATH_OPERATING_RATE 960
 #define DECODER_LOW_LATENCY_OPERATING_RATE 480
 
 extern media_status_t AMediaCodec_getName_weak(AMediaCodec *codec, char **out_name)
@@ -40,14 +41,17 @@ static void android_chiaki_video_decoder_presenter_release(void *user, bool drop
 ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *decoder, ChiakiLog *log, int32_t target_width, int32_t target_height,
 		int32_t target_fps, ChiakiCodec codec, bool low_latency_enabled, bool real_pts_enabled,
 		bool input_thread_enabled, bool late_frame_recovery_enabled, bool performance_mode_enabled,
-		int32_t operating_rate, bool operating_rate_auto, bool realtime_priority, unsigned int pts_rate_hz,
-		bool diagnostics_enabled, bool stats_log_enabled)
+		int32_t operating_rate, bool operating_rate_default, bool operating_rate_auto,
+		bool realtime_priority, unsigned int pts_rate_hz,
+		bool diagnostics_enabled, bool stats_log_enabled,
+		const AndroidChiakiVideoPresenterConfig *presenter_config)
 {
 	decoder->log = log;
 	decoder->codec = NULL;
 	decoder->timestamp_cur = 0;
 	decoder->fps = target_fps > 0 ? (unsigned int)target_fps : 60;
 	decoder->real_pts_enabled = real_pts_enabled;
+	decoder->stats_log_enabled = stats_log_enabled;
 	// PLE-75 experiment: the PTS timeline may run at a rate other than the stream fps
 	// (0 = stream fps, today's behaviour) to test whether the codec keys off timestamp spacing.
 	decoder->pts_rate_hz = pts_rate_hz > 0 ? pts_rate_hz : decoder->fps;
@@ -60,15 +64,13 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->target_codec = codec;
 	decoder->low_latency_enabled = low_latency_enabled;
 	decoder->performance_mode_enabled = performance_mode_enabled;
-	// PLE-75: explicit operating-rate (0 = unset) and realtime priority (false = unset). With real PTS
-	// and no explicit value, the auto switch (default on) requests DECODER_REAL_PTS_OPERATING_RATE.
-	decoder->operating_rate = operating_rate > 0 ? operating_rate : 0;
-	decoder->operating_rate_auto = false;
-	if(decoder->operating_rate == 0 && real_pts_enabled && operating_rate_auto)
-	{
-		decoder->operating_rate = DECODER_REAL_PTS_OPERATING_RATE;
-		decoder->operating_rate_auto = true;
-	}
+	// Explicit rate > default-path experiment > real-PTS auto switch > codec default.
+	AndroidChiakiDecoderOperatingRate selected_operating_rate =
+			android_chiaki_video_decoder_select_operating_rate(operating_rate,
+					operating_rate_default, DECODER_DEFAULT_PATH_OPERATING_RATE,
+					real_pts_enabled, operating_rate_auto, DECODER_REAL_PTS_OPERATING_RATE);
+	decoder->operating_rate = selected_operating_rate.rate;
+	decoder->operating_rate_source = selected_operating_rate.source;
 	decoder->realtime_priority = realtime_priority;
 	decoder->diagnostics_enabled = diagnostics_enabled;
 	decoder->late_frame_recovery_enabled = late_frame_recovery_enabled;
@@ -106,6 +108,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	}
 	err = android_chiaki_video_presenter_init(&decoder->presenter, log, late_frame_recovery_enabled,
 			real_pts_enabled, diagnostics_enabled, stats_log_enabled,
+			presenter_config,
 			android_chiaki_video_decoder_presenter_release, decoder);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
@@ -288,10 +291,7 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 }
 
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 
@@ -312,8 +312,7 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		ANativeWindow_release(decoder->window);
 		decoder->window = new_window;
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
-				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-				nonblocking_producer, recovery_strategy);
+				app_vsync_offset_ns);
 #else
 		CHIAKI_LOGE(decoder->log, "Video Decoder already initialized");
 #endif
@@ -345,9 +344,16 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		CHIAKI_LOGI(decoder->log, "Stream performance mode requesting MediaCodec operating-rate=%d",
 				decoder->target_fps * 4);
 	if(decoder->operating_rate > 0)
+	{
+		const char *source = "";
+		if(decoder->operating_rate_source == ANDROID_CHIAKI_DECODER_OPERATING_RATE_DEFAULT_PATH)
+			source = " (default-path setting)";
+		else if(decoder->operating_rate_source == ANDROID_CHIAKI_DECODER_OPERATING_RATE_AUTO)
+			source = " (auto for frame-index timestamps)";
 		CHIAKI_LOGI(decoder->log, "Decoder operating-rate override: operating-rate=%d frame-rate=%d%s",
 				decoder->operating_rate, decoder->target_fps,
-				decoder->operating_rate_auto ? " (auto for frame-index timestamps)" : "");
+				source);
+	}
 	if(decoder->realtime_priority)
 		CHIAKI_LOGI(decoder->log, "Decoder realtime priority override: priority=0");
 	int first_tier = decoder->low_latency_enabled ? 0 : DECODER_CONFIGURE_BASELINE_TIER;
@@ -396,8 +402,7 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 			decoder->late_frame_recovery_enabled ? "enabled" : "disabled", OUTPUT_BACKLOG_IDR_THRESHOLD);
 
 	ChiakiErrorCode err = android_chiaki_video_presenter_start(&decoder->presenter, decoder->codec, stream_fps,
-			refresh_hz, app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-			nonblocking_producer, recovery_strategy);
+			refresh_hz, app_vsync_offset_ns);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(decoder->log, "Failed to start video presenter: %s", chiaki_error_string(err));
@@ -420,16 +425,12 @@ beach:
 }
 
 void android_chiaki_video_decoder_set_timing(AndroidChiakiVideoDecoder *decoder,
-		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns,
-		AndroidChiakiVideoPacingMode pacing_mode, AndroidChiakiVideoPresenterLead presenter_lead,
-		uint32_t max_queue_age_periods, bool nonblocking_producer,
-		AndroidChiakiVideoRecoveryStrategy recovery_strategy)
+		unsigned int stream_fps, double refresh_hz, int64_t app_vsync_offset_ns)
 {
 	chiaki_mutex_lock(&decoder->codec_mutex);
 	if(decoder->codec)
 		android_chiaki_video_presenter_set_timing(&decoder->presenter, stream_fps, refresh_hz,
-				app_vsync_offset_ns, pacing_mode, presenter_lead, max_queue_age_periods,
-				nonblocking_producer, recovery_strategy);
+				app_vsync_offset_ns);
 	chiaki_mutex_unlock(&decoder->codec_mutex);
 }
 
@@ -454,7 +455,13 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 	uint64_t presentation_time_us = decoder->timestamp_cur;
 	if(decoder->real_pts_enabled)
 	{
+		uint64_t previous_unwrapped_frame_index = decoder->frame_index_unwrapper.value;
 		uint64_t unwrapped_frame_index = chiaki_seq_num_16_unwrap(&decoder->frame_index_unwrapper, frame_index);
+		// PLE-73: PS5 frame index is 16-bit and wraps every 65536 frames (~18.2 min at 60 fps);
+		// default-off log to verify the unwrapper keeps counting across the wrap during a soak.
+		if(decoder->stats_log_enabled && (previous_unwrapped_frame_index >> 16) != (unwrapped_frame_index >> 16))
+			CHIAKI_LOGI(decoder->log, "Frame-index unwrapper wrap: raw=%u unwrapped=%" PRIu64,
+					frame_index, unwrapped_frame_index);
 		presentation_time_us = unwrapped_frame_index * 1000000ULL / decoder->pts_rate_hz;
 	}
 

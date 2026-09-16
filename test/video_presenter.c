@@ -210,6 +210,17 @@ static MunitResult test_period_seed_and_update(const MunitParameter params[], vo
 	const int64_t period_120_hz = 8333333;
 	const int64_t period_60_hz = 16666667;
 
+	// The legacy high-refresh gate remains the default. Its explicit override
+	// affects 120 Hz, while both setting values remain eligible at 60 Hz.
+	munit_assert_true(android_chiaki_video_presenter_timestamped_release_eligible(
+			2, 60.0, 60, false));
+	munit_assert_true(android_chiaki_video_presenter_timestamped_release_eligible(
+			2, 60.0, 60, true));
+	munit_assert_false(android_chiaki_video_presenter_timestamped_release_eligible(
+			2, 120.0, 60, false));
+	munit_assert_true(android_chiaki_video_presenter_timestamped_release_eligible(
+			2, 120.0, 60, true));
+
 	// The active panel mode wins over both an observed callback and the stream rate.
 	munit_assert_int64(android_chiaki_video_presenter_seed_period(
 			120.0, period_60_hz, 60), ==, period_120_hz);

@@ -31,6 +31,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled
 		preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps
 		preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled
+		preferences.decoderOperatingRateDefaultKey -> preferences.decoderOperatingRateDefault
 		preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto
 		preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority
 		preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled
@@ -40,6 +41,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 		preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled
 		preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled
 		preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled
+		preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled
 		preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled
 		preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer
 		preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled
@@ -63,6 +65,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.debandRenderWhenDirtyEnabledKey -> preferences.debandRenderWhenDirtyEnabled = value
 			preferences.realVideoTimestampsKey -> preferences.realVideoTimestamps = value
 			preferences.decoderLowLatencyEnabledKey -> preferences.decoderLowLatencyEnabled = value
+			preferences.decoderOperatingRateDefaultKey -> preferences.decoderOperatingRateDefault = value
 			preferences.decoderOperatingRateAutoKey -> preferences.decoderOperatingRateAuto = value
 			preferences.decoderRealtimePriorityKey -> preferences.decoderRealtimePriority = value
 			preferences.feedbackReducedIntervalEnabledKey -> preferences.feedbackReducedIntervalEnabled = value
@@ -72,6 +75,7 @@ class DataStore(val preferences: Preferences): PreferenceDataStore()
 			preferences.takionVideoPacketReorderingDisabledKey -> preferences.takionVideoPacketReorderingDisabled = value
 			preferences.decoderLateFrameRecoveryEnabledKey -> preferences.decoderLateFrameRecoveryEnabled = value
 			preferences.videoPacingEnabledKey -> preferences.videoPacingEnabled = value
+			preferences.videoPacingHighRefreshEnabledKey -> preferences.videoPacingHighRefreshEnabled = value
 			preferences.videoPacingBoundedAgeEnabledKey -> preferences.videoPacingBoundedAgeEnabled = value
 			preferences.videoPresenterNonblockingProducerKey -> preferences.videoPresenterNonblockingProducer = value
 			preferences.controllerInputCoalescingEnabledKey -> preferences.controllerInputCoalescingEnabled = value

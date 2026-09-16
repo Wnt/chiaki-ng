@@ -528,13 +528,31 @@ class StreamActivity : AppCompatActivity()
 	{
 		val display = binding.root.display ?: windowManager.defaultDisplay
 		val mode = display.mode
+		val effectiveRefreshRateMode = effectiveDisplayRefreshRateMode(
+			preferences.displayRefreshRateMode,
+			preferences.realVideoTimestamps,
+			preferences.videoPacingEnabled
+		)
 		val flags = buildList {
 			if(connectInfo.decoderLowLatencyEnabled) add("lowlat")
 			if(preferences.wifiLowLatencyLockEnabled) add("wifi-lowlat")
 			if(preferences.realVideoTimestamps) add("pts")
 			if(preferences.decoderInputThreadEnabled) add("in-thread")
 			if(connectInfo.decoderLateFrameRecoveryEnabled) add("late-drop")
-			if(preferences.videoPacingEnabled) add("pacing")
+			if(preferences.videoPacingEnabled)
+			{
+				add("pacing")
+				add(if(preferences.videoPacingHighRefreshEnabled) "hi-hz-on" else "hi-hz-gate")
+				if(preferences.videoPacingMode != Preferences.VideoPacingMode.LOWEST_LATENCY
+					&& !preferences.videoPacingHighRefreshEnabled && mode.refreshRate >= 119.0f)
+					add("immediate-release")
+			}
+			when(effectiveRefreshRateMode)
+			{
+				Preferences.DisplayRefreshRateMode.MATCH_STREAM -> add("hz-match")
+				Preferences.DisplayRefreshRateMode.HIGHEST -> add("hz-max")
+				Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT -> add("hz-system")
+			}
 			if(preferences.videoPacingEnabled && preferences.videoPacingBoundedAgeEnabled)
 				add("age-${preferences.videoPacingMaxFrameAgePeriods}f")
 			if(preferences.videoPacingEnabled
@@ -554,12 +572,6 @@ class StreamActivity : AppCompatActivity()
 			if(preferences.streamWindowOptimizationsEnabled) add("window")
 			if(preferences.controllerInputCoalescingEnabled) add("input-coal")
 			if(preferences.gamepadUnbufferedDispatchEnabled) add("gamepad-unbuf")
-			when(preferences.displayRefreshRateMode)
-			{
-				Preferences.DisplayRefreshRateMode.MATCH_STREAM -> add("hz-match")
-				Preferences.DisplayRefreshRateMode.HIGHEST -> add("hz-max")
-				Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT -> Unit
-			}
 		}
 		return StreamDiagnosticsUiState(
 			display = StreamDiagnosticsDisplay(

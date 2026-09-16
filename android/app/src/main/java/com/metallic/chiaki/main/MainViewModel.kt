@@ -130,10 +130,12 @@ class MainViewModel(
 		autoRegister = autoRegister,
 		performanceModeEnabled = preferences.performanceModeEnabled,
 		decoderOperatingRate = preferences.decoderOperatingRate,
+		decoderOperatingRateDefault = preferences.decoderOperatingRateDefault,
 		decoderOperatingRateAuto = preferences.decoderOperatingRateAuto,
 		decoderRealtimePriority = preferences.decoderRealtimePriority,
 		videoTimestampRateHz = preferences.videoTimestampRateHz,
-		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled
+		streamDiagnosticsEnabled = preferences.streamDiagnosticsOverlayEnabled,
+		videoPresenterConfig = preferences.videoPresenterConfig
 	)
 
 	fun registerPsnConsole(console: PsnConsole)

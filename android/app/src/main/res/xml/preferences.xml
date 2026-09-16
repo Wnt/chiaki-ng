@@ -127,6 +127,13 @@
             app:icon="@drawable/ic_fps"/>
 
         <SwitchPreference
+            app:key="@string/preferences_decoder_operating_rate_default_key"
+            app:title="@string/preferences_decoder_operating_rate_default_title"
+            app:summary="@string/preferences_decoder_operating_rate_default_summary"
+            app:defaultValue="true"
+            app:icon="@drawable/ic_fps" />
+
+        <SwitchPreference
             app:key="@string/preferences_decoder_operating_rate_auto_key"
             app:title="@string/preferences_decoder_operating_rate_auto_title"
             app:summary="@string/preferences_decoder_operating_rate_auto_summary"
@@ -193,6 +200,14 @@
 			app:title="@string/preferences_video_pacing_enabled_title"
 			app:summary="@string/preferences_video_pacing_enabled_summary"
 			app:defaultValue="false"
+			app:icon="@drawable/ic_fps" />
+
+		<SwitchPreference
+			app:key="@string/preferences_video_pacing_high_refresh_enabled_key"
+			app:title="@string/preferences_video_pacing_high_refresh_enabled_title"
+			app:summary="@string/preferences_video_pacing_high_refresh_enabled_summary"
+			app:defaultValue="false"
+			app:dependency="@string/preferences_video_pacing_enabled_key"
 			app:icon="@drawable/ic_fps" />
 
 		<ListPreference

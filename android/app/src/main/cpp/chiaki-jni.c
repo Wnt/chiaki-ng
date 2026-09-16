@@ -455,6 +455,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			E->GetFieldID(env, connect_info_class, "performanceModeEnabled", "Z"));
 	jboolean decoder_late_frame_recovery = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderLateFrameRecoveryEnabled", "Z"));
 	jint decoder_operating_rate = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRate", "I"));
+	jboolean decoder_operating_rate_default = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRateDefault", "Z"));
 	jboolean decoder_operating_rate_auto = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderOperatingRateAuto", "Z"));
 	jboolean decoder_realtime_priority = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "decoderRealtimePriority", "Z"));
 	jint video_timestamp_rate_hz = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "videoTimestampRateHz", "I"));
@@ -465,6 +466,27 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	jint feedback_stats_log_interval_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "feedbackStatsLogIntervalMs", "I"));
 	jboolean stream_diagnostics_enabled = E->GetBooleanField(env, connect_info_obj,
 			E->GetFieldID(env, connect_info_class, "streamDiagnosticsEnabled", "Z"));
+	jobject presenter_config_obj = E->GetObjectField(env, connect_info_obj,
+			E->GetFieldID(env, connect_info_class, "videoPresenterConfig",
+					"L"BASE_PACKAGE"/AndroidChiakiVideoPresenterConfig;"));
+	jclass presenter_config_class = E->GetObjectClass(env, presenter_config_obj);
+	AndroidChiakiVideoPresenterConfig presenter_config = ANDROID_CHIAKI_VIDEO_PRESENTER_CONFIG_DEFAULT;
+	presenter_config.pacing_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "pacingEnabled", "Z"));
+	presenter_config.pacing_high_refresh_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "pacingHighRefreshEnabled", "Z"));
+	presenter_config.pacing_mode = (AndroidChiakiVideoPacingMode)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "pacingMode", "I"));
+	presenter_config.presenter_lead = (AndroidChiakiVideoPresenterLead)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "presenterLead", "I"));
+	presenter_config.bounded_age_enabled = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "boundedAgeEnabled", "Z"));
+	presenter_config.max_frame_age_periods = (uint32_t)E->GetIntField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "maxFrameAgePeriods", "I"));
+	presenter_config.nonblocking_producer = E->GetBooleanField(env, presenter_config_obj,
+			E->GetFieldID(env, presenter_config_class, "nonblockingProducer", "Z"));
+	presenter_config.recovery_strategy = (AndroidChiakiVideoRecoveryStrategy)E->GetIntField(env,
+			presenter_config_obj, E->GetFieldID(env, presenter_config_class, "recoveryStrategy", "I"));
 	jint audio_buffer_bursts = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioBufferBursts", "I"));
 	jint audio_fifo_ms = E->GetIntField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "audioFifoMs", "I"));
 	jboolean auto_register = E->GetBooleanField(env, connect_info_obj, E->GetFieldID(env, connect_info_class, "autoRegister", "Z"));
@@ -576,9 +598,10 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	err = android_chiaki_video_decoder_init(&session->video_decoder, log, connect_info.video_profile.width, connect_info.video_profile.height,
 			connect_info.video_profile.max_fps, connect_info.ps5 ? connect_info.video_profile.codec : CHIAKI_CODEC_H264,
 			decoder_low_latency, real_video_timestamps, decoder_input_thread, decoder_late_frame_recovery,
-			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_auto, decoder_realtime_priority,
+			performance_mode, (int32_t)decoder_operating_rate, decoder_operating_rate_default,
+			decoder_operating_rate_auto, decoder_realtime_priority,
 			video_timestamp_rate_hz > 0 ? (unsigned int)video_timestamp_rate_hz : 0, stream_stats_enabled,
-			feedback_stats_log_interval_ms > 0);
+			feedback_stats_log_interval_ms > 0, &presenter_config);
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		free(session);
@@ -755,33 +778,19 @@ JNIEXPORT jint JNICALL JNI_FCN(sessionSetRemoteDataSocket)(JNIEnv *env, jobject 
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetSurface)(JNIEnv *env, jobject obj, jlong ptr, jobject surface,
-		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode,
-		jint presenter_lead, jint max_queue_age_periods, jboolean nonblocking_producer,
-		jint recovery_strategy)
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
 	android_chiaki_video_decoder_set_surface(&session->video_decoder, env, surface,
-			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
-			(AndroidChiakiVideoPacingMode)pacing_mode,
-			(AndroidChiakiVideoPresenterLead)presenter_lead,
-			max_queue_age_periods > 0 ? (uint32_t)max_queue_age_periods : 0,
-			nonblocking_producer == JNI_TRUE,
-			android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy));
+			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetTiming)(JNIEnv *env, jobject obj, jlong ptr,
-		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns, jint pacing_mode,
-		jint presenter_lead, jint max_queue_age_periods, jboolean nonblocking_producer,
-		jint recovery_strategy)
+		jint stream_fps, jdouble refresh_hz, jlong app_vsync_offset_ns)
 {
 	AndroidChiakiSession *session = (AndroidChiakiSession *)ptr;
 	android_chiaki_video_decoder_set_timing(&session->video_decoder,
-			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns,
-			(AndroidChiakiVideoPacingMode)pacing_mode,
-			(AndroidChiakiVideoPresenterLead)presenter_lead,
-			max_queue_age_periods > 0 ? (uint32_t)max_queue_age_periods : 0,
-			nonblocking_producer == JNI_TRUE,
-			android_chiaki_video_recovery_sanitize_strategy((int)recovery_strategy));
+			(unsigned int)stream_fps, (double)refresh_hz, (int64_t)app_vsync_offset_ns);
 }
 
 JNIEXPORT void JNICALL JNI_FCN(sessionSetPacingMode)(JNIEnv *env, jobject obj, jlong ptr, jint pacing_mode)
