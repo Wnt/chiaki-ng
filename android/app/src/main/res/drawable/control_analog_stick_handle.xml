@@ -1,15 +1,16 @@
+<!--
+  Analog stick knob (PLE-342). Bounds are set to +/- handleRadius = 24dp, so
+  viewport 48 = dp. A filled cap with a rim, bright enough to be found at rest
+  and to be tracked while it travels.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="512dp"
-    android:height="512dp"
-    android:viewportWidth="135.46666"
-    android:viewportHeight="135.46667">
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
   <path
-      android:pathData="M67.733,67.733m-67.733,0a67.733,67.733 0,1 1,135.467 0a67.733,67.733 0,1 1,-135.467 0"
-      android:strokeAlpha="1"
-      android:strokeLineJoin="miter"
-      android:strokeWidth="4.56389332"
-      android:fillColor="@color/control_pressed"
-      android:strokeColor="#00000000"
-      android:fillAlpha="1"
-      android:strokeLineCap="butt"/>
+      android:pathData="M24,24m-22.5,0a22.5,22.5 0,1 1,45 0a22.5,22.5 0,1 1,-45 0"
+      android:fillColor="@color/control_stick_knob_fill"
+      android:strokeColor="@color/control_stick_knob_stroke"
+      android:strokeWidth="2"/>
 </vector>

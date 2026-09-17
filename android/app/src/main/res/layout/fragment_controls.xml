@@ -15,10 +15,21 @@
         android:importantForAccessibility="no" />
 
     <!--
-        The input Views and callbacks are unchanged; only their hit regions are grouped into a
-        compact end-anchored reach zone. On a landscape phone the whole pad is reachable without
-        moving the holding hand across the display. On narrower portrait screens it naturally
-        expands to the available safe width.
+        The reach band (PLE-342). The dock still spans the full width of its
+        window, as PLE-341 requires, but its height is bounded: controls sit in
+        the bottom 324dp, inside the arc a thumb sweeps from a normal grip,
+        instead of being spread evenly down 565dp of portrait window. Every
+        child is positioned against the band, so one geometry serves both
+        orientations and no orientation-specific layout has to be inflated.
+
+        Rows, measured from the top of the band:
+          0..64    L2 L1 L3 | R3 R1 R2   (the rarely-held modifiers)
+          68..188  d-pad (left) and the face diamond (right)
+          76..132  touchpad, in the free centre column
+          140..188 Create just inboard of the d-pad, Options just inboard of the
+                   face diamond, so each stays on its own hand's side
+          252..300 PS, centred
+          188..324 the analog sticks, closest to the thumb pivots
     -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/controllerDock"
@@ -27,19 +38,10 @@
         android:clipChildren="false"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHeight_max="400dp"
-        app:layout_constraintHorizontal_bias="1"
+        app:layout_constraintHeight_max="324dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="1"
-        app:layout_constraintWidth_max="440dp">
-
-        <androidx.constraintlayout.widget.Guideline
-            android:id="@+id/centerGuideline"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            app:layout_constraintGuide_percent="0.5" />
+        app:layout_constraintVertical_bias="1">
 
         <com.metallic.chiaki.touchcontrols.ButtonView
             android:id="@+id/l2ButtonView"
@@ -51,8 +53,6 @@
             android:paddingBottom="6dp"
             app:drawableIdle="@drawable/control_button_l2"
             app:drawablePressed="@drawable/control_button_l2_pressed"
-            app:layout_constraintEnd_toStartOf="@id/l1ButtonView"
-            app:layout_constraintHorizontal_chainStyle="spread_inside"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
@@ -60,44 +60,48 @@
             android:id="@+id/l1ButtonView"
             android:layout_width="56dp"
             android:layout_height="64dp"
+            android:layout_marginStart="68dp"
             android:padding="6dp"
             app:drawableIdle="@drawable/control_button_l1"
             app:drawablePressed="@drawable/control_button_l1_pressed"
-            app:layout_constraintEnd_toStartOf="@id/shareButtonView"
-            app:layout_constraintStart_toEndOf="@id/l2ButtonView"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
-            android:id="@+id/shareButtonView"
-            android:layout_width="48dp"
-            android:layout_height="64dp"
-            android:padding="8dp"
-            app:drawableIdle="@drawable/control_button_share"
-            app:drawablePressed="@drawable/control_button_share_pressed"
-            app:layout_constraintEnd_toStartOf="@id/optionsButtonView"
-            app:layout_constraintStart_toEndOf="@id/l1ButtonView"
+            android:id="@+id/l3ButtonView"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="132dp"
+            android:layout_marginTop="4dp"
+            android:padding="4dp"
+            app:drawableFitCenter="true"
+            app:drawableIdle="@drawable/control_button_l3"
+            app:drawablePressed="@drawable/control_button_l3_pressed"
+            app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
-            android:id="@+id/optionsButtonView"
-            android:layout_width="48dp"
-            android:layout_height="64dp"
-            android:padding="8dp"
-            app:drawableIdle="@drawable/control_button_options"
-            app:drawablePressed="@drawable/control_button_options_pressed"
-            app:layout_constraintEnd_toStartOf="@id/r1ButtonView"
-            app:layout_constraintStart_toEndOf="@id/shareButtonView"
+            android:id="@+id/r3ButtonView"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_marginEnd="132dp"
+            android:layout_marginTop="4dp"
+            android:padding="4dp"
+            app:drawableFitCenter="true"
+            app:drawableIdle="@drawable/control_button_r3"
+            app:drawablePressed="@drawable/control_button_r3_pressed"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
             android:id="@+id/r1ButtonView"
             android:layout_width="56dp"
             android:layout_height="64dp"
+            android:layout_marginEnd="68dp"
             android:padding="6dp"
             app:drawableIdle="@drawable/control_button_r1"
             app:drawablePressed="@drawable/control_button_r1_pressed"
-            app:layout_constraintEnd_toStartOf="@id/r2ButtonView"
-            app:layout_constraintStart_toEndOf="@id/optionsButtonView"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
@@ -111,34 +115,33 @@
             app:drawableIdle="@drawable/control_button_r2"
             app:drawablePressed="@drawable/control_button_r2_pressed"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/r1ButtonView"
             app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.DPadView
             android:id="@+id/dpadView"
-            android:layout_width="148dp"
-            android:layout_height="148dp"
-            android:padding="12dp"
-            app:layout_constraintBottom_toTopOf="@id/leftAnalogStickView"
+            android:layout_width="120dp"
+            android:layout_height="120dp"
+            android:layout_marginTop="68dp"
+            android:padding="10dp"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/l2ButtonView" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/faceButtonsLayout"
-            android:layout_width="156dp"
-            android:layout_height="156dp"
-            app:layout_constraintBottom_toTopOf="@id/rightAnalogStickView"
+            android:layout_width="124dp"
+            android:layout_height="124dp"
+            android:layout_marginTop="64dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/r2ButtonView">
+            app:layout_constraintTop_toTopOf="parent">
 
             <com.metallic.chiaki.touchcontrols.ButtonView
                 android:id="@+id/crossButtonView"
-                android:layout_width="156dp"
-                android:layout_height="78dp"
-                android:paddingStart="54dp"
-                android:paddingTop="18dp"
-                android:paddingEnd="54dp"
-                android:paddingBottom="12dp"
+                android:layout_width="124dp"
+                android:layout_height="62dp"
+                android:paddingStart="40dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="40dp"
+                android:paddingBottom="6dp"
                 app:drawableIdle="@drawable/control_button_cross"
                 app:drawablePressed="@drawable/control_button_cross_pressed"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -147,12 +150,12 @@
 
             <com.metallic.chiaki.touchcontrols.ButtonView
                 android:id="@+id/moonButtonView"
-                android:layout_width="78dp"
-                android:layout_height="156dp"
-                android:paddingStart="18dp"
-                android:paddingTop="54dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="54dp"
+                android:layout_width="62dp"
+                android:layout_height="124dp"
+                android:paddingStart="12dp"
+                android:paddingTop="40dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="40dp"
                 app:drawableIdle="@drawable/control_button_moon"
                 app:drawablePressed="@drawable/control_button_moon_pressed"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -161,12 +164,12 @@
 
             <com.metallic.chiaki.touchcontrols.ButtonView
                 android:id="@+id/pyramidButtonView"
-                android:layout_width="156dp"
-                android:layout_height="78dp"
-                android:paddingStart="54dp"
-                android:paddingTop="12dp"
-                android:paddingEnd="54dp"
-                android:paddingBottom="18dp"
+                android:layout_width="124dp"
+                android:layout_height="62dp"
+                android:paddingStart="40dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="40dp"
+                android:paddingBottom="12dp"
                 app:drawableIdle="@drawable/control_button_pyramid"
                 app:drawablePressed="@drawable/control_button_pyramid_pressed"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -175,12 +178,12 @@
 
             <com.metallic.chiaki.touchcontrols.ButtonView
                 android:id="@+id/boxButtonView"
-                android:layout_width="78dp"
-                android:layout_height="156dp"
-                android:paddingStart="12dp"
-                android:paddingTop="54dp"
-                android:paddingEnd="18dp"
-                android:paddingBottom="54dp"
+                android:layout_width="62dp"
+                android:layout_height="124dp"
+                android:paddingStart="6dp"
+                android:paddingTop="40dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="40dp"
                 app:drawableIdle="@drawable/control_button_box"
                 app:drawablePressed="@drawable/control_button_box_pressed"
                 app:layout_constraintBottom_toBottomOf="parent"
@@ -192,63 +195,72 @@
             android:id="@+id/touchpadView"
             android:layout_width="104dp"
             android:layout_height="56dp"
+            android:layout_marginTop="76dp"
             app:drawableIdle="@drawable/control_touchpad"
             app:drawablePressed="@drawable/control_touchpad_pressed"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/shareButtonView" />
-
-        <com.metallic.chiaki.touchcontrols.AnalogStickView
-            android:id="@+id/leftAnalogStickView"
-            android:layout_width="0dp"
-            android:layout_height="112dp"
-            app:drawableBase="@drawable/control_analog_stick_base"
-            app:drawableHandle="@drawable/control_analog_stick_handle"
-            app:handleRadius="@dimen/control_analog_stick_handle_radius"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/centerGuideline"
-            app:layout_constraintStart_toStartOf="parent"
-            app:radius="@dimen/control_analog_stick_radius" />
-
-        <com.metallic.chiaki.touchcontrols.AnalogStickView
-            android:id="@+id/rightAnalogStickView"
-            android:layout_width="0dp"
-            android:layout_height="112dp"
-            app:drawableBase="@drawable/control_analog_stick_base"
-            app:drawableHandle="@drawable/control_analog_stick_handle"
-            app:handleRadius="@dimen/control_analog_stick_handle_radius"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/centerGuideline"
-            app:radius="@dimen/control_analog_stick_radius" />
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
-            android:id="@+id/l3ButtonView"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            app:drawableIdle="@drawable/control_button_l3"
-            app:drawablePressed="@drawable/control_button_l3_pressed"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            android:id="@+id/shareButtonView"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="140dp"
+            android:padding="4dp"
+            app:drawableFitCenter="true"
+            app:drawableIdle="@drawable/control_button_share"
+            app:drawablePressed="@drawable/control_button_share_pressed"
+            app:layout_constraintStart_toEndOf="@id/dpadView"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
-            android:id="@+id/r3ButtonView"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            app:drawableIdle="@drawable/control_button_r3"
-            app:drawablePressed="@drawable/control_button_r3_pressed"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            android:id="@+id/optionsButtonView"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="4dp"
+            android:layout_marginTop="140dp"
+            android:padding="4dp"
+            app:drawableFitCenter="true"
+            app:drawableIdle="@drawable/control_button_options"
+            app:drawablePressed="@drawable/control_button_options_pressed"
+            app:layout_constraintEnd_toStartOf="@id/faceButtonsLayout"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.metallic.chiaki.touchcontrols.ButtonView
             android:id="@+id/psButtonView"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:padding="8dp"
+            android:layout_marginTop="252dp"
+            android:padding="6dp"
+            app:drawableFitCenter="true"
             app:drawableIdle="@drawable/control_button_home"
             app:drawablePressed="@drawable/control_button_home_pressed"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.metallic.chiaki.touchcontrols.AnalogStickView
+            android:id="@+id/leftAnalogStickView"
+            android:layout_width="152dp"
+            android:layout_height="136dp"
+            app:drawableBase="@drawable/control_analog_stick_base"
+            app:drawableHandle="@drawable/control_analog_stick_handle"
+            app:handleRadius="@dimen/control_analog_stick_handle_radius"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:radius="@dimen/control_analog_stick_radius" />
+
+        <com.metallic.chiaki.touchcontrols.AnalogStickView
+            android:id="@+id/rightAnalogStickView"
+            android:layout_width="152dp"
+            android:layout_height="136dp"
+            app:drawableBase="@drawable/control_analog_stick_base"
+            app:drawableHandle="@drawable/control_analog_stick_handle"
+            app:handleRadius="@dimen/control_analog_stick_handle_radius"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:radius="@dimen/control_analog_stick_radius" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

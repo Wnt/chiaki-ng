@@ -1,15 +1,30 @@
+<!--
+  Analog stick gate (PLE-342). Our own drawing, but the affordance is the one
+  both reference clients rely on: an untouched stick has to show a rim, a travel
+  reference and a home socket, or nothing on screen says "stick".
+
+    outer rim  r=62  - the bezel, dark fill so it reads over bright video
+    travel     r=40  - where the knob centre stops, = control_analog_stick_radius
+    socket     r=24  - exactly the knob, so the resting knob looks seated
+
+  Bounds are set to +/- (radius + handleRadius) = 64dp, so viewport 128 = dp.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="512dp"
-    android:height="512dp"
-    android:viewportWidth="135.46666"
-    android:viewportHeight="135.46667">
+    android:width="128dp"
+    android:height="128dp"
+    android:viewportWidth="128"
+    android:viewportHeight="128">
   <path
-      android:pathData="M67.733,67.733m-67.733,0a67.733,67.733 0,1 1,135.467 0a67.733,67.733 0,1 1,-135.467 0"
-      android:strokeAlpha="1"
-      android:strokeLineJoin="miter"
-      android:strokeWidth="4.56389332"
-      android:fillColor="@color/control_primary"
-      android:strokeColor="#00000000"
-      android:fillAlpha="1"
-      android:strokeLineCap="butt"/>
+      android:pathData="M64,64m-62,0a62,62 0,1 1,124 0a62,62 0,1 1,-124 0"
+      android:fillColor="@color/control_stick_gate_fill"
+      android:strokeColor="@color/control_stick_gate_stroke"
+      android:strokeWidth="1.5"/>
+  <path
+      android:pathData="M64,64m-40,0a40,40 0,1 1,80 0a40,40 0,1 1,-80 0"
+      android:fillColor="#00000000"
+      android:strokeColor="@color/control_stick_travel_stroke"
+      android:strokeWidth="1.5"/>
+  <path
+      android:pathData="M64,64m-24,0a24,24 0,1 1,48 0a24,24 0,1 1,-48 0"
+      android:fillColor="@color/control_stick_socket_fill"/>
 </vector>
