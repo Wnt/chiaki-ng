@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import os
 from pathlib import Path
 import re
@@ -41,19 +40,9 @@ def read_env_file(path: Path) -> dict[str, str]:
             if len(value) < 2 or value[-1] != value[0]:
                 raise ConfigError(f"{path}:{number}: unmatched quote")
             value = value[1:-1]
-        if key in ("IMPAIR_HOST", "IMPAIR_PEER"):
+        if key == "IMPAIR_HOST":
             values[key] = value
     return values
-
-
-def ipv4(value: str) -> str:
-    try:
-        parsed = ipaddress.ip_address(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-    if parsed.version != 4:
-        raise argparse.ArgumentTypeError("expected an IPv4 address")
-    return str(parsed)
 
 
 def ttl(value: str) -> str:
@@ -75,8 +64,7 @@ def parser() -> argparse.ArgumentParser:
 
     apply_parser = subparsers.add_parser("apply", help="apply a profile")
     apply_parser.add_argument("profile", choices=PROFILES)
-    apply_parser.add_argument("--ttl", required=True, type=ttl)
-    apply_parser.add_argument("--phone", type=ipv4)
+    apply_parser.add_argument("--ttl", type=ttl)
     apply_parser.add_argument("--delay")
     apply_parser.add_argument("--jitter")
     apply_parser.add_argument("--loss")
@@ -87,13 +75,15 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def remote_arguments(args: argparse.Namespace, peer: str | None) -> list[str]:
+def remote_arguments(args: argparse.Namespace) -> list[str]:
     if args.command != "apply":
         return [args.command]
-    if peer is None:
-        raise ConfigError("IMPAIR_PEER is required for apply")
-    command = ["apply", args.profile, "--peer", ipv4(peer), "--ttl", args.ttl]
-    for option in ("phone", "delay", "jitter", "loss", "reorder", "rate"):
+    if args.profile == "clean":
+        return ["clean"]
+    if args.ttl is None:
+        raise ConfigError("--ttl is required for apply unless the profile is clean")
+    command = ["profile", args.profile, "--ttl", args.ttl]
+    for option in ("delay", "jitter", "loss", "reorder", "rate"):
         value = getattr(args, option)
         if value is not None:
             command.extend((f"--{option}", value))
@@ -105,8 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         file_values = read_env_file(args.env_file.expanduser())
         host = safe_host(os.environ.get("IMPAIR_HOST", file_values.get("IMPAIR_HOST", "")))
-        peer = os.environ.get("IMPAIR_PEER", file_values.get("IMPAIR_PEER"))
-        remote = remote_arguments(args, peer)
+        remote = remote_arguments(args)
     except (ConfigError, argparse.ArgumentTypeError, OSError) as exc:
         print(f"impairctl.py: {exc}", file=sys.stderr)
         return 2
