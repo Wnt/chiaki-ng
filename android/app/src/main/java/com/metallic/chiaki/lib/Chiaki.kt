@@ -430,7 +430,8 @@ data class StreamStatsEvent(
 	/** Our own round trip: 1 Hz heartbeat to console DATA_ACK on the stream socket. 0 = none yet. */
 	val probeRttMicros: Long = 0,
 	val probeRttSamples: Long = 0,
-	val probeRttUnacked: Long = 0
+	val probeRttUnacked: Long = 0,
+	val probeRttAmbiguous: Long = 0
 ): Event()
 {
 	/** The round trip we can defend: the in-stream probe, else senkusha's startup ping, else nothing. */
@@ -595,7 +596,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		consoleRttRaw: Double,
 		probeRttMicros: Long,
 		probeRttSamples: Long,
-		probeRttUnacked: Long
+		probeRttUnacked: Long,
+		probeRttAmbiguous: Long
 	)
 	{
 		event(StreamStatsEvent(
@@ -637,7 +639,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			consoleRttRaw = consoleRttRaw,
 			probeRttMicros = probeRttMicros,
 			probeRttSamples = probeRttSamples,
-			probeRttUnacked = probeRttUnacked
+			probeRttUnacked = probeRttUnacked,
+			probeRttAmbiguous = probeRttAmbiguous
 		))
 	}
 

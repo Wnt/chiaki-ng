@@ -406,6 +406,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.probe_rtt_us = network_stats.probe_rtt_us;
 			stats_event.stream_stats.probe_rtt_samples = network_stats.probe_rtt_samples;
 			stats_event.stream_stats.probe_rtt_unacked = network_stats.probe_rtt_unacked;
+			stats_event.stream_stats.probe_rtt_ambiguous = network_stats.probe_rtt_ambiguous;
 
 			diagnostics_window_start_ms = now_ms;
 			previous_stream_frames = stream_frames;
@@ -826,11 +827,12 @@ static void stream_connection_takion_data_idle(ChiakiStreamConnection *stream_co
 			ChiakiNetworkStatsSnapshot probe;
 			chiaki_network_stats_get_snapshot(&stream_connection->network_stats, &probe);
 			CHIAKI_LOGI(stream_connection->log,
-				"ConsoleRtt raw=%.6f senkusha_rtt_us=%llu probe_rtt_us=%llu probe_samples=%llu probe_unacked=%llu target_bitrate=%u server_loss=%llu",
+				"ConsoleRtt raw=%.6f senkusha_rtt_us=%llu probe_rtt_us=%llu probe_samples=%llu probe_unacked=%llu probe_ambiguous=%llu target_bitrate=%u server_loss=%llu",
 				q.rtt,
 				(unsigned long long)(stream_connection->session->rtt_us_measured ? stream_connection->session->rtt_us : 0),
 				(unsigned long long)probe.probe_rtt_us, (unsigned long long)probe.probe_rtt_samples,
-				(unsigned long long)probe.probe_rtt_unacked, q.target_bitrate, (unsigned long long)q.loss);
+				(unsigned long long)probe.probe_rtt_unacked, (unsigned long long)probe.probe_rtt_ambiguous,
+				q.target_bitrate, (unsigned long long)q.loss);
 		}
 		stream_connection->measured_bitrate = measured_bitrate_bps / 1000000.0;
 		if(stream_connection->session->connect_info.stream_diagnostics_enabled

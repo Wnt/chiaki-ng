@@ -200,6 +200,7 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t probe_rtt_us; // last heartbeat -> DATA_ACK round trip on the stream socket, 0 = none yet
 	uint64_t probe_rtt_samples;
 	uint64_t probe_rtt_unacked;
+	uint64_t probe_rtt_ambiguous;
 } ChiakiStreamStatsEvent;
 
 typedef enum {

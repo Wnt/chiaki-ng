@@ -68,7 +68,7 @@ class StreamDiagnosticsFormatterTest
 		assertTrue(text.contains("decode 8.13 ms mean | 10.75 ms p95 | q 1"))
 		assertTrue(text.contains("drop-in 2 | late 3 | lost 5 | reorder 6"))
 		assertTrue(text.contains("network UNKNOWN (none) | 0.00/0.00 Mbps actual/target"))
-		assertTrue(text.contains("loss 0.00/0.00% measured/reported | RTT 4.25 ms startup | jitter 2.75 ms | console-rtt 0.0 (unverified)"))
+		assertTrue(text.contains("loss 0.00/0.00% measured/reported | RTT 4.25 ms startup (ambiguous 0) | jitter 2.75 ms | console-rtt 0.0 (unverified)"))
 		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
 		assertTrue(text.contains("audio 12.50 ms | xruns 7 | underruns 8"))
 		assertTrue(text.contains("vsync 8.333 ms | miss 4 | DJB 8.0 ms"))
@@ -92,12 +92,13 @@ class StreamDiagnosticsFormatterTest
 			connectionQualityValid = true, targetBitrateBps = 15_000_000,
 			measuredThroughputBps = 12_500_000, consoleRttMicros = 98_000,
 			serverLoss = 2, congestionMeasuredLoss = 0.0375,
-			congestionReportedLoss = 0.01, consoleRttRaw = 98.25, probeRttMicros = 23_500
+			congestionReportedLoss = 0.01, consoleRttRaw = 98.25, probeRttMicros = 23_500,
+			probeRttAmbiguous = 3
 		)
 		val quality = NetworkQualitySnapshot(NetworkQualityLevel.POOR, NetworkQualityCause.WIFI_LINK)
 		val text = StreamDiagnosticsFormatter.format(stats, ui, quality)
 		assertTrue(text.contains("network POOR (Wi-Fi link) | 12.50/15.00 Mbps actual/target"))
-		assertTrue(text.contains("loss 3.75/1.00% measured/reported | RTT 23.50 ms probe | jitter 6.00 ms | console-rtt 98.3 (unverified)"))
+		assertTrue(text.contains("loss 3.75/1.00% measured/reported | RTT 23.50 ms probe (ambiguous 3) | jitter 6.00 ms | console-rtt 98.3 (unverified)"))
 	}
 
 	@Test

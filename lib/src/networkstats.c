@@ -51,8 +51,16 @@ CHIAKI_EXPORT bool chiaki_network_stats_probe_acked(ChiakiNetworkStats *stats, u
 	if(matched)
 	{
 		stats->probe_pending = false;
-		stats->snapshot.probe_rtt_us = now_us >= stats->probe_sent_us ? now_us - stats->probe_sent_us : 0;
-		stats->snapshot.probe_rtt_samples++;
+		uint64_t elapsed_us = now_us >= stats->probe_sent_us ? now_us - stats->probe_sent_us : 0;
+		// Karn's algorithm: past the re-send timeout the heartbeat has been
+		// retransmitted, so this ack cannot be attributed to a single transmission.
+		if(elapsed_us <= (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000)
+		{
+			stats->snapshot.probe_rtt_us = elapsed_us;
+			stats->snapshot.probe_rtt_samples++;
+		}
+		else
+			stats->snapshot.probe_rtt_ambiguous++;
 	}
 	chiaki_mutex_unlock(&stats->mutex);
 	return matched;

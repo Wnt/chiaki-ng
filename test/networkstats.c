@@ -16,7 +16,10 @@ static MunitResult test_connection_quality_wire_units(const MunitParameter param
 	(void)params;
 	(void)user;
 
-	// Captured PS5 message: target is bits/s and RTT is milliseconds on the wire.
+	// Captured PS5 message. target_bitrate is bits/s. The rtt field decodes to 35.285,
+	// but PLE-343's impairment-rig capture showed the field is a sawtooth independent of
+	// the real round trip, so this asserts the decode only: it is carried through as
+	// console_rtt_raw, and console_rtt_us is that figure read as ms for diagnostics alone.
 	static const uint8_t encoded[] = {
 		0x08, 0x10, 0x8a, 0x01, 0x25,
 		0x08, 0xb8, 0xed, 0xf8, 0x06, 0x10, 0x45, 0x1d, 0x00, 0x00, 0x00, 0x00,
@@ -86,11 +89,31 @@ static MunitResult test_probe_rtt_matches_only_the_pending_heartbeat(const Munit
 	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 2);
 	munit_assert_uint64(snapshot.probe_rtt_unacked, ==, 1);
 
+	// Karn's algorithm: an ack that arrives past the send buffer's re-send timeout
+	// crossed a retransmission, so it is not a round trip. PLE-343's measured case:
+	// a heartbeat sent on a 25 ms link, resent at 200 ms, acked at 228.8 ms.
+	chiaki_network_stats_probe_sent(&stats, 50, 100000);
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 50, 100000 + 228800));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 250);      // the previous sample stands
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 2);   // and no new one was recorded
+	munit_assert_uint64(snapshot.probe_rtt_ambiguous, ==, 1);
+
+	// The boundary itself is still a usable sample: exactly the re-send timeout means
+	// the re-send thread had not yet fired when the ack was timed.
+	chiaki_network_stats_probe_sent(&stats, 51, 200000);
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 51,
+		200000 + (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 3);
+	munit_assert_uint64(snapshot.probe_rtt_ambiguous, ==, 1);
+
 	// A console quality message in between leaves the probe untouched.
 	chiaki_network_stats_probe_sent(&stats, 45, 40000);
 	chiaki_network_stats_record_connection_quality(&stats, 1, 1, 98.0, 0);
 	chiaki_network_stats_get_snapshot(&stats, &snapshot);
-	munit_assert_uint64(snapshot.probe_rtt_us, ==, 250);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000);
 	munit_assert_double_equal(snapshot.console_rtt_raw, 98.0, 6);
 	munit_assert_uint64(snapshot.console_rtt_us, ==, 98000);
 	chiaki_network_stats_fini(&stats);

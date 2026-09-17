@@ -16,6 +16,12 @@ extern "C" {
 
 typedef struct chiaki_takion_t ChiakiTakion;
 
+/** How long the send buffer waits for an ack before it re-sends a data packet.
+ * Public because a round trip measured over a packet older than this necessarily
+ * crossed at least one re-send and is therefore ambiguous (Karn's algorithm);
+ * see chiaki_network_stats_probe_acked(). */
+#define CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS 200
+
 typedef struct chiaki_takion_send_buffer_packet_t ChiakiTakionSendBufferPacket;
 
 typedef struct chiaki_takion_send_buffer_t

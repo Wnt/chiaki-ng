@@ -31,7 +31,7 @@ class NetworkQualityClassifierTest
 	}
 
 	@Test
-	fun fiveSampleFastWindowSmoothsRttAndUsesNamedBoundaries()
+	fun fiveSampleFastWindowFollowsRttAndUsesNamedBoundaries()
 	{
 		val classifier = NetworkQualityClassifier()
 		repeat(4) { classifier.update(base, ethernet) }
@@ -83,6 +83,48 @@ class NetworkQualityClassifierTest
 		val result = NetworkQualityClassifier().update(noMeasurement, ethernet)
 		assertEquals(NetworkQualityLevel.GOOD, result.level)
 		assertEquals(0.0, result.fastRttMillis, 0.001)
+	}
+
+	@Test
+	fun oneRetransmitSizedOutlierDoesNotReachPoor()
+	{
+		// PLE-343, measured: on the 5g profile one probe sample read 228.8 ms (a heartbeat
+		// retransmitted after 200 ms) while the phone's own ping read 24.8 ms. The five-sample
+		// mean it used to feed was 65 ms -- Poor for the next 190 s of a link that was fine.
+		// Karn's algorithm drops that sample in the lib; the median is the second line of
+		// defence for any outlier that is a genuine round trip.
+		val classifier = NetworkQualityClassifier()
+		val link = base.copy(probeRttMicros = 25_000)
+		repeat(4) { classifier.update(link, ethernet) }
+		val spike = classifier.update(base.copy(probeRttMicros = 228_800), ethernet)
+		assertEquals(NetworkQualityLevel.CONSTRAINED, spike.level)
+		assertEquals(25.0, spike.fastRttMillis, 0.001)
+	}
+
+	@Test
+	fun measuredImpairmentProfilesMapToTheirVerdicts()
+	{
+		// PLE-343's calibration run: one stream, the impairment profile stepped underneath it,
+		// the phone's own ping to the PS5 as ground truth. Median per 60 s phase, ping vs probe:
+		//   clean 5.6/5.5   5g 26.6/25.1   wifi-slow 42.8/43.4   4g 62.0/63.6 ms
+		// Each level is entered from UNKNOWN so this reads the thresholds, not the hysteresis.
+		fun steadyLevel(rttMillis: Double, lossPercent: Double): NetworkQualityLevel
+		{
+			val classifier = NetworkQualityClassifier()
+			val lost = (10_000 * lossPercent / 100.0).toLong()
+			var level = NetworkQualityLevel.UNKNOWN
+			repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
+			{
+				level = classifier.update(base.copy(
+					probeRttMicros = (rttMillis * 1000).toLong(),
+					takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost), ethernet).level
+			}
+			return level
+		}
+		assertEquals(NetworkQualityLevel.GOOD, steadyLevel(5.5, 0.0))
+		assertEquals(NetworkQualityLevel.CONSTRAINED, steadyLevel(25.1, 0.5))
+		assertEquals(NetworkQualityLevel.POOR, steadyLevel(43.4, 0.0))
+		assertEquals(NetworkQualityLevel.POOR, steadyLevel(63.6, 1.6))
 	}
 
 	@Test
