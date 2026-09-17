@@ -107,6 +107,13 @@ internal class NetworkQualityClassifier
 			// over -- and its per-phase median stayed 105-116 while the measured RTT was stepped
 			// 5.6 -> 26.6 -> 62.0 -> 42.8 ms under it. It never drives the badge.
 			rttMillis = stats.measuredRttMicros / 1000.0,
+			// PLE-356: this is a per-frame delay variation now. It used to be an EWMA over
+			// every video packet, and ~9 of every 10 video packets share their frame's index,
+			// so their sender delta was zero and the sample was an intra-burst gap of tens of
+			// microseconds. It read 2.14 -> 3.11 ms while the path's delay variation was
+			// stepped 1.8 -> 13.3 ms, never once reaching CONSTRAINED_JITTER_MS. The
+			// attenuation was the packets per frame, which is a function of bitrate, so no
+			// rescaling could have recovered it -- the estimator had to change.
 			jitterMillis = stats.videoPacketJitterMicros / 1000.0,
 			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0)
 		)

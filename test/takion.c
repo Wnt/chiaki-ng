@@ -207,23 +207,118 @@ static MunitResult test_takion_video_packet_jitter(const MunitParameter params[]
 {
 	(void)params;
 	(void)user;
-	ChiakiTakionVideoPacketJitter jitter = { 0 };
+	const uint64_t frame_us = 1000000 / 60;
 
-	// Stable 60 fps, one packet per frame, including frame-index wrap.
-	chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 65534, 60);
-	chiaki_takion_video_packet_jitter_push(&jitter, 1016666, 65535, 60);
-	chiaki_takion_video_packet_jitter_push(&jitter, 1033332, 0, 60);
-	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
+	{
+		// Stable 60 fps, one packet per frame, including the frame-index wrap.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 65534, 60);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1016666, 65535, 60);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1033332, 0, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
 
-	// A 16 ms delay spike and its recovery each contribute |D| = 16000 us.
-	chiaki_takion_video_packet_jitter_push(&jitter, 1065998, 1, 60);
-	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1000);
-	chiaki_takion_video_packet_jitter_push(&jitter, 1066664, 2, 60);
-	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1938);
+		// A 16 ms delay spike and its recovery each contribute |D| = 16000 us at gain 1/16.
+		chiaki_takion_video_packet_jitter_push(&jitter, 1065998, 1, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1000);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1066664, 2, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1938);
+	}
 
-	// Multiple packets from one video frame are packet samples, not a frame proxy.
-	chiaki_takion_video_packet_jitter_push(&jitter, 1067664, 2, 60);
-	munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1879);
+	{
+		// PLE-356: further packets of a frame carry no new sender-side time, so they must
+		// not move the estimate. Before the fix each of these dropped it -- 1938 -> 1879 --
+		// and ~9 of every 10 real packets are of this kind, which is why the field read
+		// 2.9 ms on a path whose delay variation was 32 ms.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 0, 60);
+		uint64_t late = 1000000 + frame_us + 16000;  // 16 ms late
+		chiaki_takion_video_packet_jitter_push(&jitter, late, 1, 60);
+		uint64_t after_spike = chiaki_takion_video_packet_jitter_get(&jitter);
+		munit_assert_uint64(after_spike, ==, 1000);
+		for(int i = 1; i <= 10; i++)
+			chiaki_takion_video_packet_jitter_push(&jitter, late + i * 100, 1, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, after_spike);
+		// The superseded per-packet EWMA is exactly what those ten packets dilute.
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get_raw(&jitter), <, after_spike);
+	}
+
+	{
+		// A burst arriving intact but late: ten packets of the frame land together, and the
+		// frame's leading edge is what is priced, once, at its full size.
+		ChiakiTakionVideoPacketJitter a = { 0 };
+		ChiakiTakionVideoPacketJitter b = { 0 };
+		chiaki_takion_video_packet_jitter_push(&a, 1000000, 0, 60);
+		chiaki_takion_video_packet_jitter_push(&b, 1000000, 0, 60);
+		for(int i = 0; i < 10; i++)
+			chiaki_takion_video_packet_jitter_push(&b, 1000000 + i * 50, 0, 60);
+		chiaki_takion_video_packet_jitter_push(&a, 1000000 + frame_us + 20000, 1, 60);
+		chiaki_takion_video_packet_jitter_push(&b, 1000000 + frame_us + 20000, 1, 60);
+		// Same answer whether the frame came as one packet or as eleven: 20000/16 = 1250.
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&a), ==, 1250);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&b), ==,
+			chiaki_takion_video_packet_jitter_get(&a));
+	}
+
+	{
+		// Lost frames are priced against the nominal cadence, so three missing frames
+		// arriving on time are not jitter; a reordered older frame is ignored outright.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 10, 60);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000 + 4 * frame_us, 14, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000 + 5 * frame_us, 12, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
+		// ... and the state still tracks frame 14, so the next frame is priced from it.
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000 + 5 * frame_us + 16000, 15, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 1000);
+	}
+
+	{
+		// A blip-200ms stall is twelve frames at 60 fps: it is real delay variation and must
+		// register. Only a gap too large to attribute resyncs silently.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 0, 60);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000 + frame_us + 200000, 1, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 12500);
+
+		ChiakiTakionVideoPacketJitter discontinuity = { 0 };
+		chiaki_takion_video_packet_jitter_push(&discontinuity, 1000000, 0, 60);
+		chiaki_takion_video_packet_jitter_push(&discontinuity, 1000000 + frame_us,
+			CHIAKI_TAKION_VIDEO_JITTER_MAX_FRAME_DELTA + 1, 60);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&discontinuity), ==, 0);
+	}
+
+	{
+		// The whole defect, in the shape the ticket measured it in: every frame alternately
+		// 10 ms early and 10 ms late, so |D| is 10 ms at every frame boundary, delivered as
+		// ten packets per frame. The fix converges on the real 10 ms; the per-packet form
+		// lands near a tenth of it, because the divisor is the packets per frame -- a
+		// function of bitrate, so no constant scale factor could correct it.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		for(int frame = 0; frame < 400; frame++)
+		{
+			uint64_t arrival = 1000000 + frame * frame_us + ((frame % 2) ? 10000 : 0);
+			for(int pkt = 0; pkt < 10; pkt++)
+				chiaki_takion_video_packet_jitter_push(&jitter, arrival + pkt * 60,
+					(ChiakiSeqNum16)frame, 60);
+		}
+		uint64_t frame_jitter = chiaki_takion_video_packet_jitter_get(&jitter);
+		uint64_t raw_jitter = chiaki_takion_video_packet_jitter_get_raw(&jitter);
+		munit_assert_uint64(frame_jitter, >, 9500);
+		munit_assert_uint64(frame_jitter, <, 10500);
+		munit_assert_uint64(raw_jitter, >, 0);
+		munit_assert_uint64(raw_jitter, <, frame_jitter / 4);
+	}
+
+	{
+		// A zero fps -- no video profile yet -- must not divide by zero or record anything.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 0, 0);
+		chiaki_takion_video_packet_jitter_push(&jitter, 1100000, 1, 0);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 0);
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get_raw(&jitter), ==, 0);
+	}
+
 	return MUNIT_OK;
 }
 
