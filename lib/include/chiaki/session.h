@@ -175,7 +175,7 @@ typedef struct chiaki_video_fec_failure_event_t
 typedef struct chiaki_stream_stats_event_t
 {
 	uint64_t interval_ms;
-	uint64_t rtt_us;
+	uint64_t rtt_us; // senkusha's startup ping average; 0 when senkusha failed
 	uint64_t stream_frames;
 	uint64_t video_frames_lost;
 	uint64_t video_reorder_timeouts;
@@ -192,10 +192,15 @@ typedef struct chiaki_stream_stats_event_t
 	bool connection_quality_valid;
 	uint64_t target_bitrate_bps;
 	uint64_t measured_throughput_bps;
-	uint64_t live_rtt_us;
+	double console_rtt_raw; // ConnectionQualityPayload.rtt as decoded, unit and meaning unverified
+	uint64_t console_rtt_us; // console_rtt_raw read as ms; diagnostics only
 	uint64_t server_loss;
 	double congestion_measured_loss;
 	double congestion_reported_loss;
+	uint64_t probe_rtt_us; // last heartbeat -> DATA_ACK round trip on the stream socket, 0 = none yet
+	uint64_t probe_rtt_samples;
+	uint64_t probe_rtt_unacked;
+	uint64_t probe_rtt_ambiguous;
 } ChiakiStreamStatsEvent;
 
 typedef enum {
@@ -295,6 +300,7 @@ typedef struct chiaki_session_t
 	uint32_t mtu_in;
 	uint32_t mtu_out;
 	uint64_t rtt_us;
+	bool rtt_us_measured; // false when rtt_us is the senkusha-failed fallback, not a measurement
 	bool dontfrag;
 	ChiakiECDH ecdh;
 

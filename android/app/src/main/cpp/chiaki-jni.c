@@ -382,7 +382,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" | feedback_gap max_ms %llu mean_ms %llu.%03llu over_50_ms %llu"
 					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
 					" audio_xruns %s%d audio_underruns %llu"
-					" | network target_bps %llu measured_bps %llu live_rtt_ms %llu.%03llu"
+					" | network target_bps %llu measured_bps %llu console_rtt_raw %.6f"
+					" probe_rtt_ms %llu.%03llu probe_samples %llu probe_unacked %llu probe_ambiguous %llu"
 					" server_loss %llu congestion_loss measured=%.4f reported=%.4f%s",
 					(unsigned long long)interval_ms,
 					(unsigned long long)event->stream_stats.stream_frames,
@@ -419,8 +420,12 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)audio.underruns,
 					(unsigned long long)event->stream_stats.target_bitrate_bps,
 					(unsigned long long)event->stream_stats.measured_throughput_bps,
-					(unsigned long long)(event->stream_stats.live_rtt_us / 1000),
-					(unsigned long long)(event->stream_stats.live_rtt_us % 1000),
+					event->stream_stats.console_rtt_raw,
+					(unsigned long long)(event->stream_stats.probe_rtt_us / 1000),
+					(unsigned long long)(event->stream_stats.probe_rtt_us % 1000),
+					(unsigned long long)event->stream_stats.probe_rtt_samples,
+					(unsigned long long)event->stream_stats.probe_rtt_unacked,
+					(unsigned long long)event->stream_stats.probe_rtt_ambiguous,
 					(unsigned long long)event->stream_stats.server_loss,
 					event->stream_stats.congestion_measured_loss,
 					event->stream_stats.congestion_reported_loss, performance_status);
@@ -457,11 +462,16 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jboolean)event->stream_stats.connection_quality_valid,
 					(jlong)event->stream_stats.target_bitrate_bps,
 					(jlong)event->stream_stats.measured_throughput_bps,
-					(jlong)event->stream_stats.live_rtt_us,
+					(jlong)event->stream_stats.console_rtt_us,
 					(jlong)event->stream_stats.server_loss,
 					(jdouble)event->stream_stats.congestion_measured_loss,
 					(jdouble)event->stream_stats.congestion_reported_loss,
-					(jboolean)diagnostics.cadence_half_rate_detected);
+					(jboolean)diagnostics.cadence_half_rate_detected,
+					(jdouble)event->stream_stats.console_rtt_raw,
+					(jlong)event->stream_stats.probe_rtt_us,
+					(jlong)event->stream_stats.probe_rtt_samples,
+					(jlong)event->stream_stats.probe_rtt_unacked,
+					(jlong)event->stream_stats.probe_rtt_ambiguous);
 			break;
 		}
 		default:
@@ -729,7 +739,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZDJJJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

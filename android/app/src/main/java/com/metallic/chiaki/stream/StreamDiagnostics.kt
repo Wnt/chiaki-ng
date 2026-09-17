@@ -45,9 +45,8 @@ internal object StreamDiagnosticsFormatter
 		val presenter = ui.presenterMode?.let { " | presenter=$it" }.orEmpty()
 		val measuredLoss = (stats?.congestionMeasuredLoss ?: 0.0) * 100.0
 		val reportedLoss = (stats?.congestionReportedLoss ?: 0.0) * 100.0
-		val rttMicros = if(stats?.connectionQualityValid == true && stats.liveRttMicros > 0L)
-			stats.liveRttMicros else stats?.rttMicros ?: 0L
-		val rttSource = if(stats?.connectionQualityValid == true && stats.liveRttMicros > 0L) "live" else "startup"
+		val rttMicros = stats?.measuredRttMicros ?: 0L
+		val rttSource = stats?.measuredRttSource ?: "none"
 		val cause = when(quality.cause)
 		{
 			NetworkQualityCause.WIFI_LINK -> "Wi-Fi link"
@@ -62,7 +61,7 @@ internal object StreamDiagnosticsFormatter
 				"decode %.2f ms mean | %.2f ms p95 | q %d\n" +
 				"drop-in %d | late %d | lost %d | reorder %d\n" +
 				"network %s (%s) | %.2f/%.2f Mbps actual/target\n" +
-				"loss %.2f/%.2f%% measured/reported | RTT %.2f ms %s | jitter %.2f ms\n" +
+				"loss %.2f/%.2f%% measured/reported | RTT %.2f ms %s (ambiguous %d) | jitter %.2f ms | console-rtt %.1f (unverified)\n" +
 				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | server-loss %d\n" +
 				"audio %.2f ms | xruns %d | underruns %d\n" +
 				"vsync %.3f ms | miss %d | DJB %.1f ms\n" +
@@ -86,7 +85,9 @@ internal object StreamDiagnosticsFormatter
 			reportedLoss,
 			rttMicros / 1000.0,
 			rttSource,
+			stats?.probeRttAmbiguous ?: 0L,
 			(stats?.videoPacketJitterMicros ?: 0L) / 1000.0,
+			stats?.consoleRttRaw ?: 0.0,
 			rate(received, interval),
 			lossPercent,
 			rate(stats?.feedbackPackets ?: 0L, interval),

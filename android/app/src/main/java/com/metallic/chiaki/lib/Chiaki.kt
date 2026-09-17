@@ -418,12 +418,31 @@ data class StreamStatsEvent(
 	val connectionQualityValid: Boolean = false,
 	val targetBitrateBps: Long = 0,
 	val measuredThroughputBps: Long = 0,
-	val liveRttMicros: Long = 0,
+	/** ConnectionQualityPayload.rtt read as milliseconds. The console derives it by
+	 * means we cannot see and its unit is unverified (PLE-343): diagnostics only. */
+	val consoleRttMicros: Long = 0,
 	val serverLoss: Long = 0,
 	val congestionMeasuredLoss: Double = 0.0,
 	val congestionReportedLoss: Double = 0.0,
-	val cadenceHalfRateDetected: Boolean = false
+	val cadenceHalfRateDetected: Boolean = false,
+	/** The same console field exactly as decoded, for the capture log. */
+	val consoleRttRaw: Double = 0.0,
+	/** Our own round trip: 1 Hz heartbeat to console DATA_ACK on the stream socket. 0 = none yet. */
+	val probeRttMicros: Long = 0,
+	val probeRttSamples: Long = 0,
+	val probeRttUnacked: Long = 0,
+	val probeRttAmbiguous: Long = 0
 ): Event()
+{
+	/** The round trip we can defend: the in-stream probe, else senkusha's startup ping, else nothing. */
+	val measuredRttMicros: Long get() = if(probeRttMicros > 0L) probeRttMicros else rttMicros
+	val measuredRttSource: String get() = when
+	{
+		probeRttMicros > 0L -> "probe"
+		rttMicros > 0L -> "startup"
+		else -> "none"
+	}
+}
 
 class CreateError(val errorCode: ErrorCode): Exception("Failed to create a native object: $errorCode")
 
@@ -569,11 +588,16 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		connectionQualityValid: Boolean,
 		targetBitrateBps: Long,
 		measuredThroughputBps: Long,
-		liveRttMicros: Long,
+		consoleRttMicros: Long,
 		serverLoss: Long,
 		congestionMeasuredLoss: Double,
 		congestionReportedLoss: Double,
-		cadenceHalfRateDetected: Boolean
+		cadenceHalfRateDetected: Boolean,
+		consoleRttRaw: Double,
+		probeRttMicros: Long,
+		probeRttSamples: Long,
+		probeRttUnacked: Long,
+		probeRttAmbiguous: Long
 	)
 	{
 		event(StreamStatsEvent(
@@ -607,11 +631,16 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			connectionQualityValid = connectionQualityValid,
 			targetBitrateBps = targetBitrateBps,
 			measuredThroughputBps = measuredThroughputBps,
-			liveRttMicros = liveRttMicros,
+			consoleRttMicros = consoleRttMicros,
 			serverLoss = serverLoss,
 			congestionMeasuredLoss = congestionMeasuredLoss,
 			congestionReportedLoss = congestionReportedLoss,
-			cadenceHalfRateDetected = cadenceHalfRateDetected
+			cadenceHalfRateDetected = cadenceHalfRateDetected,
+			consoleRttRaw = consoleRttRaw,
+			probeRttMicros = probeRttMicros,
+			probeRttSamples = probeRttSamples,
+			probeRttUnacked = probeRttUnacked,
+			probeRttAmbiguous = probeRttAmbiguous
 		))
 	}
 

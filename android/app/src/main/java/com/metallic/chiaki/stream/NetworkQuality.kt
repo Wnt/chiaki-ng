@@ -103,8 +103,11 @@ internal class NetworkQualityClassifier
 		val packetLoss = if(packetTotal > 0L)
 			stats.takionPacketsLost * 100.0 / packetTotal else 0.0
 		val sample = NetworkQualitySample(
-			rttMillis = (if(stats.connectionQualityValid && stats.liveRttMicros > 0L)
-				stats.liveRttMicros else stats.rttMicros) / 1000.0,
+			// PLE-343: only round trips we measured ourselves. The console's rtt field is a
+			// sawtooth -- it resets to ~200 and ramps down to ~0 at about 27 units/s, over and
+			// over -- and its per-phase median stayed 105-116 while the measured RTT was stepped
+			// 5.6 -> 26.6 -> 62.0 -> 42.8 ms under it. It never drives the badge.
+			rttMillis = stats.measuredRttMicros / 1000.0,
 			jitterMillis = stats.videoPacketJitterMicros / 1000.0,
 			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0)
 		)
@@ -112,8 +115,8 @@ internal class NetworkQualityClassifier
 		while(samples.size > NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
 			samples.removeFirst()
 
-		val fast = average(samples.takeLast(NetworkQualityThresholds.FAST_WINDOW_SECONDS))
-		val slow = average(samples)
+		val fast = median(samples.takeLast(NetworkQualityThresholds.FAST_WINDOW_SECONDS))
+		val slow = median(samples)
 		val candidate = maxOf(enterLevel(fast), enterLevel(slow))
 		level = nextLevel(candidate, slow)
 		return NetworkQualitySnapshot(
@@ -187,10 +190,22 @@ internal class NetworkQualityClassifier
 		return if(consoleEvidence && localTransportClean) NetworkQualityCause.CONSOLE else NetworkQualityCause.LAN
 	}
 
-	private fun average(values: List<NetworkQualitySample>) = NetworkQualitySample(
-		rttMillis = values.sumOf { it.rttMillis } / values.size,
-		jitterMillis = values.sumOf { it.jitterMillis } / values.size,
-		lossPercent = values.sumOf { it.lossPercent } / values.size
+	/** Median, not mean. The window is five or thirty one-per-second samples, so a single
+	 * outlier moves a mean by a fifth of itself: PLE-343 measured one 228.8 ms RTT sample
+	 * lifting a five-sample mean of a 25 ms link to 65 ms, which is Poor. The median of the
+	 * same window is 25 ms. A condition that lasts long enough to matter to the viewer moves
+	 * the median too, so nothing real is suppressed. */
+	private fun median(values: List<NetworkQualitySample>) = NetworkQualitySample(
+		rttMillis = middle(values.map { it.rttMillis }),
+		jitterMillis = middle(values.map { it.jitterMillis }),
+		lossPercent = middle(values.map { it.lossPercent })
 	)
+
+	private fun middle(values: List<Double>): Double
+	{
+		val sorted = values.sorted()
+		val mid = sorted.size / 2
+		return if(sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2.0
+	}
 
 }

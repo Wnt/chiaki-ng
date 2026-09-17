@@ -55,8 +55,7 @@ internal class StreamSummaryAccumulator
 		if(connectedAtMillis == null)
 			return
 		val interval = stats.intervalMillis.coerceAtLeast(0L)
-		val latencyMicros = if(stats.connectionQualityValid && stats.liveRttMicros > 0L)
-			stats.liveRttMicros else stats.rttMicros
+		val latencyMicros = stats.measuredRttMicros
 		if(latencyMicros > 0L && interval > 0L)
 		{
 			latencyWeightedSum += latencyMicros / 1000.0 * interval

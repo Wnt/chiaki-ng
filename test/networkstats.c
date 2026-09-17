@@ -16,7 +16,10 @@ static MunitResult test_connection_quality_wire_units(const MunitParameter param
 	(void)params;
 	(void)user;
 
-	// Captured PS5 message: target is bits/s and RTT is milliseconds on the wire.
+	// Captured PS5 message. target_bitrate is bits/s. The rtt field decodes to 35.285,
+	// but PLE-343's impairment-rig capture showed the field is a sawtooth independent of
+	// the real round trip, so this asserts the decode only: it is carried through as
+	// console_rtt_raw, and console_rtt_us is that figure read as ms for diagnostics alone.
 	static const uint8_t encoded[] = {
 		0x08, 0x10, 0x8a, 0x01, 0x25,
 		0x08, 0xb8, 0xed, 0xf8, 0x06, 0x10, 0x45, 0x1d, 0x00, 0x00, 0x00, 0x00,
@@ -38,8 +41,81 @@ static MunitResult test_connection_quality_wire_units(const MunitParameter param
 	munit_assert_true(snapshot.connection_quality_valid);
 	munit_assert_uint64(snapshot.target_bitrate_bps, ==, 14563000);
 	munit_assert_uint64(snapshot.measured_throughput_bps, ==, 11137400);
-	munit_assert_uint64(snapshot.live_rtt_us, ==, 35285);
+	munit_assert_double_equal(snapshot.console_rtt_raw, 35.285, 3);
+	munit_assert_uint64(snapshot.console_rtt_us, ==, 35285);
+	// The console's figure never touches the probe fields.
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 0);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 0);
 	munit_assert_uint64(snapshot.server_loss, ==, 2);
+	chiaki_network_stats_fini(&stats);
+	return MUNIT_OK;
+}
+
+static MunitResult test_probe_rtt_matches_only_the_pending_heartbeat(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	ChiakiNetworkStats stats;
+	munit_assert_int(chiaki_network_stats_init(&stats), ==, CHIAKI_ERR_SUCCESS);
+	ChiakiNetworkStatsSnapshot snapshot;
+
+	// No probe outstanding: any ack is ignored.
+	munit_assert_false(chiaki_network_stats_probe_acked(&stats, 7, 1000));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 0);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 0);
+
+	// A foreign sequence number (another data message's ack) does not close the probe.
+	chiaki_network_stats_probe_sent(&stats, 42, 10000);
+	munit_assert_false(chiaki_network_stats_probe_acked(&stats, 41, 10500));
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 42, 13400));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 3400);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 1);
+	munit_assert_uint64(snapshot.probe_rtt_unacked, ==, 0);
+
+	// A late ack for a closed probe is ignored, the last sample stands.
+	munit_assert_false(chiaki_network_stats_probe_acked(&stats, 42, 20000));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 3400);
+
+	// A heartbeat superseded before its ack counts as unacked, and its stale ack is dropped.
+	chiaki_network_stats_probe_sent(&stats, 43, 30000);
+	chiaki_network_stats_probe_sent(&stats, 44, 31000);
+	munit_assert_false(chiaki_network_stats_probe_acked(&stats, 43, 31200));
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 44, 31250));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 250);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 2);
+	munit_assert_uint64(snapshot.probe_rtt_unacked, ==, 1);
+
+	// Karn's algorithm: an ack that arrives past the send buffer's re-send timeout
+	// crossed a retransmission, so it is not a round trip. PLE-343's measured case:
+	// a heartbeat sent on a 25 ms link, resent at 200 ms, acked at 228.8 ms.
+	chiaki_network_stats_probe_sent(&stats, 50, 100000);
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 50, 100000 + 228800));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, 250);      // the previous sample stands
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 2);   // and no new one was recorded
+	munit_assert_uint64(snapshot.probe_rtt_ambiguous, ==, 1);
+
+	// The boundary itself is still a usable sample: exactly the re-send timeout means
+	// the re-send thread had not yet fired when the ack was timed.
+	chiaki_network_stats_probe_sent(&stats, 51, 200000);
+	munit_assert_true(chiaki_network_stats_probe_acked(&stats, 51,
+		200000 + (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000));
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000);
+	munit_assert_uint64(snapshot.probe_rtt_samples, ==, 3);
+	munit_assert_uint64(snapshot.probe_rtt_ambiguous, ==, 1);
+
+	// A console quality message in between leaves the probe untouched.
+	chiaki_network_stats_probe_sent(&stats, 45, 40000);
+	chiaki_network_stats_record_connection_quality(&stats, 1, 1, 98.0, 0);
+	chiaki_network_stats_get_snapshot(&stats, &snapshot);
+	munit_assert_uint64(snapshot.probe_rtt_us, ==, (uint64_t)CHIAKI_TAKION_DATA_RESEND_TIMEOUT_MS * 1000);
+	munit_assert_double_equal(snapshot.console_rtt_raw, 98.0, 6);
+	munit_assert_uint64(snapshot.console_rtt_us, ==, 98000);
 	chiaki_network_stats_fini(&stats);
 	return MUNIT_OK;
 }
@@ -172,7 +248,7 @@ static MunitResult test_snapshot_is_coherent_during_update(const MunitParameter 
 			continue;
 		munit_assert_uint64(snapshot.measured_throughput_bps, ==,
 			snapshot.target_bitrate_bps * 2);
-		munit_assert_uint64(snapshot.live_rtt_us, ==, snapshot.target_bitrate_bps * 3);
+		munit_assert_uint64(snapshot.console_rtt_us, ==, snapshot.target_bitrate_bps * 3);
 		munit_assert_uint64(snapshot.server_loss, ==, snapshot.target_bitrate_bps * 4);
 	}
 	munit_assert_int(chiaki_thread_join(&thread, NULL), ==, CHIAKI_ERR_SUCCESS);
@@ -208,6 +284,9 @@ MunitResult test_network_stats_all(void)
 	munit_assert_uint64(sender.stats_gaps_over_50_ms, ==, 1);
 
 	MunitResult result = test_connection_quality_wire_units(NULL, NULL);
+	if(result != MUNIT_OK)
+		return result;
+	result = test_probe_rtt_matches_only_the_pending_heartbeat(NULL, NULL);
 	if(result != MUNIT_OK)
 		return result;
 	result = test_congestion_measured_versus_reported(NULL, NULL);

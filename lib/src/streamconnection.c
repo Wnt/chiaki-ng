@@ -379,7 +379,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			ChiakiEvent stats_event = { 0 };
 			stats_event.type = CHIAKI_EVENT_STREAM_STATS;
 			stats_event.stream_stats.interval_ms = now_ms - diagnostics_window_start_ms;
-			stats_event.stream_stats.rtt_us = session->rtt_us;
+			stats_event.stream_stats.rtt_us = session->rtt_us_measured ? session->rtt_us : 0;
 			stats_event.stream_stats.stream_frames = stream_frames - previous_stream_frames;
 			stats_event.stream_stats.video_frames_lost = (uint64_t)chiaki_video_receiver_get_frames_lost_total(stream_connection->video_receiver);
 			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);
@@ -398,10 +398,15 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.connection_quality_valid = network_stats.connection_quality_valid;
 			stats_event.stream_stats.target_bitrate_bps = network_stats.target_bitrate_bps;
 			stats_event.stream_stats.measured_throughput_bps = network_stats.measured_throughput_bps;
-			stats_event.stream_stats.live_rtt_us = network_stats.live_rtt_us;
+			stats_event.stream_stats.console_rtt_raw = network_stats.console_rtt_raw;
+			stats_event.stream_stats.console_rtt_us = network_stats.console_rtt_us;
 			stats_event.stream_stats.server_loss = network_stats.server_loss;
 			stats_event.stream_stats.congestion_measured_loss = network_stats.congestion_measured_loss;
 			stats_event.stream_stats.congestion_reported_loss = network_stats.congestion_reported_loss;
+			stats_event.stream_stats.probe_rtt_us = network_stats.probe_rtt_us;
+			stats_event.stream_stats.probe_rtt_samples = network_stats.probe_rtt_samples;
+			stats_event.stream_stats.probe_rtt_unacked = network_stats.probe_rtt_unacked;
+			stats_event.stream_stats.probe_rtt_ambiguous = network_stats.probe_rtt_ambiguous;
 
 			diagnostics_window_start_ms = now_ms;
 			previous_stream_frames = stream_frames;
@@ -510,6 +515,11 @@ static void stream_connection_takion_cb(ChiakiTakionEvent *event, void *user)
 			break;
 		case CHIAKI_TAKION_EVENT_TYPE_AV:
 			stream_connection_takion_av(stream_connection, event->av);
+			break;
+		case CHIAKI_TAKION_EVENT_TYPE_DATA_ACK:
+			// One mutexed compare per acked data packet; nothing on the AV path.
+			chiaki_network_stats_probe_acked(&stream_connection->network_stats,
+				event->data_ack.seq_num, chiaki_time_now_monotonic_us());
 			break;
 		default:
 			break;
@@ -809,6 +819,20 @@ static void stream_connection_takion_data_idle(ChiakiStreamConnection *stream_co
 				 q.target_bitrate, q.upstream_bitrate,
 				 q.upstream_loss,
 				 q.disable_upstream_audio, q.rtt, q.loss);
+		}
+		if(stream_connection->session->connect_info.feedback_stats_log_interval_ms > 0)
+		{
+			// PLE-343: the console's rtt field verbatim, next to the two round trips we
+			// measure ourselves, once per console message so its cadence is visible too.
+			ChiakiNetworkStatsSnapshot probe;
+			chiaki_network_stats_get_snapshot(&stream_connection->network_stats, &probe);
+			CHIAKI_LOGI(stream_connection->log,
+				"ConsoleRtt raw=%.6f senkusha_rtt_us=%llu probe_rtt_us=%llu probe_samples=%llu probe_unacked=%llu probe_ambiguous=%llu target_bitrate=%u server_loss=%llu",
+				q.rtt,
+				(unsigned long long)(stream_connection->session->rtt_us_measured ? stream_connection->session->rtt_us : 0),
+				(unsigned long long)probe.probe_rtt_us, (unsigned long long)probe.probe_rtt_samples,
+				(unsigned long long)probe.probe_rtt_unacked, (unsigned long long)probe.probe_rtt_ambiguous,
+				q.target_bitrate, (unsigned long long)q.loss);
 		}
 		stream_connection->measured_bitrate = measured_bitrate_bps / 1000000.0;
 		if(stream_connection->session->connect_info.stream_diagnostics_enabled
@@ -1370,7 +1394,14 @@ static ChiakiErrorCode stream_connection_send_heartbeat(ChiakiStreamConnection *
 		return CHIAKI_ERR_UNKNOWN;
 	}
 
-	return chiaki_takion_send_message_data(&stream_connection->takion, 1, 1, buf, stream.bytes_written, NULL);
+	// PLE-343: the heartbeat doubles as the in-stream RTT probe. Its DATA_ACK is
+	// matched in stream_connection_takion_cb; same socket and 5-tuple as the video.
+	ChiakiSeqNum32 seq_num = 0;
+	uint64_t sent_us = chiaki_time_now_monotonic_us();
+	ChiakiErrorCode err = chiaki_takion_send_message_data(&stream_connection->takion, 1, 1, buf, stream.bytes_written, &seq_num);
+	if(err == CHIAKI_ERR_SUCCESS)
+		chiaki_network_stats_probe_sent(&stream_connection->network_stats, seq_num, sent_us);
+	return err;
 }
 
 CHIAKI_EXPORT ChiakiErrorCode stream_connection_send_corrupt_frame(ChiakiStreamConnection *stream_connection, ChiakiSeqNum16 start, ChiakiSeqNum16 end)
