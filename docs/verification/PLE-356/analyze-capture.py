@@ -51,8 +51,9 @@ def pct(v, q):
 def med(v): return statistics.median(v) if v else float("nan")
 
 print(f"{len(rows)} stats lines, {len(pings)} ping replies\n")
-hdr = ("phase", "n", "ping med", "ping p10-p90", "ping mean|IPDV|", "probe med",
-       "packet_jitter_ms", "raw (old)", "pkts/frame", "loss%", "badge jitter verdict")
+hdr = ("phase", "n", "ping med", "ping p10-p90", "ping mean|IPDV|", "ping max", "probe med",
+       "packet_jitter_ms", "jitter p90", "jitter max", "raw (old)", "raw max",
+       "pkts/frame", "loss%", "badge jitter verdict")
 print("| " + " | ".join(hdr) + " |")
 print("|" + "---|" * len(hdr))
 for tag, (a, b) in spans.items():
@@ -68,9 +69,12 @@ for tag, (a, b) in spans.items():
         med([x["raw"] for x in r]))
     fps = med([x["frames"] * 1000.0 / x["win"] for x in r])
     pk = med([x["pkts"] for x in r])
-    print("| {} | {} | {:.1f} | {:.1f}-{:.1f} | {:.1f} | {:.1f} | {:.2f} | {:.2f} | {:.1f} | {:.2f} | {} (was {}) |".format(
-        tag, len(r), med(p), pct(p, 0.1), pct(p, 0.9), ipdv, med([x["probe"] for x in r]),
-        jm, med([x["raw"] for x in r]), pk / fps if fps else float("nan"),
+    js = [x["jit"] for x in r]
+    rs = [x["raw"] for x in r]
+    print("| {} | {} | {:.1f} | {:.1f}-{:.1f} | {:.1f} | {:.0f} | {:.1f} | {:.2f} | {:.2f} | {:.2f} | {:.2f} | {:.2f} | {:.1f} | {:.2f} | {} (was {}) |".format(
+        tag, len(r), med(p), pct(p, 0.1), pct(p, 0.9), ipdv, max(p),
+        med([x["probe"] for x in r]), jm, pct(js, 0.9), max(js), med(rs), max(rs),
+        pk / fps if fps else float("nan"),
         med([x["loss"] for x in r]), verdict, verdict_old))
 
 print("\n--- per-second series ---")
