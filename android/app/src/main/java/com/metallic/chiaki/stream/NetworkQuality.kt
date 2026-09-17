@@ -9,7 +9,6 @@ internal object NetworkQualityThresholds
 {
 	// The producer is the diagnostics event's fixed 1 Hz cadence, so samples equal seconds.
 	const val FAST_WINDOW_SECONDS = 5
-	const val SLOW_WINDOW_SECONDS = 30
 	const val RECOVERY_SAMPLES = 3
 
 	const val CONSTRAINED_RTT_MS = 20.0
@@ -111,13 +110,11 @@ internal class NetworkQualityClassifier
 			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0)
 		)
 		samples.addLast(sample)
-		while(samples.size > NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
+		while(samples.size > NetworkQualityThresholds.FAST_WINDOW_SECONDS)
 			samples.removeFirst()
 
-		val fast = median(samples.takeLast(NetworkQualityThresholds.FAST_WINDOW_SECONDS))
-		val slow = median(samples)
-		val candidate = maxOf(enterLevel(fast), enterLevel(slow))
-		level = nextLevel(candidate, slow)
+		val fast = median(samples)
+		level = nextLevel(fast)
 		return NetworkQualitySnapshot(
 			level = level,
 			cause = cause(level, stats, link, fast),
@@ -127,26 +124,48 @@ internal class NetworkQualityClassifier
 		)
 	}
 
-	private fun nextLevel(candidate: NetworkQualityLevel, slow: NetworkQualitySample): NetworkQualityLevel
+	// PLE-357: there used to be a second, 30-sample "slow" window feeding the same candidate as
+	// the 5-sample fast one (`candidate = maxOf(enterLevel(fast), enterLevel(slow))`), so a
+	// genuinely bad spell stayed live in that buffer for up to 30 s after the path went clean.
+	// A worse verdict from the slow median could also re-fire *after* the fast window had
+	// already recovered the badge down a level -- because the slow window is a strict superset
+	// of history, its own median lags the fast one by construction, so the "candidate worse than
+	// current level" check re-triggered on stale data and flipped the badge back up
+	// (POOR -> CONSTRAINED -> POOR) before the slow window emptied. That is the oscillation this
+	// card is explicitly here to avoid, so the second window is gone rather than patched: one
+	// 5 s median drives both directions, asymmetric only in how many *consecutive* samples each
+	// direction needs. Getting worse needs one (`candidate.ordinal > level.ordinal`, unchanged
+	// from before this ticket -- worseningToPoorStillTakesOnlyThreeSamples shows the median
+	// itself still needs three bad samples of five to move, same math as before). Recovering
+	// needs three consecutive samples with the fast median below the exit boundary
+	// (RECOVERY_SAMPLES), so a single clean sample can't flip it back and a single dirty one
+	// resets the count. Worst case that is 5 s to fill the window with clean samples plus 3 more
+	// to confirm: 8 s, deterministic, versus the ~25-30 s the slow window produced --
+	// recoveryReturnsToGoodInEightSecondsNotThirty asserts the exact number. The same 5-sample
+	// median that already resists one outlier out of five (oneRetransmitSizedOutlierDoesNotReachPoor)
+	// resists it on the way down too, so a recurring single-sample blip never round-trips the
+	// badge (blipShapedSpikesNeverFlipTheLevel).
+	private fun nextLevel(fast: NetworkQualitySample): NetworkQualityLevel
 	{
+		val candidate = enterLevel(fast)
 		if(level == NetworkQualityLevel.UNKNOWN || candidate.ordinal > level.ordinal)
 		{
 			recoveryCount = 0
 			return candidate
 		}
-		if(candidate == level)
+		if(candidate.ordinal >= level.ordinal)
 		{
 			recoveryCount = 0
 			return level
 		}
 		val canRecover = when(level)
 		{
-			NetworkQualityLevel.POOR -> slow.rttMillis < NetworkQualityThresholds.POOR_EXIT_RTT_MS &&
-				slow.jitterMillis < NetworkQualityThresholds.POOR_EXIT_JITTER_MS &&
-				slow.lossPercent < NetworkQualityThresholds.POOR_EXIT_LOSS_PERCENT
-			NetworkQualityLevel.CONSTRAINED -> slow.rttMillis < NetworkQualityThresholds.GOOD_RTT_MS &&
-				slow.jitterMillis < NetworkQualityThresholds.GOOD_JITTER_MS &&
-				slow.lossPercent < NetworkQualityThresholds.GOOD_LOSS_PERCENT
+			NetworkQualityLevel.POOR -> fast.rttMillis < NetworkQualityThresholds.POOR_EXIT_RTT_MS &&
+				fast.jitterMillis < NetworkQualityThresholds.POOR_EXIT_JITTER_MS &&
+				fast.lossPercent < NetworkQualityThresholds.POOR_EXIT_LOSS_PERCENT
+			NetworkQualityLevel.CONSTRAINED -> fast.rttMillis < NetworkQualityThresholds.GOOD_RTT_MS &&
+				fast.jitterMillis < NetworkQualityThresholds.GOOD_JITTER_MS &&
+				fast.lossPercent < NetworkQualityThresholds.GOOD_LOSS_PERCENT
 			else -> true
 		}
 		recoveryCount = if(canRecover) recoveryCount + 1 else 0
@@ -201,7 +220,7 @@ internal class NetworkQualityClassifier
 		return if(consoleEvidence && localTransportClean) NetworkQualityCause.CONSOLE else NetworkQualityCause.LAN
 	}
 
-	/** Median, not mean. The window is five or thirty one-per-second samples, so a single
+	/** Median, not mean. The window is five one-per-second samples, so a single
 	 * outlier moves a mean by a fifth of itself: PLE-343 measured one 228.8 ms RTT sample
 	 * lifting a five-sample mean of a 25 ms link to 65 ms, which is Poor. The median of the
 	 * same window is 25 ms. A condition that lasts long enough to matter to the viewer moves

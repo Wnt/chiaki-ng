@@ -113,7 +113,7 @@ class NetworkQualityClassifierTest
 			val classifier = NetworkQualityClassifier()
 			val lost = (10_000 * lossPercent / 100.0).toLong()
 			var level = NetworkQualityLevel.UNKNOWN
-			repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
+			repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS)
 			{
 				level = classifier.update(base.copy(
 					probeRttMicros = (rttMillis * 1000).toLong(),
@@ -154,22 +154,69 @@ class NetworkQualityClassifierTest
 	@Test
 	fun consoleEvidenceWinsOnlyWhenLocalTransportHasTrulyRecovered()
 	{
-		// The slow window keeps the level POOR under recovery hysteresis after RTT/jitter/
-		// loss have already gone clean in the fast window. That is the one case left where
-		// server-reported loss can be believed as the console's own fault: nothing in our
-		// own measurement (RTT included) is still moving, so a live report from the console
-		// is not otherwise explained.
+		// PLE-357 removed the second, 30-sample window recovery used to be judged on, so this no
+		// longer lingers at POOR -- it lands on POOR's graceful step-down, CONSTRAINED, exactly
+		// at the fast window's fill point. RTT/jitter/loss are clean in that same fast window,
+		// so nothing in our own measurement explains the remaining degradation; a live
+		// server-reported loss is the one thing left that does, hence CONSOLE.
 		val classifier = NetworkQualityClassifier()
 		val bad = base.copy(probeRttMicros = 45_000)
-		repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS) { classifier.update(bad, ethernet) }
-		// Enough clean samples to flush the 5-sample fast window; the 30-sample slow window
-		// is still mostly the earlier bad samples, so its median keeps recovery from firing.
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(bad, ethernet) }
 		var result = NetworkQualitySnapshot.UNKNOWN
 		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) {
 			result = classifier.update(base.copy(serverLoss = 2), ethernet)
 		}
-		assertEquals(NetworkQualityLevel.POOR, result.level)
+		assertEquals(NetworkQualityLevel.CONSTRAINED, result.level)
 		assertEquals(NetworkQualityCause.CONSOLE, result.cause)
+	}
+
+	@Test
+	fun recoveryReturnsToGoodInEightSecondsNotThirty()
+	{
+		// PLE-357: recovery used to be judged on a second, 30-sample slow median, so a POOR
+		// verdict lingered until a majority of that 30 s buffer was clean again -- measured on
+		// the rig at ~25 s. Recovery is now judged on the same 5-sample fast median entering
+		// uses: the window itself needs 3 clean samples out of 5 to move (worst case), then 3
+		// more consecutive clean readings (RECOVERY_SAMPLES) confirm it -- a deterministic 8 s
+		// from the step to GOOD, landing on CONSTRAINED first as the same graceful step-down
+		// POOR->GOOD always took.
+		val classifier = NetworkQualityClassifier()
+		val bad = base.copy(probeRttMicros = 60_000)
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(bad, ethernet) }
+		var result = NetworkQualitySnapshot.UNKNOWN
+		repeat(7) { result = classifier.update(base, ethernet) }
+		assertEquals(NetworkQualityLevel.CONSTRAINED, result.level)
+		result = classifier.update(base, ethernet)
+		assertEquals(NetworkQualityLevel.GOOD, result.level)
+	}
+
+	@Test
+	fun worseningToPoorStillTakesOnlyThreeSamples()
+	{
+		// PLE-357 touches only recovery. Getting worse must stay exactly as fast as before:
+		// the fast window's median crosses into POOR as soon as bad samples are the majority
+		// of the last five, same as fiveSampleFastWindowFollowsRttAndUsesNamedBoundaries.
+		val classifier = NetworkQualityClassifier()
+		repeat(10) { classifier.update(base, ethernet) }
+		val bad = base.copy(probeRttMicros = 60_000)
+		assertEquals(NetworkQualityLevel.GOOD, classifier.update(bad, ethernet).level)
+		assertEquals(NetworkQualityLevel.GOOD, classifier.update(bad, ethernet).level)
+		assertEquals(NetworkQualityLevel.POOR, classifier.update(bad, ethernet).level)
+	}
+
+	@Test
+	fun blipShapedSpikesNeverFlipTheLevel()
+	{
+		// PLE-357's adversarial case: blip-200ms is a single bad sample every ~20 s. The fast
+		// median already resists one outlier out of five (oneRetransmitSizedOutlierDoesNotReachPoor);
+		// this confirms that holds across a long run, so a shorter recovery window does not
+		// trade lag for flapping.
+		val classifier = NetworkQualityClassifier()
+		for(second in 1..90)
+		{
+			val sample = if(second % 20 == 0) base.copy(probeRttMicros = 200_000) else base
+			assertEquals(NetworkQualityLevel.GOOD, classifier.update(sample, ethernet).level)
+		}
 	}
 
 	@Test
@@ -193,7 +240,7 @@ class NetworkQualityClassifierTest
 			val classifier = NetworkQualityClassifier()
 			val lost = (10_000 * lossPercent / 100.0).toLong()
 			var result = NetworkQualitySnapshot.UNKNOWN
-			repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
+			repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS)
 			{
 				result = classifier.update(base.copy(
 					probeRttMicros = (rttMillis * 1000).toLong(),
