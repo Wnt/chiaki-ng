@@ -140,11 +140,73 @@ class NetworkQualityClassifierTest
 	}
 
 	@Test
-	fun consoleEvidenceWinsWhenClientLossAndJitterAreClean()
+	fun elevatedRttIsAPathSignatureEvenWithServerLoss()
 	{
+		// PLE-355: an elevated RTT is our own measured round trip, so it moving is a path
+		// fault regardless of what the console's loss counter says -- exactly the case a
+		// rate-capped link produces. Server-reported loss no longer overrides a dirty RTT.
 		val consoleLimited = base.copy(probeRttMicros = 45_000, serverLoss = 2)
 		val result = NetworkQualityClassifier().update(consoleLimited, ethernet)
 		assertEquals(NetworkQualityLevel.POOR, result.level)
+		assertEquals(NetworkQualityCause.LAN, result.cause)
+	}
+
+	@Test
+	fun consoleEvidenceWinsOnlyWhenLocalTransportHasTrulyRecovered()
+	{
+		// The slow window keeps the level POOR under recovery hysteresis after RTT/jitter/
+		// loss have already gone clean in the fast window. That is the one case left where
+		// server-reported loss can be believed as the console's own fault: nothing in our
+		// own measurement (RTT included) is still moving, so a live report from the console
+		// is not otherwise explained.
+		val classifier = NetworkQualityClassifier()
+		val bad = base.copy(probeRttMicros = 45_000)
+		repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS) { classifier.update(bad, ethernet) }
+		// Enough clean samples to flush the 5-sample fast window; the 30-sample slow window
+		// is still mostly the earlier bad samples, so its median keeps recovery from firing.
+		var result = NetworkQualitySnapshot.UNKNOWN
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) {
+			result = classifier.update(base.copy(serverLoss = 2), ethernet)
+		}
+		assertEquals(NetworkQualityLevel.POOR, result.level)
 		assertEquals(NetworkQualityCause.CONSOLE, result.cause)
+	}
+
+	@Test
+	fun ple343CapturesRateCappedPathsAreNeverBlamedOnTheConsole()
+	{
+		// PLE-343's impairment-rig captures (build/captures/ple343-verify), medians per 60 s
+		// phase with the first 10 s of each dropped while the shaper step settles:
+		//   phase      | probe RTT | jitter | congestion loss | measured/target throughput
+		//   01_clean   |    5.2 ms |  2.14  |            0.0% | 6.59M/9.71M (0.68) -- GOOD
+		//   02_5g      |   25.8 ms |  3.11  |            0.0% | 6.56M/9.71M (0.68)
+		//   03_4g      |   63.0 ms |  2.72  |            0.8% | 5.17M/8.50M (0.61)
+		//   04_wifi-slow| 40.7 ms  |  2.89  |            0.0% | 5.27M/8.18M (0.65)
+		//   05_clean   |    5.5 ms |  2.53  |            0.0% | 5.23M/7.83M (0.67)
+		// The ratio sits at 0.61-0.68 in every phase including the two with zero impairment,
+		// so it carries no information -- exactly PLE-355's finding -- and 4g/wifi-slow's
+		// rate caps show up as elevated RTT, our own measurement, which is what correctly
+		// keeps them off "console" now.
+		fun phaseCause(rttMillis: Double, jitterMillis: Double, lossPercent: Double,
+			targetBps: Long, measuredBps: Long): NetworkQualityCause
+		{
+			val classifier = NetworkQualityClassifier()
+			val lost = (10_000 * lossPercent / 100.0).toLong()
+			var result = NetworkQualitySnapshot.UNKNOWN
+			repeat(NetworkQualityThresholds.SLOW_WINDOW_SECONDS)
+			{
+				result = classifier.update(base.copy(
+					probeRttMicros = (rttMillis * 1000).toLong(),
+					videoPacketJitterMicros = (jitterMillis * 1000).toLong(),
+					takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost,
+					targetBitrateBps = targetBps, measuredThroughputBps = measuredBps), ethernet)
+			}
+			return result.cause
+		}
+		assertEquals(NetworkQualityCause.NONE, phaseCause(5.2, 2.14, 0.0, 9_708_000, 6_588_352))
+		assertEquals(NetworkQualityCause.LAN, phaseCause(25.8, 3.11, 0.0, 9_708_000, 6_559_984))
+		assertEquals(NetworkQualityCause.LAN, phaseCause(63.0, 2.72, 0.8, 8_500_000, 5_166_518))
+		assertEquals(NetworkQualityCause.LAN, phaseCause(40.7, 2.89, 0.0, 8_175_000, 5_274_452))
+		assertEquals(NetworkQualityCause.NONE, phaseCause(5.5, 2.53, 0.0, 7_825_000, 5_230_172))
 	}
 }

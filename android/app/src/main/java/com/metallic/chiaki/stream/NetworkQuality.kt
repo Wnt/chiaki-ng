@@ -29,7 +29,6 @@ internal object NetworkQualityThresholds
 
 	const val WEAK_WIFI_RSSI_DBM = -67
 	const val WIFI_TARGET_HEADROOM = 2.0
-	const val CONSOLE_THROUGHPUT_RATIO = 0.75
 }
 
 internal enum class NetworkQualityLevel { UNKNOWN, GOOD, CONSTRAINED, POOR }
@@ -182,10 +181,22 @@ internal class NetworkQualityClassifier
 		if(weakRadio)
 			return NetworkQualityCause.WIFI_LINK
 
-		val consoleEvidence = stats.connectionQualityValid &&
-			(stats.serverLoss > 0L || (stats.targetBitrateBps > 0L &&
-				stats.measuredThroughputBps < stats.targetBitrateBps * NetworkQualityThresholds.CONSOLE_THROUGHPUT_RATIO))
-		val localTransportClean = fast.jitterMillis < NetworkQualityThresholds.CONSTRAINED_JITTER_MS &&
+		// PLE-355: throughput below 75% of target is not evidence of anything. PLE-343's
+		// impairment captures put the measured/target ratio at 0.61-0.68 in every one of
+		// five phases, including the two with no impairment at all -- it is encoder
+		// headroom, not a symptom, so a rate-capped path (4g/wifi-slow's tc caps) produces
+		// the identical ratio a struggling console would. It cannot tell the two apart and
+		// is not used here.
+		//
+		// What does: RTT here is our own measured round trip (PLE-343), so a fault in the
+		// path raises it together with loss, while a console/encoder problem leaves RTT and
+		// loss flat and only throughput falls. In those same captures RTT alone is what
+		// pushed the 5g/4g/wifi-slow phases out of GOOD, so a clean local RTT -- not just
+		// clean jitter and loss -- is what has to hold before the evidence can be read as
+		// the console's fault rather than the path's.
+		val consoleEvidence = stats.connectionQualityValid && stats.serverLoss > 0L
+		val localTransportClean = fast.rttMillis < NetworkQualityThresholds.CONSTRAINED_RTT_MS &&
+			fast.jitterMillis < NetworkQualityThresholds.CONSTRAINED_JITTER_MS &&
 			fast.lossPercent < NetworkQualityThresholds.CONSTRAINED_LOSS_PERCENT
 		return if(consoleEvidence && localTransportClean) NetworkQualityCause.CONSOLE else NetworkQualityCause.LAN
 	}
