@@ -597,32 +597,79 @@ CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacke
 {
 	if(!jitter || video_fps == 0)
 		return;
+
+	// The superseded per-packet EWMA, kept so one capture can show both numbers.
 	if(!jitter->initialized)
 	{
 		jitter->initialized = true;
 		jitter->previous_arrival_us = arrival_us;
 		jitter->previous_frame_index = frame_index;
+	}
+	else
+	{
+		int64_t arrival_delta_us = (int64_t)(arrival_us - jitter->previous_arrival_us);
+		int16_t raw_frame_delta = (int16_t)(frame_index - jitter->previous_frame_index);
+		int64_t sender_delta_us = (int64_t)raw_frame_delta * 1000000LL / (int64_t)video_fps;
+		int64_t variation_us = arrival_delta_us - sender_delta_us;
+		if(variation_us < 0)
+			variation_us = -variation_us;
+
+		// RFC 3550 A.8 integer form: keep four fractional bits and use gain 1/16.
+		jitter->raw_jitter_us_q4 += variation_us - ((jitter->raw_jitter_us_q4 + 8) >> 4);
+		jitter->previous_arrival_us = arrival_us;
+		jitter->previous_frame_index = frame_index;
+	}
+
+	// PLE-356: the measurement that drives thresholds takes one sample per frame, from
+	// the first packet seen for a frame index. Later packets of the same frame carry no
+	// sender-side time information -- their nominal send time is identical -- so folding
+	// them in only dilutes the frame-boundary samples that do.
+	if(!jitter->frame_initialized)
+	{
+		jitter->frame_initialized = true;
+		jitter->frame_arrival_us = arrival_us;
+		jitter->frame_index = frame_index;
 		return;
 	}
 
-	int64_t arrival_delta_us = (int64_t)(arrival_us - jitter->previous_arrival_us);
-	int16_t frame_delta = (int16_t)(frame_index - jitter->previous_frame_index);
-	int64_t sender_delta_us = (int64_t)frame_delta * 1000000LL / (int64_t)video_fps;
-	int64_t variation_us = arrival_delta_us - sender_delta_us;
-	if(variation_us < 0)
-		variation_us = -variation_us;
+	int16_t frame_delta = (int16_t)(frame_index - jitter->frame_index);
+	// <= 0 is a further packet of the current frame, or one of an older frame arriving
+	// out of order: it says nothing about when the newest frame's leading edge landed.
+	if(frame_delta <= 0)
+		return;
+	if(frame_delta > CHIAKI_TAKION_VIDEO_JITTER_MAX_FRAME_DELTA)
+	{
+		// Two seconds of frames unaccounted for is an index discontinuity, not a stall we
+		// can price. Resync without polluting the estimate. Shorter gaps -- including a
+		// blip-200ms stall, twelve frames at 60 fps -- are real delay variation and count.
+		jitter->frame_arrival_us = arrival_us;
+		jitter->frame_index = frame_index;
+		return;
+	}
 
-	// RFC 3550 A.8 integer form: keep four fractional bits and use gain 1/16.
-	jitter->jitter_us_q4 += variation_us - ((jitter->jitter_us_q4 + 8) >> 4);
-	jitter->previous_arrival_us = arrival_us;
-	jitter->previous_frame_index = frame_index;
+	int64_t frame_arrival_delta_us = (int64_t)(arrival_us - jitter->frame_arrival_us);
+	int64_t frame_sender_delta_us = (int64_t)frame_delta * 1000000LL / (int64_t)video_fps;
+	int64_t frame_variation_us = frame_arrival_delta_us - frame_sender_delta_us;
+	if(frame_variation_us < 0)
+		frame_variation_us = -frame_variation_us;
+
+	jitter->jitter_us_q4 += frame_variation_us - ((jitter->jitter_us_q4 + 8) >> 4);
+	jitter->frame_arrival_us = arrival_us;
+	jitter->frame_index = frame_index;
 }
 
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter)
 {
-	if(!jitter || !jitter->initialized)
+	if(!jitter || !jitter->frame_initialized)
 		return 0;
 	return (uint64_t)((jitter->jitter_us_q4 + 8) >> 4);
+}
+
+CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get_raw(const ChiakiTakionVideoPacketJitter *jitter)
+{
+	if(!jitter || !jitter->initialized)
+		return 0;
+	return (uint64_t)((jitter->raw_jitter_us_q4 + 8) >> 4);
 }
 
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *takion)
@@ -631,6 +678,16 @@ CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *ta
 		return 0;
 	chiaki_mutex_lock(&takion->diagnostics_mutex);
 	uint64_t jitter_us = chiaki_takion_video_packet_jitter_get(&takion->video_packet_jitter);
+	chiaki_mutex_unlock(&takion->diagnostics_mutex);
+	return jitter_us;
+}
+
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_raw_us(ChiakiTakion *takion)
+{
+	if(!takion->diagnostics_enabled)
+		return 0;
+	chiaki_mutex_lock(&takion->diagnostics_mutex);
+	uint64_t jitter_us = chiaki_takion_video_packet_jitter_get_raw(&takion->video_packet_jitter);
 	chiaki_mutex_unlock(&takion->diagnostics_mutex);
 	return jitter_us;
 }

@@ -122,11 +122,32 @@ typedef struct chiaki_takion_connect_info_t
 	bool close_socket; // close socket when finishing takion
 } ChiakiTakionConnectInfo;
 
+/** PLE-356: frame-boundary packet delay variation, plus the superseded per-packet EWMA.
+ *
+ * The per-packet form (`raw_jitter_us_q4`) derives each packet's send time from
+ * `frame_index / fps`, but every packet of one video frame carries the same
+ * `frame_index`, so ~9 of every 10 samples are intra-burst gaps of tens of us with a
+ * sender delta of zero. The EWMA then converges to roughly the real delay variation
+ * divided by the packets per frame, which is a function of bitrate, not a constant.
+ * Measured: real delay variation stepped 1.8 -> 13.3 ms while the field moved 2.14 ->
+ * 3.11 ms and never reached CONSTRAINED_JITTER_MS. It is kept only so a capture can
+ * show both numbers side by side; it drives nothing.
+ *
+ * `jitter_us_q4` takes one sample per *frame*, from the first packet received for each
+ * frame index, against the nominal `frame_delta / fps` cadence. That is a delay
+ * variation of the video stream itself and tracks the path.
+ */
+#define CHIAKI_TAKION_VIDEO_JITTER_MAX_FRAME_DELTA 120
+
 typedef struct chiaki_takion_video_packet_jitter_t
 {
 	bool initialized;
 	uint64_t previous_arrival_us;
 	ChiakiSeqNum16 previous_frame_index;
+	int64_t raw_jitter_us_q4;
+	bool frame_initialized;
+	uint64_t frame_arrival_us;
+	ChiakiSeqNum16 frame_index;
 	int64_t jitter_us_q4;
 } ChiakiTakionVideoPacketJitter;
 
@@ -207,7 +228,10 @@ CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *ta
 CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
 	uint64_t arrival_us, ChiakiSeqNum16 frame_index, uint32_t video_fps);
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter);
+/** The superseded per-packet EWMA. Diagnostics only: never feed it to a threshold. */
+CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get_raw(const ChiakiTakionVideoPacketJitter *jitter);
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *takion);
+CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_raw_us(ChiakiTakion *takion);
 
 /**
  * Must be called from within the Takion thread, i.e. inside the callback!

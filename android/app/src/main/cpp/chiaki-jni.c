@@ -376,7 +376,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" dropped_input %llu dropped_presenter %llu dropped_bounded_age %llu"
 					" recovery_flushes %llu recovery_flushed %llu"
 					" lost %llu reorder_timeouts %llu"
-					" packet_jitter_ms %llu.%03llu"
+					" packet_jitter_ms %llu.%03llu packet_jitter_raw_ms %llu.%03llu"
 					" | per_s takion %llu.%03llu feedback %llu.%03llu"
 					" | takion_raw expected_per_s %llu.%03llu received_per_s %llu.%03llu fec_recovered %llu unrecoverable %llu"
 					" | feedback_gap max_ms %llu mean_ms %llu.%03llu over_50_ms %llu"
@@ -397,6 +397,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)event->stream_stats.video_reorder_timeouts,
 					(unsigned long long)(event->stream_stats.video_packet_jitter_us / 1000),
 					(unsigned long long)(event->stream_stats.video_packet_jitter_us % 1000),
+					(unsigned long long)(event->stream_stats.video_packet_jitter_raw_us / 1000),
+					(unsigned long long)(event->stream_stats.video_packet_jitter_raw_us % 1000),
 					(unsigned long long)(takion_per_s_milli / 1000),
 					(unsigned long long)(takion_per_s_milli % 1000),
 					(unsigned long long)(feedback_per_s_milli / 1000),
