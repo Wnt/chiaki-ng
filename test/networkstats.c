@@ -216,6 +216,50 @@ static MunitResult test_adaptive_loss_report_jitter_and_cooldown(const MunitPara
 	return MUNIT_OK;
 }
 
+// PLE-365: the two jitter bounds re-derived against real per-second samples of
+// chiaki_takion_get_video_packet_jitter_us, recorded in docs/verification/PLE-365.md from
+// build/captures/ple356 and build/captures/ple357. Values here are representative samples
+// from each phase, not synthetic round numbers, so a regression that drifts a bound back
+// toward the old (broken) 2000/5000 values shows up as a wrong classification of real data.
+static MunitResult test_adaptive_loss_report_jitter_boundaries_from_capture(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	ChiakiAdaptiveLossReportState state = { 0 };
+	ChiakiAdaptiveLossReportResult result;
+
+	// Clean-LAN 1 Hz samples (build/captures/ple356/analysis.txt 01_clean/06_clean and
+	// ple357 01_clean/05_clean), up to the combined observed max of 3.70 ms: all "good".
+	uint64_t clean_samples_us[] = { 1530, 1990, 2400, 2900, 3700 };
+	for(size_t i = 0; i < sizeof(clean_samples_us) / sizeof(clean_samples_us[0]); i++)
+	{
+		result = chiaki_adaptive_loss_report_update(&state, true, 0.0, clean_samples_us[i]);
+		munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_GOOD);
+	}
+
+	// The 4g phase's own observed maximum, 4.90 ms (ple357 02_4g). It is not clean, but it
+	// is the ceiling of a phase the badge itself calls GOOD (PLE-356's after-capture verdict
+	// table), so the recovery gate must not call it poor: it lands in the dead zone.
+	result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 4900);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_NEUTRAL);
+	munit_assert_uint(result.good_samples, ==, 0);
+
+	// wifi-slow's phase median, 7.43 ms (ple356 03_wifi-slow) -- the phase PLE-356 measured
+	// as CONSTRAINED against 10.8 ms of the phone's own ping mean |delta|. Three consecutive
+	// samples at this level must enter poor.
+	for(uint32_t i = 0; i < CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES - 1; i++)
+	{
+		result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 7430);
+		munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_NONE);
+	}
+	result = chiaki_adaptive_loss_report_update(&state, true, 0.0, 7430);
+	munit_assert_true(result.uncapped);
+	munit_assert_int(result.transition, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_TRANSITION_UNCAPPED);
+	munit_assert_int(result.reason, ==, CHIAKI_ADAPTIVE_LOSS_REPORT_REASON_JITTER);
+
+	return MUNIT_OK;
+}
+
 typedef struct network_stats_writer_context_t
 {
 	ChiakiNetworkStats *stats;
@@ -296,6 +340,9 @@ MunitResult test_network_stats_all(void)
 	if(result != MUNIT_OK)
 		return result;
 	result = test_adaptive_loss_report_jitter_and_cooldown(NULL, NULL);
+	if(result != MUNIT_OK)
+		return result;
+	result = test_adaptive_loss_report_jitter_boundaries_from_capture(NULL, NULL);
 	if(result != MUNIT_OK)
 		return result;
 	return test_snapshot_is_coherent_during_update(NULL, NULL);

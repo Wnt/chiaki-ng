@@ -12,12 +12,32 @@
 extern "C" {
 #endif
 
-/* Initial experiment thresholds: the loss-2 impairment is poor; recovery must
- * be clearly below it. Jitter uses separate enter/exit gates to avoid flapping. */
+/* The loss-2 impairment is poor; recovery must be clearly below it. Jitter uses
+ * separate enter/exit gates to avoid flapping, with a dead zone between them so a
+ * mildly lossy-but-tolerable path (5g/4g-shaped) lands in neither.
+ *
+ * PLE-365 re-derived the two jitter bounds against `chiaki_takion_get_video_packet_jitter_us`,
+ * the per-frame estimator PLE-356 fixed, sampled once per second exactly as this state
+ * machine consumes it (not the badge's windowed median). Combined 1 Hz samples from
+ * docs/verification/PLE-356/{ple356,ple357 captures} across six clean phases, two 5g/4g
+ * phases and one wifi-slow phase (see docs/verification/PLE-365.md):
+ *   - clean:      p50 1.53-2.40  p99 2.90  max 3.70 (ms)
+ *   - 5g/4g:      p50 2.49-2.60  p90 3.01-3.74  max 4.90 (ms)
+ *   - wifi-slow:  p50 7.43  min (steady-state) 4.88  max 9.84 (ms)
+ * GOOD_JITTER_US=2000 sat below the clean-LAN per-second median (not just its old
+ * per-packet floor), so the run of CHIAKI_ADAPTIVE_LOSS_REPORT_RECOVER_SAMPLES consecutive
+ * good samples it needs was still practically unreachable. 4000us clears the observed
+ * clean and 5g/4g ceiling (max 4.90ms) with margin, while staying well under wifi-slow's
+ * steady floor (4.88ms), so recovery still cannot assert while the path is genuinely
+ * degraded. POOR_JITTER_US=5000 had only 100us of clearance over the observed 4g/5g
+ * ceiling (4.90ms); 6000us keeps wifi-slow's near-total exceedance (89% of its samples)
+ * while restoring a defensible margin above 4g/5g. Neither bound moved in a direction
+ * that merely fits this one capture: both were pushed to sit outside the full observed
+ * range of the class of path they must not fire on. */
 #define CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_LOSS 0.02
-#define CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_JITTER_US 5000
+#define CHIAKI_ADAPTIVE_LOSS_REPORT_POOR_JITTER_US 6000
 #define CHIAKI_ADAPTIVE_LOSS_REPORT_GOOD_LOSS 0.005
-#define CHIAKI_ADAPTIVE_LOSS_REPORT_GOOD_JITTER_US 2000
+#define CHIAKI_ADAPTIVE_LOSS_REPORT_GOOD_JITTER_US 4000
 #define CHIAKI_ADAPTIVE_LOSS_REPORT_ENTER_SAMPLES 3
 #define CHIAKI_ADAPTIVE_LOSS_REPORT_RECOVER_SAMPLES 30
 #define CHIAKI_ADAPTIVE_LOSS_REPORT_COOLDOWN_SAMPLES 60
