@@ -80,7 +80,9 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		session?.stop()
 		session?.dispose()
 		session = null
-		surface = null
+		// Keep the surface: it belongs to the view, whose callbacks (and detachSurface) clear it when
+		// it goes away. Clearing it here left a Reconnect with no surface to decode into, so the
+		// restarted session received video and decoded none (PLE-384).
 		_state.value = StreamStateIdle
 		//surfaceTexture?.release()
 	}
@@ -106,7 +108,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			_state.value = if(handoffRetry.handoffInProgress) StreamStateLinkedStarting else StreamStateConnecting
 			session.eventCallback = this::eventCallback
 			session.start()
-			val surface = surface
+			val surface = surface?.takeIf { it.isValid }
 			if(surface != null)
 				session.setSurface(surface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 					surfaceVsyncOffsetNanos)
@@ -124,7 +126,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		session = remoteSession
 		remoteSession.setSustainedPerformanceModeLive(sustainedPerformanceModeLive)
 		_state.postValue(StreamStateConnecting)
-		val currentSurface = surface
+		val currentSurface = surface?.takeIf { it.isValid }
 		if(currentSurface != null)
 			remoteSession.setSurface(currentSurface, connectInfo.videoProfile.maxFPS, surfaceRefreshHz,
 				surfaceVsyncOffsetNanos)

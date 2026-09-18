@@ -106,6 +106,9 @@ class StreamActivity : AppCompatActivity()
 	private lateinit var binding: ActivityStreamBinding
 	private lateinit var insetsController: WindowInsetsControllerCompat
 	private var originalPreferredDisplayModeId: Int? = null
+	private var displayRefreshRateRequest: Pair<Preferences.DisplayRefreshRateMode, Float>? = null
+	private var displayRefreshRateDisplayId: Int? = null
+	private var lastConfigurationDisplayId: Int? = null
 	private var performanceModeRequested = false
 	private var sustainedPerformanceModeEnabled = false
 	private var sustainedPerformanceModeRefusalLogged = false
@@ -160,6 +163,7 @@ class StreamActivity : AppCompatActivity()
 		})[StreamViewModel::class.java]
 
 		viewModel.input.observe(this)
+		viewModel.setTouchscreenAvailable(hasTouchscreen(resources.configuration))
 
 		binding = ActivityStreamBinding.inflate(layoutInflater)
 		setContentView(binding.root)
@@ -176,6 +180,10 @@ class StreamActivity : AppCompatActivity()
 			preferences.videoPacingEnabled
 		)
 		configureDisplayRefreshRate(displayRefreshRateMode, connectInfo.videoProfile.maxFPS.toFloat())
+		streamDisplay().let { display ->
+			lastConfigurationDisplayId = display.displayId
+			Log.i("StreamActivity", "Stream window created: ${describeWindow(display, resources.configuration)}")
+		}
 		insetsController = WindowCompat.getInsetsController(window, window.decorView)
 		insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
@@ -194,6 +202,7 @@ class StreamActivity : AppCompatActivity()
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
 			if(binding.controllerButton.isChecked != it)
 				binding.controllerButton.isChecked = it
+			binding.root.post(::applyWindowTouchLayout)
 		})
 		binding.controllerButton.addOnCheckedChangeListener { _, isChecked ->
 			viewModel.setOnScreenControlsEnabled(isChecked)
@@ -436,34 +445,51 @@ class StreamActivity : AppCompatActivity()
 
 	private fun configureDisplayRefreshRate(mode: Preferences.DisplayRefreshRateMode, streamFrameRate: Float)
 	{
+		displayRefreshRateRequest = mode to streamFrameRate
 		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT)
 			return
 
-		val display = windowManager.defaultDisplay
-		val currentMode = display.mode
-		val modesAtCurrentResolution = display.supportedModes.filter {
-			it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight
-		}
-		val targetMode = when(mode)
-		{
-			Preferences.DisplayRefreshRateMode.MATCH_STREAM -> modesAtCurrentResolution
-				.filter { abs(it.refreshRate - streamFrameRate) < 0.5f }
-				.minByOrNull { abs(it.refreshRate - streamFrameRate) }
-			Preferences.DisplayRefreshRateMode.HIGHEST -> modesAtCurrentResolution.maxByOrNull { it.refreshRate }
-			Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT -> null
-		}
+		val display = streamDisplay()
+		displayRefreshRateDisplayId = display.displayId
+		val currentMode = display.mode.toCandidate()
+		val targetMode = selectDisplayMode(mode, streamFrameRate, currentMode,
+			display.supportedModes.map { it.toCandidate() })
 		if(targetMode == null)
 		{
-			Log.w("StreamActivity", "No display mode for $mode at ${currentMode.physicalWidth}x${currentMode.physicalHeight}")
+			Log.w("StreamActivity", "No display mode for $mode at ${currentMode.width}x${currentMode.height} on display ${display.displayId}")
 			return
 		}
 
 		val attributes = window.attributes
-		originalPreferredDisplayModeId = attributes.preferredDisplayModeId
+		if(originalPreferredDisplayModeId == null)
+			originalPreferredDisplayModeId = attributes.preferredDisplayModeId
 		attributes.preferredDisplayModeId = targetMode.modeId
 		window.attributes = attributes
-		Log.i("StreamActivity", "Requested display mode ${targetMode.modeId}: ${targetMode.physicalWidth}x${targetMode.physicalHeight}@${targetMode.refreshRate}")
+		Log.i("StreamActivity", "Requested display mode ${targetMode.modeId}: ${targetMode.width}x${targetMode.height}@${targetMode.refreshRate} on display ${display.displayId}")
 	}
+
+	/**
+	 * A mode id belongs to one display, so a window that moved (DeX starting or stopping) must ask
+	 * again on the display it is on now; the old id means nothing there (PLE-384).
+	 */
+	private fun reconfigureDisplayRefreshRateIfMoved(displayId: Int)
+	{
+		val (mode, streamFrameRate) = displayRefreshRateRequest ?: return
+		if(mode == Preferences.DisplayRefreshRateMode.SYSTEM_DEFAULT || displayId == displayRefreshRateDisplayId)
+			return
+		configureDisplayRefreshRate(mode, streamFrameRate)
+	}
+
+	/** The display the stream window is on; see [streamDisplayOf]. */
+	@Suppress("DEPRECATION")
+	private fun streamDisplay(): Display = streamDisplayOf(
+		if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else null,
+		binding.root.display,
+		windowManager.defaultDisplay
+	)
+
+	private fun Display.Mode.toCandidate() =
+		DisplayModeCandidate(modeId, physicalWidth, physicalHeight, refreshRate)
 
 	private fun restoreDisplayRefreshRate()
 	{
@@ -514,7 +540,13 @@ class StreamActivity : AppCompatActivity()
 		if(debandRenderer != null) {
 			binding.debandSurfaceView.onPause()
 		}
-		viewModel.pause()
+		// A configuration change this activity does not handle in place (the density step when DeX
+		// moves the window between the phone and the TV) recreates it; the view model and its
+		// session outlive that, so keep streaming instead of ending the session (PLE-384).
+		if(isChangingConfigurations)
+			Log.i("StreamActivity", "Recreating the stream window for a configuration change; the session continues")
+		else
+			viewModel.pause()
 	}
 
 	private fun registerDisplayListener()
@@ -535,7 +567,7 @@ class StreamActivity : AppCompatActivity()
 			override fun onDisplayRemoved(displayId: Int) = Unit
 			override fun onDisplayChanged(displayId: Int)
 			{
-				val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
+				val streamDisplay = streamDisplay()
 				if(displayId != streamDisplay.displayId)
 					return
 				manager.getDisplay(displayId)?.let(::updatePresenterDisplayTiming)
@@ -544,7 +576,7 @@ class StreamActivity : AppCompatActivity()
 		displayManager = manager
 		displayListener = listener
 		manager.registerDisplayListener(listener, uiVisibilityHandler)
-		val streamDisplay = binding.root.display ?: windowManager.defaultDisplay
+		val streamDisplay = streamDisplay()
 		updatePresenterDisplayTiming(manager.getDisplay(streamDisplay.displayId) ?: streamDisplay)
 	}
 
@@ -566,8 +598,24 @@ class StreamActivity : AppCompatActivity()
 	{
 		super.onConfigurationChanged(newConfig)
 		viewModel.input.refreshDisplayRotation()
+		viewModel.setTouchscreenAvailable(hasTouchscreen(newConfig))
+		// PLE-384: DeX window resizes and the move between the phone and an external display land
+		// here instead of recreating the activity, which would end the session.
+		val display = streamDisplay()
+		Log.i("StreamActivity", "Configuration changed in place: ${describeWindow(display, newConfig)}")
+		if(display.displayId != lastConfigurationDisplayId)
+		{
+			lastConfigurationDisplayId = display.displayId
+			reconfigureDisplayRefreshRateIfMoved(display.displayId)
+			updatePresenterDisplayTiming(display)
+		}
 		binding.root.post(::applyWindowTouchLayout)
 	}
+
+	private fun describeWindow(display: Display, configuration: Configuration) =
+		"display ${display.displayId} (${"%.2f".format(Locale.US, display.mode.refreshRate)} Hz), " +
+			"window ${configuration.screenWidthDp}x${configuration.screenHeightDp} dp, " +
+			"${configuration.densityDpi} dpi, touchscreen=${hasTouchscreen(configuration)}"
 
 	override fun onDestroy()
 	{
@@ -592,7 +640,7 @@ class StreamActivity : AppCompatActivity()
 	@Suppress("DEPRECATION")
 	private fun diagnosticsUiState(preferences: Preferences, connectInfo: ConnectInfo): StreamDiagnosticsUiState
 	{
-		val display = binding.root.display ?: windowManager.defaultDisplay
+		val display = streamDisplay()
 		val mode = display.mode
 		val effectiveRefreshRateMode = effectiveDisplayRefreshRateMode(
 			preferences.displayRefreshRateMode,
@@ -715,6 +763,10 @@ class StreamActivity : AppCompatActivity()
 	private fun portraitControlsTop(): Int
 	{
 		if(binding.root.width <= 0 || binding.root.height <= binding.root.width)
+			return 0
+		// A tall DeX window has no touchscreen and, unless the user asked for them, no controls to
+		// put under the video, so the video stays centred (PLE-384).
+		if(!hasTouchscreen(resources.configuration) && viewModel.onScreenControlsEnabled.value != true)
 			return 0
 		val ratio = binding.aspectRatioLayout.aspectRatio
 		return if(ratio > 0f) (binding.root.width / ratio).toInt().coerceAtMost(binding.root.height) else 0

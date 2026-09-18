@@ -90,6 +90,14 @@ typedef struct android_chiaki_video_decoder_t
 	uint64_t output_frames_released;
 	uint64_t output_frames_dropped;
 	bool backlog_idr_requested;
+	// The codec was torn down with its surface while the session ran (PLE-384: a DeX display move
+	// recreating the stream window). The next codec starts mid-GOP and needs a keyframe.
+	bool surface_lost_idr_pending;
+	// The stream's parameter sets (VPS/SPS/PPS, or SPS/PPS). The console sends them once per
+	// profile, ahead of the first frame, and never again, so a codec rebuilt mid-session is fed this
+	// copy before any frame (PLE-384). Guarded by codec_mutex.
+	uint8_t *codec_header;
+	size_t codec_header_size;
 	AndroidChiakiVideoDecoderRequestIDRCallback request_idr_cb;
 	void *request_idr_cb_user;
 } AndroidChiakiVideoDecoder;
