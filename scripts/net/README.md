@@ -62,6 +62,19 @@ so an abandoned test cannot leave the PS5 path impaired indefinitely.
 
 ### Traffic layout
 
+**PLE-363 note:** the guest actually deployed at `IMPAIR_HOST` no longer
+matches the IFB/`flower`-filter design described below -- it was replaced
+out-of-band at some point without a corresponding commit here (discovered
+and reconciled by PLE-363; `impair.sh` and `impairctl.py` now track what is
+actually running). The live script shapes each of the two bridge NICs'
+egress directly: `tc qdisc replace dev $lan_iface root handle 10: netem ...`
+and the same for `$ps5_iface` at handle `20:`. There is no per-flow IP
+filtering, no IFB, and no `--peer`/`--phone` option -- whatever exits each
+interface gets that profile's netem parameters, full stop. The paragraphs
+below describe the design as originally deployed by PLE-194 and no longer
+reflect the live rig; treat them as historical until a follow-up ticket
+reconciles this whole document.
+
 The script discovers the interfaces used to reach the PS5 (`--peer`) and phone
 (`--phone`). On the normal two-NIC routed guest, ingress from each interface is
 redirected to its own IFB. Each IFB has a two-band `prio` qdisc whose default
@@ -124,15 +137,14 @@ Create `~/.config/pleikkari/impair.env` (shell export syntax is also accepted):
 
 ```sh
 IMPAIR_HOST=root@192.168.1.5
-IMPAIR_PEER=192.168.1.164
 ```
 
 Then run:
 
 ```sh
-scripts/net/impairctl.py apply 4g --ttl 30m --phone 10.20.0.22
+scripts/net/impairctl.py apply 4g --ttl 30m
 scripts/net/impairctl.py status
-scripts/net/impairctl.py clear
+scripts/net/impairctl.py apply clean
 
 scripts/net/impairctl.py apply custom --ttl 5m \
   --delay 30ms --jitter 8ms --loss 1.5% --reorder 0.5% --rate 25mbit
@@ -167,9 +179,9 @@ Phase 4 should perform the following manual check on the real routed topology:
    output. The PS5 path should gain about 45 ms RTT and show up to roughly 2%
    ping loss (1% independently on request and reply); the CT950 path should
    remain near its baseline.
-3. Run `impairctl.py status` and confirm packet counters grow only on the
-   PS5-address filters. Run `clear`, repeat both pings, and verify the PS5 path
-   returns to baseline.
+3. Run `impairctl.py status` and confirm packet counters grow on both bridge
+   NICs. Run `impairctl.py apply clean`, repeat both pings, and verify the PS5
+   path returns to baseline.
 4. Apply `4g --ttl 1m` without clearing it. After 70 seconds, verify status is
    `clean` and both destinations remain reachable.
 
