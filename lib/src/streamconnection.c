@@ -326,6 +326,21 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 
 	ChiakiEvent event = { 0 };
 	event.type = CHIAKI_EVENT_CONNECTED;
+	event.connected.relay = session->holepunch_session || session->remote_connection;
+	if(session->remote_connection)
+	{
+		strncpy(event.connected.peer_host, session->remote_connection_info.selected_addr, sizeof(event.connected.peer_host) - 1);
+		event.connected.peer_port = session->remote_connection_info.ctrl_port;
+	}
+	else if(!event.connected.relay)
+	{
+		strncpy(event.connected.peer_host, session->connect_info.hostname, sizeof(event.connected.peer_host) - 1);
+		event.connected.peer_port = CHIAKI_SESSION_PORT;
+	}
+	// else: native holepunch relay, no single peer address to show
+	event.connected.mtu_in = session->mtu_in;
+	event.connected.rtt_us = session->rtt_us;
+	event.connected.measured = session->rtt_us_measured;
 	chiaki_mutex_unlock(&stream_connection->state_mutex);
 	chiaki_session_send_event(session, &event);
 	err = chiaki_mutex_lock(&stream_connection->state_mutex);

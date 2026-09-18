@@ -284,9 +284,19 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 	switch(event->type)
 	{
 		case CHIAKI_EVENT_CONNECTED:
+		{
+			jstring peer_host_java = E->NewStringUTF(env, event->connected.peer_host);
 			E->CallVoidMethod(env, session->java_session,
-							  session->java_session_event_connected_meth);
+							  session->java_session_event_connected_meth,
+							  (jboolean)event->connected.relay,
+							  peer_host_java,
+							  (jint)event->connected.peer_port,
+							  (jlong)event->connected.mtu_in,
+							  (jlong)event->connected.rtt_us,
+							  (jboolean)event->connected.measured);
+			E->DeleteLocalRef(env, peer_host_java);
 			break;
+		}
 		case CHIAKI_EVENT_LOGIN_PIN_REQUEST:
 			E->CallVoidMethod(env, session->java_session,
 							  session->java_session_event_login_pin_request_meth,
@@ -734,7 +744,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 			"L"BASE_PACKAGE"/Target;"
 			"Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
 			"[BLjava/lang/String;[BI[B)V");
-	session->java_session_event_connected_meth = E->GetMethodID(env, session->java_session_class, "eventConnected", "()V");
+	session->java_session_event_connected_meth = E->GetMethodID(env, session->java_session_class, "eventConnected", "(ZLjava/lang/String;IJJZ)V");
 	session->java_session_event_login_pin_request_meth = E->GetMethodID(env, session->java_session_class, "eventLoginPinRequest", "(Z)V");
 	session->java_session_event_quit_meth = E->GetMethodID(env, session->java_session_class, "eventQuit", "(ILjava/lang/String;)V");
 	session->java_session_event_rumble_meth = E->GetMethodID(env, session->java_session_class, "eventRumble", "(II)V");

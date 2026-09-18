@@ -261,6 +261,16 @@
     <string name="stream_display_stretch">Stretch</string>
     <string name="stream_quit_title">Quit Remote Play?</string>
     <string name="stream_quality_details">%1$.0f ms RTT · %2$.1f ms jitter · %3$.1f%% loss</string>
+    <string name="connection_mode_direct">Direct</string>
+    <string name="connection_mode_vpn">VPN</string>
+    <string name="connection_mode_relay">Relay (PSN)</string>
+    <string name="connection_mode_unknown">Connecting…</string>
+    <string name="stream_connection_mode">Connection: %1$s</string>
+    <string name="stream_connection_peer">Connection: %1$s · %2$s:%3$d</string>
+    <string name="stream_connection_mtu_measured">MTU %1$d (measured)</string>
+    <string name="stream_connection_mtu_fallback">MTU %1$d (fallback — may fragment)</string>
+    <string name="stream_connection_rtt_measured">RTT %1$d ms (measured)</string>
+    <string name="stream_connection_rtt_fallback">RTT %1$d ms (fallback)</string>
 
     <!-- Don't localize these -->
     <string name="preferences_discovery_enabled_key">discovery_enabled</string>

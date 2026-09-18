@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+#define CHIAKI_SESSION_PORT 9295
+
 #define CHIAKI_RP_APPLICATION_REASON_REGIST_FAILED		0x80108b09
 #define CHIAKI_RP_APPLICATION_REASON_INVALID_PSN_ID		0x80108b02
 #define CHIAKI_RP_APPLICATION_REASON_IN_USE				0x80108b10
@@ -226,6 +228,19 @@ typedef enum {
 	CHIAKI_EVENT_STREAM_STATS,
 } ChiakiEventType;
 
+// PLE-371: snapshot of how the stream connection actually got made, taken once
+// when CHIAKI_EVENT_CONNECTED fires (after ctrl + senkusha have run), so mtu_in
+// and rtt_us_measured below are already the final measured-or-fallback values.
+typedef struct chiaki_connected_event_t
+{
+	bool relay; // session->holepunch_session || session->remote_connection: PSN data plane, not the LAN. Must not fire in this fork; see REMOTE_DATA_SOCKET_NEEDED.
+	char peer_host[256]; // address actually dialled; empty for the native-holepunch relay path, which has no single peer address to show
+	uint16_t peer_port;
+	uint32_t mtu_in;
+	uint64_t rtt_us;
+	bool measured; // false when mtu_in/rtt_us are the senkusha-failed 1454/1000us fallback (session.c), not a measurement. mtu and rtt share this one fate: they are set together in the same success/failure branch.
+} ChiakiConnectedEvent;
+
 typedef struct chiaki_event_t
 {
 	ChiakiEventType type;
@@ -250,6 +265,7 @@ typedef struct chiaki_event_t
 		char server_nickname[0x20];
 		ChiakiVideoFecFailureEvent video_fec_failure;
 		ChiakiStreamStatsEvent stream_stats;
+		ChiakiConnectedEvent connected;
 	};
 } ChiakiEvent;
 

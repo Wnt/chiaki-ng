@@ -119,6 +119,7 @@ class StreamActivity : AppCompatActivity()
 	private val networkQualityClassifier = NetworkQualityClassifier()
 	private var networkQuality = NetworkQualitySnapshot.UNKNOWN
 	private var networkQualityDetailsExpanded = false
+	private var connectionMode = ConnectionModeSnapshot.UNKNOWN
 	private var streamTransformMode = TransformMode.FIT
 	private var touchControlsFragment: TouchControlsFragment? = null
 	private var lastWindowInsets: WindowInsetsCompat? = null
@@ -237,6 +238,9 @@ class StreamActivity : AppCompatActivity()
 			networkQuality = networkQualityClassifier.update(stats, link)
 			updateNetworkQualityChip()
 			diagnosticsOverlay?.update(stats)
+		}
+		viewModel.session.connectionMode.observe(this) { mode ->
+			connectionMode = mode
 		}
 		updateNetworkQualityChip()
 		adjustStreamViewAspect()
@@ -809,6 +813,12 @@ class StreamActivity : AppCompatActivity()
 			})
 	}
 
+	// PLE-371: the network-quality chip is a fixed-height (40dp), wrap-content-width assist chip
+	// packed into a 3-button horizontal dock anchored to the screen's top-right corner -- there is
+	// no room in it for mode + peer address + MTU alongside the existing RTT/jitter/loss line
+	// without the dock's card overflowing off-screen at phone width in portrait. This menu is the
+	// ticket's named alternative surface: each fact gets its own disabled (read-only) row, which
+	// wraps and lays out safely regardless of phone width or orientation.
 	private fun showDisplayModeMenu()
 	{
 		PopupMenu(this, binding.streamMenuButton).also { menu ->
@@ -819,7 +829,10 @@ class StreamActivity : AppCompatActivity()
 				TransformMode.ZOOM -> R.id.display_mode_zoom_button
 				TransformMode.STRETCH -> R.id.display_mode_stretch_button
 			}).isChecked = true
+			addConnectionInfoItems(menu.menu)
 			menu.setOnMenuItemClickListener { item ->
+				if(!item.isEnabled)
+					return@setOnMenuItemClickListener true
 				streamTransformMode = TransformMode.fromButton(item.itemId)
 				item.isChecked = true
 				adjustStreamViewAspect()
@@ -829,6 +842,41 @@ class StreamActivity : AppCompatActivity()
 			menu.show()
 		}
 		showOverlay()
+	}
+
+	private fun addConnectionInfoItems(menu: Menu)
+	{
+		val snapshot = connectionMode
+		for(line in connectionInfoLines(snapshot))
+			menu.add(Menu.NONE, Menu.NONE, Menu.NONE, line).isEnabled = false
+	}
+
+	private fun connectionInfoLines(snapshot: ConnectionModeSnapshot): List<String>
+	{
+		val modeLabel = getString(when(snapshot.mode)
+		{
+			ConnectionMode.DIRECT -> R.string.connection_mode_direct
+			ConnectionMode.VPN -> R.string.connection_mode_vpn
+			ConnectionMode.RELAY -> R.string.connection_mode_relay
+			ConnectionMode.UNKNOWN -> R.string.connection_mode_unknown
+		})
+		if(snapshot.mode == ConnectionMode.UNKNOWN)
+			return listOf(getString(R.string.stream_connection_mode, modeLabel))
+		val lines = mutableListOf(
+			if(snapshot.peerHost.isBlank())
+				getString(R.string.stream_connection_mode, modeLabel)
+			else
+				getString(R.string.stream_connection_peer, modeLabel, snapshot.peerHost, snapshot.peerPort)
+		)
+		lines += getString(
+			if(snapshot.measured) R.string.stream_connection_mtu_measured else R.string.stream_connection_mtu_fallback,
+			snapshot.mtuIn
+		)
+		lines += getString(
+			if(snapshot.measured) R.string.stream_connection_rtt_measured else R.string.stream_connection_rtt_fallback,
+			snapshot.rttUs / 1000
+		)
+		return lines
 	}
 
 	private fun updateNetworkQualityChip()
