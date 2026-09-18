@@ -28,20 +28,35 @@ log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 streaming(){ "$ADB" shell dumpsys activity activities | grep -q "topResumedActivity.*StreamActivity"; }
 
 # PLE-367: leave through the in-app Quit dialog (quitButton -> confirm), never
-# `keyevent 4` + force-stop. The overlay auto-hides after 3.5 s (HIDE_UI_TIMEOUT_MS
-# in StreamActivity.kt), so tap the video surface first to reveal it, then the
-# quit button, then the dialog's positive button. No force-stop anywhere below.
+# `keyevent 4` + force-stop. StreamActivity runs edge-to-edge with
+# BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE, and a `streamTouchpadView` sits on top
+# of the video surface to capture touchpad gestures -- a plain tap on the video
+# area is consumed as touchpad input, not a click, and never reaches
+# aspectRatioLayout's listener. The overlay (and quitButton on it) only
+# appears via the same edge-swipe a real user would use to reveal the system
+# bars, and it auto-hides again after 3.5 s (HIDE_UI_TIMEOUT_MS in
+# StreamActivity.kt), so the swipe and the quitButton tap must happen back to
+# back. No force-stop anywhere below.
 exit_stream_gracefully(){
   streaming || return 0
-  local tries
+  local tries cur
   for tries in 1 2; do
-    ui_tap_resource_id "$PKG:id/aspectRatioLayout" "$OUT/exit_${tries}_overlay.xml" 2>/dev/null || true
-    sleep 1
-    if ui_tap_resource_id "$PKG:id/quitButton" "$OUT/exit_${tries}_quit.xml" 2>/dev/null; then
-      sleep 1
-      ui_tap_resource_id "android:id/button1" "$OUT/exit_${tries}_confirm.xml" "Quit" 2>/dev/null || true
-      for _ in $(seq 1 10); do sleep 1; streaming || return 0; done
+    # A session error (e.g. AvCap init failure) raises its own dialog first
+    # ("Session has quit: ...", Reconnect=button1 / Quit=button2), which sits
+    # on top of and hides the normal overlay/quitButton. Its Quit button calls
+    # the same finish() the manual path does, so prefer it when present
+    # instead of trying to reach a quitButton the dialog is covering.
+    if ui_tap_resource_id "android:id/button2" "$OUT/exit_${tries}_autodialog.xml" "Quit" 2>/dev/null; then
+      :
+    else
+      cur=$("$ADB" shell dumpsys window displays | grep -m1 -o 'cur=[0-9]*x[0-9]*' | cut -d= -f2)
+      "$ADB" shell input swipe $((${cur%x*}/2)) 5 $((${cur%x*}/2)) $((${cur#*x}/3)) 200
+      if ui_tap_resource_id "$PKG:id/quitButton" "$OUT/exit_${tries}_quit.xml" 2>/dev/null; then
+        sleep 1
+        ui_tap_resource_id "android:id/button1" "$OUT/exit_${tries}_confirm.xml" "Quit" 2>/dev/null || true
+      fi
     fi
+    for _ in $(seq 1 10); do sleep 1; streaming || return 0; done
     streaming || return 0
     log "in-app exit attempt $tries did not clear StreamActivity; retrying"
   done
