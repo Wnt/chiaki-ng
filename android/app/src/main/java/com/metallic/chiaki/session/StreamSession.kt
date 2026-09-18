@@ -4,6 +4,8 @@ package com.metallic.chiaki.session
 
 import android.content.Context
 import android.graphics.SurfaceTexture
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -14,6 +16,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.metallic.chiaki.common.LogManager
 import com.metallic.chiaki.lib.*
+import com.metallic.chiaki.stream.ConnectionModeClassifier
+import com.metallic.chiaki.stream.ConnectionModeSnapshot
 import com.metallic.chiaki.stream.displayTimingChanged
 import com.metallic.chiaki.stream.useFrameIndexVideoTimestamps
 
@@ -54,6 +58,8 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 	val rumbleState: LiveData<RumbleEvent> get() = _rumbleState
 	private val _streamStats = MutableLiveData<StreamStatsEvent>()
 	val streamStats: LiveData<StreamStatsEvent> get() = _streamStats
+	private val _connectionMode = MutableLiveData(ConnectionModeSnapshot.UNKNOWN)
+	val connectionMode: LiveData<ConnectionModeSnapshot> get() = _connectionMode
 
 	private var surfaceTexture: SurfaceTexture? = null
 	private var surface: Surface? = null
@@ -173,6 +179,13 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		resume()
 	}
 
+	private fun isVpnActive(): Boolean
+	{
+		val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return false
+		val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork) ?: return false
+		return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+	}
+
 	private fun eventCallback(event: Event)
 	{
 		when(event)
@@ -180,6 +193,7 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 			is ConnectedEvent ->
 			{
 				handoffRetry.onConnected()
+				_connectionMode.postValue(ConnectionModeClassifier.classify(event, isVpnActive()))
 				_state.postValue(StreamStateConnected)
 			}
 			is QuitEvent -> if(!absorbHandoffQuit(event))

@@ -381,7 +381,17 @@ class QuitReason(val value: Int)
 }
 
 sealed class Event
-object ConnectedEvent: Event()
+data class ConnectedEvent(
+	/** session->holepunch_session || session->remote_connection: the PSN data plane, not the LAN. */
+	val relay: Boolean,
+	/** Address actually dialled; empty for the native-holepunch relay path (no single peer address). */
+	val peerHost: String,
+	val peerPort: Int,
+	val mtuIn: Long,
+	val rttUs: Long,
+	/** False when mtuIn/rttUs are the senkusha-failed fallback (1454 / 1000us), not a measurement. */
+	val measured: Boolean
+): Event()
 data class LoginPinRequestEvent(val pinIncorrect: Boolean): Event()
 data class QuitEvent(val reason: QuitReason, val reasonString: String?): Event()
 data class RumbleEvent(val left: UByte, val right: UByte): Event()
@@ -526,9 +536,9 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		eventCallback?.let { it(event) }
 	}
 
-	private fun eventConnected()
+	private fun eventConnected(relay: Boolean, peerHost: String, peerPort: Int, mtuIn: Long, rttUs: Long, measured: Boolean)
 	{
-		event(ConnectedEvent)
+		event(ConnectedEvent(relay, peerHost, peerPort, mtuIn, rttUs, measured))
 	}
 
 	private fun eventLoginPinRequest(pinIncorrect: Boolean)
