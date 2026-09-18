@@ -55,7 +55,8 @@ class StreamViewModel(
 	private var remoteJob: Job? = null
 	private var remoteActive = false
 
-	private var _onScreenControlsEnabled = MutableLiveData<Boolean>(preferences.onScreenControlsEnabled)
+	private val onScreenControlsPolicy = OnScreenControlsPolicy(preferences.onScreenControlsEnabled)
+	private var _onScreenControlsEnabled = MutableLiveData<Boolean>(onScreenControlsPolicy.visible)
 	val onScreenControlsEnabled: LiveData<Boolean> get() = _onScreenControlsEnabled
 
 
@@ -120,8 +121,22 @@ class StreamViewModel(
 
 	fun setOnScreenControlsEnabled(enabled: Boolean)
 	{
-		preferences.onScreenControlsEnabled = enabled
-		_onScreenControlsEnabled.value = enabled
+		if(onScreenControlsPolicy.toggle(enabled))
+			preferences.onScreenControlsEnabled = enabled
+		publishOnScreenControls()
+	}
+
+	fun setTouchscreenAvailable(available: Boolean)
+	{
+		onScreenControlsPolicy.touchscreenChanged(available)
+		publishOnScreenControls()
+	}
+
+	private fun publishOnScreenControls()
+	{
+		val visible = onScreenControlsPolicy.visible
+		if(_onScreenControlsEnabled.value != visible)
+			_onScreenControlsEnabled.value = visible
 	}
 
 }

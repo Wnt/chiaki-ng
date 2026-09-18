@@ -60,10 +60,16 @@
             </intent-filter>
         </activity>
 
+        <!-- PLE-384: Samsung DeX runs the stream in a resizable desktop window and moves it between
+             the phone and an external display. Window size, layout, touchscreen and UI mode changes
+             are handled in place so a resize never ends the session; a density change (the move
+             between the phone panel and the TV) recreates the views at the new density while the
+             session stays up (StreamActivity.onPause). -->
         <activity
             android:name=".stream.StreamActivity"
             android:theme="@style/StreamTheme"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize" />
+            android:resizeableActivity="true"
+            android:configChanges="keyboard|keyboardHidden|navigation|touchscreen|orientation|screenSize|smallestScreenSize|screenLayout|uiMode" />
 
         <activity
             android:name=".settings.SettingsActivity" />

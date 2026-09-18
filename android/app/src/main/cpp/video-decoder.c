@@ -77,6 +77,7 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->output_frames_released = 0;
 	decoder->output_frames_dropped = 0;
 	decoder->backlog_idr_requested = false;
+	decoder->surface_lost_idr_pending = false;
 	decoder->request_idr_cb = NULL;
 	decoder->request_idr_cb_user = NULL;
 	decoder->input_thread_enabled = input_thread_enabled;
@@ -291,7 +292,12 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 	{
 		chiaki_mutex_unlock(&decoder->codec_mutex);
 		if(kill_decoder(decoder))
+		{
 			CHIAKI_LOGI(decoder->log, "Decoder shut down after surface was removed");
+			chiaki_mutex_lock(&decoder->stats_mutex);
+			decoder->surface_lost_idr_pending = true;
+			chiaki_mutex_unlock(&decoder->stats_mutex);
+		}
 		return;
 	}
 
@@ -395,7 +401,20 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 		goto error_codec;
 	}
 
-	goto beach;
+	chiaki_mutex_lock(&decoder->stats_mutex);
+	bool request_idr = decoder->surface_lost_idr_pending;
+	decoder->surface_lost_idr_pending = false;
+	AndroidChiakiVideoDecoderRequestIDRCallback request_idr_cb = decoder->request_idr_cb;
+	void *request_idr_cb_user = decoder->request_idr_cb_user;
+	chiaki_mutex_unlock(&decoder->stats_mutex);
+	chiaki_mutex_unlock(&decoder->codec_mutex);
+	if(request_idr)
+	{
+		ChiakiErrorCode idr_err = request_idr_cb ? request_idr_cb(request_idr_cb_user) : CHIAKI_ERR_UNINITIALIZED;
+		CHIAKI_LOGI(decoder->log, "Decoder recreated on a new surface mid-session; requested IDR: %s",
+				chiaki_error_string(idr_err));
+	}
+	return;
 
 error_codec:
 	AMediaCodec_delete(decoder->codec);
