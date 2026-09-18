@@ -202,6 +202,7 @@ class StreamActivity : AppCompatActivity()
 		viewModel.onScreenControlsEnabled.observe(this, Observer {
 			if(binding.controllerButton.isChecked != it)
 				binding.controllerButton.isChecked = it
+			binding.root.post(::applyWindowTouchLayout)
 		})
 		binding.controllerButton.addOnCheckedChangeListener { _, isChecked ->
 			viewModel.setOnScreenControlsEnabled(isChecked)
@@ -762,6 +763,10 @@ class StreamActivity : AppCompatActivity()
 	private fun portraitControlsTop(): Int
 	{
 		if(binding.root.width <= 0 || binding.root.height <= binding.root.width)
+			return 0
+		// A tall DeX window has no touchscreen and, unless the user asked for them, no controls to
+		// put under the video, so the video stays centred (PLE-384).
+		if(!hasTouchscreen(resources.configuration) && viewModel.onScreenControlsEnabled.value != true)
 			return 0
 		val ratio = binding.aspectRatioLayout.aspectRatio
 		return if(ratio > 0f) (binding.root.width / ratio).toInt().coerceAtMost(binding.root.height) else 0

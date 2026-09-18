@@ -78,6 +78,8 @@ ChiakiErrorCode android_chiaki_video_decoder_init(AndroidChiakiVideoDecoder *dec
 	decoder->output_frames_dropped = 0;
 	decoder->backlog_idr_requested = false;
 	decoder->surface_lost_idr_pending = false;
+	decoder->codec_header = NULL;
+	decoder->codec_header_size = 0;
 	decoder->request_idr_cb = NULL;
 	decoder->request_idr_cb_user = NULL;
 	decoder->input_thread_enabled = input_thread_enabled;
@@ -278,9 +280,59 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 		kill_decoder(decoder);
 	android_chiaki_video_presenter_fini(&decoder->presenter);
 	free(decoder->input_buf);
+	free(decoder->codec_header);
 	chiaki_mutex_fini(&decoder->input_mutex);
 	chiaki_mutex_fini(&decoder->stats_mutex);
 	chiaki_mutex_fini(&decoder->codec_mutex);
+}
+
+/** Whether an Annex-B sample opens with a parameter set NAL: VPS/SPS/PPS for H.265, SPS/PPS for H.264. */
+static bool sample_is_codec_header(bool h265, const uint8_t *buf, size_t buf_size)
+{
+	size_t nal = 0;
+	if(buf_size >= 4 && buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 1)
+		nal = 4;
+	else if(buf_size >= 3 && buf[0] == 0 && buf[1] == 0 && buf[2] == 1)
+		nal = 3;
+	if(nal == 0 || nal >= buf_size)
+		return false;
+	if(h265)
+	{
+		unsigned int type = (buf[nal] >> 1) & 0x3f;
+		return type == 32 || type == 33 || type == 34;
+	}
+	unsigned int type = buf[nal] & 0x1f;
+	return type == 7 || type == 8;
+}
+
+/** Called with codec_mutex held. */
+static void remember_codec_header(AndroidChiakiVideoDecoder *decoder, const uint8_t *buf, size_t buf_size)
+{
+	if(!sample_is_codec_header(chiaki_codec_is_h265(decoder->target_codec), buf, buf_size))
+		return;
+	uint8_t *header = realloc(decoder->codec_header, buf_size);
+	if(!header)
+		return;
+	memcpy(header, buf, buf_size);
+	decoder->codec_header = header;
+	decoder->codec_header_size = buf_size;
+}
+
+/** Called with codec_mutex held and a started codec. */
+static bool replay_codec_header(AndroidChiakiVideoDecoder *decoder)
+{
+	if(!decoder->codec_header)
+		return false;
+	ssize_t index = AMediaCodec_dequeueInputBuffer(decoder->codec, INPUT_BUFFER_TIMEOUT_MS * 1000);
+	if(index < 0)
+		return false;
+	size_t capacity;
+	uint8_t *codec_buf = AMediaCodec_getInputBuffer(decoder->codec, (size_t)index, &capacity);
+	if(!codec_buf || capacity < decoder->codec_header_size)
+		return false;
+	memcpy(codec_buf, decoder->codec_header, decoder->codec_header_size);
+	return AMediaCodec_queueInputBuffer(decoder->codec, (size_t)index, 0, decoder->codec_header_size,
+			decoder->timestamp_cur, AMEDIACODEC_BUFFER_FLAG_CODEC_CONFIG) == AMEDIA_OK;
 }
 
 void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder, JNIEnv *env, jobject surface,
@@ -404,6 +456,9 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 	chiaki_mutex_lock(&decoder->stats_mutex);
 	bool request_idr = decoder->surface_lost_idr_pending;
 	decoder->surface_lost_idr_pending = false;
+	chiaki_mutex_unlock(&decoder->stats_mutex);
+	bool header_replayed = request_idr && replay_codec_header(decoder);
+	chiaki_mutex_lock(&decoder->stats_mutex);
 	AndroidChiakiVideoDecoderRequestIDRCallback request_idr_cb = decoder->request_idr_cb;
 	void *request_idr_cb_user = decoder->request_idr_cb_user;
 	chiaki_mutex_unlock(&decoder->stats_mutex);
@@ -411,8 +466,8 @@ void android_chiaki_video_decoder_set_surface(AndroidChiakiVideoDecoder *decoder
 	if(request_idr)
 	{
 		ChiakiErrorCode idr_err = request_idr_cb ? request_idr_cb(request_idr_cb_user) : CHIAKI_ERR_UNINITIALIZED;
-		CHIAKI_LOGI(decoder->log, "Decoder recreated on a new surface mid-session; requested IDR: %s",
-				chiaki_error_string(idr_err));
+		CHIAKI_LOGI(decoder->log, "Decoder recreated on a new surface mid-session; parameter sets %s, requested IDR: %s",
+				header_replayed ? "replayed" : "NOT replayed", chiaki_error_string(idr_err));
 	}
 	return;
 
@@ -449,6 +504,7 @@ static bool android_chiaki_video_decoder_queue_sample(AndroidChiakiVideoDecoder 
 	void *request_idr_cb_user = NULL;
 	bool backlog_recorded = false;
 	chiaki_mutex_lock(&decoder->codec_mutex);
+	remember_codec_header(decoder, buf, buf_size);
 
 	if(!decoder->codec)
 	{
