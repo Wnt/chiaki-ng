@@ -136,8 +136,20 @@ typedef struct chiaki_takion_connect_info_t
  * `jitter_us_q4` takes one sample per *frame*, from the first packet received for each
  * frame index, against the nominal `frame_delta / fps` cadence. That is a delay
  * variation of the video stream itself and tracks the path.
+ *
+ * PLE-403: the EWMA above starts at zero, and the gain term `(jitter_us_q4 + 8) >> 4`
+ * is itself zero until the accumulator has some magnitude, so the very first frame
+ * sample lands in `jitter_us_q4` at full weight, unsmoothed -- it *is* the estimate,
+ * not an average of one. A one-off startup delay (the first frame after connect is
+ * commonly late) then reads back as if it were the steady-state jitter. `frame_sample_count`
+ * counts smoothing updates so callers can tell "one raw sample" from "an average";
+ * `CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES` is the filter's own time constant --
+ * `1 / gain` with gain `1/16` -- the number of samples after which the initial
+ * transient's contribution has decayed to a minority of the accumulator, same
+ * reasoning RFC 3550 A.8 uses for its own EWMA.
  */
 #define CHIAKI_TAKION_VIDEO_JITTER_MAX_FRAME_DELTA 120
+#define CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES 16
 
 typedef struct chiaki_takion_video_packet_jitter_t
 {
@@ -149,6 +161,7 @@ typedef struct chiaki_takion_video_packet_jitter_t
 	uint64_t frame_arrival_us;
 	ChiakiSeqNum16 frame_index;
 	int64_t jitter_us_q4;
+	uint32_t frame_sample_count;
 } ChiakiTakionVideoPacketJitter;
 
 
@@ -232,6 +245,10 @@ CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionV
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get_raw(const ChiakiTakionVideoPacketJitter *jitter);
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *takion);
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_raw_us(ChiakiTakion *takion);
+/** PLE-403: false until `jitter_us_q4` has absorbed enough frame samples that its value is an
+ * average rather than one unsmoothed sample. See the comment on `CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES`. */
+CHIAKI_EXPORT bool chiaki_takion_video_packet_jitter_filled(const ChiakiTakionVideoPacketJitter *jitter);
+CHIAKI_EXPORT bool chiaki_takion_get_video_packet_jitter_filled(ChiakiTakion *takion);
 
 /**
  * Must be called from within the Takion thread, i.e. inside the callback!

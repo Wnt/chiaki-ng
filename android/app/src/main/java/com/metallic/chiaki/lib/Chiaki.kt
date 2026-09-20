@@ -441,7 +441,11 @@ data class StreamStatsEvent(
 	val probeRttMicros: Long = 0,
 	val probeRttSamples: Long = 0,
 	val probeRttUnacked: Long = 0,
-	val probeRttAmbiguous: Long = 0
+	val probeRttAmbiguous: Long = 0,
+	/** PLE-403: false while videoPacketJitterMicros is one unsmoothed sample rather than an
+	 * average -- see the comment on CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES. Defaults true so
+	 * a caller not exercising warm-up (every existing test) keeps today's behaviour. */
+	val videoPacketJitterFilled: Boolean = true
 ): Event()
 {
 	/** The round trip we can defend: the in-stream probe, else senkusha's startup ping, else nothing. */
@@ -607,7 +611,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		probeRttMicros: Long,
 		probeRttSamples: Long,
 		probeRttUnacked: Long,
-		probeRttAmbiguous: Long
+		probeRttAmbiguous: Long,
+		videoPacketJitterFilled: Boolean
 	)
 	{
 		event(StreamStatsEvent(
@@ -650,7 +655,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			probeRttMicros = probeRttMicros,
 			probeRttSamples = probeRttSamples,
 			probeRttUnacked = probeRttUnacked,
-			probeRttAmbiguous = probeRttAmbiguous
+			probeRttAmbiguous = probeRttAmbiguous,
+			videoPacketJitterFilled = videoPacketJitterFilled
 		))
 	}
 

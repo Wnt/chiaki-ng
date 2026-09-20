@@ -131,6 +131,18 @@ internal class NetworkQualityClassifier
 		val packetTotal = stats.takionPacketsReceived + stats.takionPacketsLost
 		if(!stats.connectionQualityValid && packetTotal == 0L)
 			return NetworkQualitySnapshot.UNKNOWN
+		// PLE-403: videoPacketJitterMicros is one unsmoothed frame sample, not an average, until
+		// the native EWMA reports filled (CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES). A one-off
+		// startup delay -- the first frame after connect is commonly late -- then reads back
+		// indistinguishable from real jitter, and both the fast median and the tail-rate arm
+		// (PLE-366) take a single sample at face value by design, so a startup transient opens
+		// the badge at CONSTRAINED every session (measured: 7 s, PLE-403). "Filled" is the right
+		// condition because it names exactly the moment the value stops being one raw sample --
+		// not a tuned delay, and the same signal a real bad second still has by the time the
+		// badge reacts to it (a stall long enough for the estimator to have any samples at all
+		// has already filled it, since fill takes a fraction of a second of frames).
+		if(!stats.videoPacketJitterFilled)
+			return NetworkQualitySnapshot.UNKNOWN
 
 		val packetLoss = if(packetTotal > 0L)
 			stats.takionPacketsLost * 100.0 / packetTotal else 0.0
