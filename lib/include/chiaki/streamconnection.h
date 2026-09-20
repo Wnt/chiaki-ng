@@ -5,6 +5,7 @@
 
 #include "feedbacksender.h"
 #include "takion.h"
+#include "linkwatchdog.h"
 #include "log.h"
 #include "ecdh.h"
 #include "gkcrypt.h"
@@ -78,6 +79,11 @@ typedef struct chiaki_stream_connection_t
 	bool should_stop;
 	bool remote_disconnected;
 	char *remote_disconnect_reason;
+	/**
+	 * PLE-423: set when the link watchdog declared the console unreachable, so
+	 * the run's exit code can distinguish that from a clean or requested stop.
+	 */
+	bool link_timed_out;
 
 	double measured_bitrate;
 } ChiakiStreamConnection;

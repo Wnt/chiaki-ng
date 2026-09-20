@@ -9,6 +9,7 @@
 #include <chiaki/audio.h>
 #include <chiaki/video.h>
 #include <chiaki/time.h>
+#include <chiaki/linkwatchdog.h>
 
 #include <string.h>
 #include <inttypes.h>
@@ -75,6 +76,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_init(ChiakiStreamConnecti
 	stream_connection->streaminfo_early_buf = NULL;
 	stream_connection->streaminfo_early_buf_size = 0;
 	stream_connection->player_index = 0;
+	stream_connection->link_timed_out = false;
 	memset(stream_connection->led_state, 0, sizeof(stream_connection->led_state));
 
 	stream_connection->haptic_intensity = Strong;
@@ -363,6 +365,13 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 		previous_feedback_packets = chiaki_feedback_sender_get_packets_total(&stream_connection->feedback_sender);
 	}
 
+	// PLE-423: from here the stream is up, so silence on the data socket is a
+	// fault rather than a state we are still waiting to leave. Arm the watchdog
+	// on the same 1 Hz tick the heartbeat already uses -- no extra thread, no
+	// extra wakeup, and no extra packet on the wire.
+	ChiakiLinkWatchdog link_watchdog;
+	chiaki_link_watchdog_init(&link_watchdog, (uint32_t)chiaki_time_now_monotonic_ms(), CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+
 	while(true)
 	{
 		err = chiaki_cond_timedwait_pred(&stream_connection->state_cond, &stream_connection->state_mutex, HEARTBEAT_INTERVAL_MS, state_finished_cond_check, stream_connection);
@@ -375,8 +384,35 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 		else
 			CHIAKI_LOGV(stream_connection->log, "StreamConnection sent heartbeat");
 
+		uint32_t link_now_ms = (uint32_t)chiaki_time_now_monotonic_ms();
+		uint32_t link_last_receive_ms = chiaki_takion_get_last_receive_ms(&stream_connection->takion);
+		uint32_t link_silence_ms = chiaki_link_watchdog_silence_ms(&link_watchdog, link_last_receive_ms, link_now_ms);
+		if(chiaki_link_watchdog_check(&link_watchdog, link_last_receive_ms, link_now_ms))
+		{
+			CHIAKI_LOGE(stream_connection->log,
+				"StreamConnection link watchdog: nothing received from the console for %u ms (limit %u ms), quitting",
+				(unsigned int)link_silence_ms, (unsigned int)CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+			stream_connection->link_timed_out = true;
+			break;
+		}
+		// Halfway to the deadline is already a stall the user can see, and saying
+		// so is what turns "the picture froze" into a diagnosable report.
+		if(link_silence_ms >= CHIAKI_LINK_WATCHDOG_TIMEOUT_MS / 2)
+			CHIAKI_LOGW(stream_connection->log,
+				"StreamConnection has received nothing from the console for %u ms",
+				(unsigned int)link_silence_ms);
+
 		if(stream_stats_enabled)
 		{
+			// PLE-423: the 1 Hz series the impairment runs are read off. The max is
+			// session-cumulative, so a phase that raised it is the phase whose window
+			// the step lands in; `silence` is the instantaneous reading at this poll.
+			CHIAKI_LOGI(stream_connection->log,
+				"StreamConnection link: silence %u ms, worst gap so far %u ms, limit %u ms",
+				(unsigned int)link_silence_ms,
+				(unsigned int)chiaki_takion_get_max_receive_gap_ms(&stream_connection->takion),
+				(unsigned int)CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+
 			uint64_t now_ms = chiaki_time_now_monotonic_ms();
 			uint64_t stream_frames = chiaki_video_receiver_get_frames_received_total(stream_connection->video_receiver);
 			uint64_t packets_received;
@@ -441,6 +477,13 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 		}
 	}
 
+	// PLE-423: the worst inbound gap this session saw, against the deadline that
+	// would have ended it. An impairment run reads its margin straight off this line.
+	CHIAKI_LOGI(stream_connection->log,
+		"StreamConnection link: worst inbound gap %u ms, watchdog limit %u ms",
+		(unsigned int)chiaki_takion_get_max_receive_gap_ms(&stream_connection->takion),
+		(unsigned int)CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+
 	err = chiaki_mutex_lock(&stream_connection->feedback_sender_mutex);
 	assert(err == CHIAKI_ERR_SUCCESS);
 	stream_connection->feedback_sender_active = false;
@@ -467,6 +510,11 @@ disconnect:
 	{
 		CHIAKI_LOGI(stream_connection->log, "StreamConnection closing after Remote disconnected");
 		err = CHIAKI_ERR_DISCONNECTED;
+	}
+	else if(stream_connection->link_timed_out)
+	{
+		CHIAKI_LOGE(stream_connection->log, "StreamConnection closing after the console became unreachable");
+		err = CHIAKI_ERR_TIMEOUT;
 	}
 
 err_congestion_control:

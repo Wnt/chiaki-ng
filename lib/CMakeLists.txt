@@ -24,6 +24,7 @@ set(HEADER_FILES
 		include/chiaki/frameprocessor.h
 		include/chiaki/packetstats.h
 		include/chiaki/networkstats.h
+		include/chiaki/linkwatchdog.h
 		include/chiaki/seqnum.h
 		include/chiaki/discovery.h
 		include/chiaki/congestioncontrol.h
@@ -71,6 +72,7 @@ set(SOURCE_FILES
 		src/frameprocessor.c
 		src/packetstats.c
 		src/networkstats.c
+		src/linkwatchdog.c
 		src/discovery.c
 		src/congestioncontrol.c
 		src/stoppipe.c
