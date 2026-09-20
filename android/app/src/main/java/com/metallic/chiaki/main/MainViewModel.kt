@@ -133,7 +133,8 @@ class MainViewModel(
 			{
 				Log.w(PSN_LIST_TAG, "PSN console list failed: ${describePsnFailure(error)}", error)
 				_psnListState.value = PsnConsoleListState.Error(
-					error.message ?: "Unable to list consoles on your PSN account"
+					error.message ?: "Unable to list consoles on your PSN account",
+					if(error is PsnRemoteAuthenticationException) PsnErrorRecovery.SIGN_IN else PsnErrorRecovery.RETRY
 				)
 			}
 		}

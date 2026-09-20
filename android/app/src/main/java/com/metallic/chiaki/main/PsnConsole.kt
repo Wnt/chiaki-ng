@@ -95,5 +95,5 @@ sealed interface PsnConsoleListState
 	data object Hidden : PsnConsoleListState
 	data object Loading : PsnConsoleListState
 	data object Ready : PsnConsoleListState
-	data class Error(val message: String) : PsnConsoleListState
+	data class Error(val message: String, val recovery: PsnErrorRecovery) : PsnConsoleListState
 }

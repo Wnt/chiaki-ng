@@ -147,7 +147,6 @@ class MainActivity : AppCompatActivity()
 		binding.onboardingAddAddressButton.setOnClickListener {
 			addManualConsole(binding.onboardingAddAddressButton)
 		}
-		binding.retryPsnListButton.setOnClickListener { viewModel.loadPsnConsoles() }
 		binding.summaryDismissButton.setOnClickListener {
 			binding.streamSummaryCard.visibility = View.GONE
 		}
@@ -313,9 +312,18 @@ class MainActivity : AppCompatActivity()
 	{
 		binding.psnProgressLayout.visibility =
 			if(state == PsnConsoleListState.Loading) View.VISIBLE else View.GONE
-		val error = (state as? PsnConsoleListState.Error)?.message
+		val error = state as? PsnConsoleListState.Error
 		binding.psnListErrorLayout.visibility = if(error == null) View.GONE else View.VISIBLE
-		binding.psnConsolesInfoTextView.text = error
+		binding.psnConsolesInfoTextView.text = error?.message
+		if(error != null)
+		{
+			binding.retryPsnListButton.setText(
+				if(error.recovery == PsnErrorRecovery.SIGN_IN) R.string.action_psn_sign_in else R.string.action_retry
+			)
+			binding.retryPsnListButton.setOnClickListener {
+				if(error.recovery == PsnErrorRecovery.SIGN_IN) startPsnSignIn() else viewModel.loadPsnConsoles()
+			}
+		}
 		updateConsoleList()
 	}
 
