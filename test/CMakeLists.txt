@@ -23,8 +23,10 @@ set(CHIAKI_UNIT_SOURCES
 				bitstream.c
 				video_presenter.c
 				video_decoder_operating_rate.c
+				video_decoder_codec_header.c
 				networkstats.c
 				../android/app/src/main/cpp/video-decoder-operating-rate.c
+				../android/app/src/main/cpp/video-decoder-codec-header.c
 				../android/app/src/main/cpp/video-presenter-age.c
 				../android/app/src/main/cpp/video-presenter-recovery.c
 				../android/app/src/main/cpp/video-presenter-histogram.c
