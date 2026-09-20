@@ -241,10 +241,22 @@ class StreamActivity : AppCompatActivity()
 		}
 		else
 			Log.i("StreamActivity", "Stream diagnostics overlay disabled")
+		// PLE-366: the badge's verdict has to be auditable as a series, not as a screenshot per
+		// phase -- a stall the tail arm catches lasts 8 s, less than a screenshot cadence. This
+		// rides the same 1 Hz debug log the captures already parse.
+		val qualityLogEnabled = preferences.feedbackStatsLogEnabled
 		viewModel.session.streamStats.observe(this) { stats ->
 			val link = diagnosticsNetworkLink()
 			summaryAccumulator.add(stats, link)
 			networkQuality = networkQualityClassifier.update(stats, link)
+			if(qualityLogEnabled)
+				Log.i("NetworkQuality", String.format(Locale.US,
+					"Quality badge: level %s cause %s | median rtt_ms %.2f jitter_ms %.2f loss_pct %.2f" +
+						" | tail_rate jitter %.2f loss %.2f cut %.2f",
+					networkQuality.level.name, networkQuality.cause.name,
+					networkQuality.fastRttMillis, networkQuality.fastJitterMillis,
+					networkQuality.fastLossPercent, networkQuality.tailJitterRate,
+					networkQuality.tailLossRate, NetworkQualityThresholds.TAIL_RATE_CUT))
 			updateNetworkQualityChip()
 			diagnosticsOverlay?.update(stats)
 		}
