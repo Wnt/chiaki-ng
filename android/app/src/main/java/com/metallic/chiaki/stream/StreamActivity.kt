@@ -4,7 +4,10 @@ package com.metallic.chiaki.stream
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
@@ -25,6 +28,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import com.metallic.chiaki.lib.QuitEvent
+import com.metallic.chiaki.lib.QuitReason
 import androidx.lifecycle.lifecycleScope
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -84,6 +89,13 @@ class StreamActivity : AppCompatActivity()
 		const val EXTRA_JUST_LINKED = "just_linked"
 		const val EXTRA_DIAGNOSTICS_PREVIEW = "diagnostics_preview"
 		const val EXTRA_STREAM_SUMMARY = "stream_summary"
+		/**
+		 * PLE-422: devtools-only affordance to drive a live session into the real error-quit path
+		 * (see [registerQuitReasonInjector]), so the error dialog and Reconnect can be exercised on
+		 * demand instead of waiting on a real network failure.
+		 */
+		const val ACTION_INJECT_QUIT_REASON = "com.metallic.chiaki.debug.INJECT_QUIT_REASON"
+		const val EXTRA_QUIT_REASON = "quit_reason"
 		private const val HIDE_UI_TIMEOUT_MS = 3500L
 		/** How often the connect overlay's second count is redrawn (PLE-337). */
 		private const val CONNECT_PROGRESS_TICK_MS = 500L
@@ -127,6 +139,7 @@ class StreamActivity : AppCompatActivity()
 	private var touchControlsFragment: TouchControlsFragment? = null
 	private var lastWindowInsets: WindowInsetsCompat? = null
 	private var lastLayoutBoundsLog: String? = null
+	private var quitReasonInjector: BroadcastReceiver? = null
 
 	private val uiVisibilityHandler = Handler(Looper.getMainLooper())
 
@@ -230,6 +243,8 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
+		if(BuildConfig.DEBUG)
+			quitReasonInjector = registerQuitReasonInjector()
 		if(diagnosticsPreview || preferences.streamDiagnosticsOverlayEnabled)
 		{
 			val overlay = StreamDiagnosticsOverlay(this) {
@@ -631,6 +646,8 @@ class StreamActivity : AppCompatActivity()
 
 	override fun onDestroy()
 	{
+		quitReasonInjector?.let { unregisterReceiver(it) }
+		quitReasonInjector = null
 		uiVisibilityHandler.removeCallbacks(connectProgressTick)
 		diagnosticsOverlay?.destroy()
 		diagnosticsOverlay = null
@@ -735,6 +752,42 @@ class StreamActivity : AppCompatActivity()
 	{
 		viewModel.pause()
 		viewModel.resume()
+	}
+
+	/**
+	 * PLE-422: delivers an `adb shell am broadcast` payload straight into the live
+	 * [com.metallic.chiaki.session.StreamSession] as a [QuitEvent], through the same
+	 * [com.metallic.chiaki.session.StreamSession.remoteEvent] entry point the PSN remote-session
+	 * path already uses for events that did not originate in this process. From here on it is the
+	 * same code a real error takes: [com.metallic.chiaki.session.StreamSession] posts
+	 * `StreamStateQuit`, and [stateChanged] shows the real error dialog with Reconnect wired to the
+	 * real [reconnect]. There is no shortcut that shows the dialog without also driving the state
+	 * machine underneath it.
+	 *
+	 * Only registered when [BuildConfig.DEBUG]; see `scripts/dev/flag-gate-allowlist.txt` and
+	 * `docs/devtools-quit-injection.md`.
+	 */
+	private fun registerQuitReasonInjector(): BroadcastReceiver
+	{
+		val receiver = object: BroadcastReceiver()
+		{
+			override fun onReceive(context: Context, intent: Intent)
+			{
+				val reasonValue = intent.getIntExtra(EXTRA_QUIT_REASON, -1)
+				if(reasonValue < 0)
+				{
+					Log.w("StreamActivity", "PLE-422 devtools: ignoring broadcast with no $EXTRA_QUIT_REASON")
+					return
+				}
+				val reason = QuitReason(reasonValue)
+				Log.w("StreamActivity", "PLE-422 devtools: injecting QuitEvent(reason=$reason, isError=${reason.isError})")
+				viewModel.session.remoteEvent(QuitEvent(reason, "PLE-422 devtools injection"))
+			}
+		}
+		ContextCompat.registerReceiver(
+			this, receiver, IntentFilter(ACTION_INJECT_QUIT_REASON), ContextCompat.RECEIVER_EXPORTED
+		)
+		return receiver
 	}
 
 	private val hideSystemUIRunnable = Runnable {
