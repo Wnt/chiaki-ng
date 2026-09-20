@@ -27,6 +27,9 @@ FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/capture-guard.sh"
 require_out_dir "$OUT" "$FORCE"
+# PLE-410: refuse before spending any phone time if the installed APK
+# predates the stats fields this capture measures.
+require_current_apk "$ADB" "$PKG" || exit 1
 PS5=192.168.1.164
 PHASE_SECONDS=${PHASE_SECONDS:-60}
 PROFILES=${PROFILES:-"clean 5g wifi-slow clean blip-200ms clean"}
