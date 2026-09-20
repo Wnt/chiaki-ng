@@ -1,21 +1,24 @@
 # PLE-393: Reconnect-after-an-error-quit verification
 
-## Result: inconclusive (BLOCKED) — could not reach the scenario, not a confirmed regression
-
-I could not get the phone into the state the fix actually addresses (StreamActivity
-showing the "Session has quit: ..." error dialog with a Reconnect button), so I never
-observed the Reconnect button being pressed. Everything below is either real-hardware
-evidence for adjacent scenarios that DID work, or an explanation of why the two
-substitutes I tried do not stand in for the real one. Per the ticket's own instruction
-("if Reconnect still shows no video, report it as BLOCKED... do not attempt a fix"),
-I did not touch `StreamSession.kt` or the decoder.
+## Result: CONFIRMED — the fix works, on both a genuine error quit and the clean-quit control
 
 Device: Samsung S22 Ultra (SM-S908B), serial/endpoint `192.168.40.101:5555`, reserved
 via `scripts/dev/device.py run ple-393`. App: this worktree's own build (branch
-`jonni/ple-393-...`, which contains `1acc5ab0` — confirmed with
-`git merge-base --is-ancestor 1acc5ab0... HEAD`), built by `scripts/dev/gate.sh`
-(GATE: PASS) and installed with `adb install -r`. PS5-466, 192.168.1.164, confirmed
-`ready` with `scripts/dev/ps5-discover.py` before starting.
+`jonni/ple-393-...`, rebased onto `fork/android-port` after PLE-422 landed
+`9f6b125b`/`dd010baa`), built by `scripts/dev/gate.sh` (GATE: PASS) and installed
+with `adb install -r`. PS5-466, 192.168.1.164, confirmed `ready` with
+`scripts/dev/ps5-discover.py` before starting.
+
+An earlier attempt at this ticket (preserved in git history on this branch, see
+the previous commit) could not reach a genuine error `QuitReason` on hardware —
+two substitutes were tried and both exercised a different code path than
+Reconnect. That gap is why [PLE-422](https://linear.app/pleikkari/issue/PLE-422)
+exists: a devtools-only `adb shell am broadcast` hook
+(`docs/devtools-quit-injection.md`) that feeds a real `QuitEvent` into the live
+`StreamSession` through the same `remoteEvent()` entry point the PSN
+remote-session path already uses. From there it is indistinguishable from a real
+error: the state machine, the error dialog, and the Reconnect button are all the
+genuine ones. This run uses that hook.
 
 ## 1. What `1acc5ab0` actually changed (read first, per the ticket)
 
@@ -42,168 +45,160 @@ In `StreamSession.kt`:
 So the actual bug was purely in the Kotlin layer's surface bookkeeping across a
 `shutdown()` + `resume()` pair on the same `StreamActivity`/`StreamSession` instance.
 
-## 2. What I could get real hardware evidence for
+## 2. Scenario A: genuine injected error quit → Reconnect — WORKS
 
-### Baseline connect (healthy)
-Connected to PS5-466, confirmed `Feedback stats:` lines (`video received`/`decoded`
-climbing, `per_s takion` ~120) within 10s. Screenshot and logcat exist for the
-second run only (see "Evidence paths" below); the first run's baseline looked
-identical.
+`docs/verification/PLE-393/capture.sh` (`OUT_DIR=build/captures/ple393`):
+connected to PS5-466, confirmed healthy streaming (`Feedback stats:` climbing),
+then ran:
 
-### Clean quit → fresh connect (the ticket's control, scenario B) — WORKS
+```sh
+adb shell am broadcast -a com.metallic.chiaki.debug.INJECT_QUIT_REASON --ei quit_reason 10
+```
+
+(`10` = `STREAM_CONNECTION_UNKNOWN`, `isError=true`.) Logcat immediately shows the
+injection landing on the real path and the real dialog going up:
+
+```
+00:25:58.980 W/StreamActivity: PLE-422 devtools: injecting QuitEvent(reason=Unknown Error in Stream Connection, isError=true)
+```
+
+Screenshot `A_01_error_dialog.png`: the genuine `MaterialAlertDialogBuilder` dialog,
+"Session has quit: Unknown Error in Stream Connection / PLE-422 devtools injection",
+with **Quit** / **Reconnect** buttons.
+
+Tapped **Reconnect** (`android:id/button1`). Full decoder lifecycle from logcat,
+timestamps in device-local time:
+
+```
+00:25:41.643 Initializing decoder with mime video/hevc            (initial connect)
+00:25:41.669 AMediaCodec_configure() succeeded ...
+
+00:25:58.980 injecting QuitEvent(... isError=true)                (this ticket's injection)
+
+00:26:05.080 Stop JNI Session                                     (Reconnect tapped -> shutdown())
+00:26:05.082 Session quit: reason=stopped
+00:26:05.082 Shutting down JNI Session                            (old decoder torn down)
+00:26:05.303 Initializing decoder with mime video/hevc            (resume(): decoder re-init #1)
+00:26:05.311 Session quit: reason=session_request_rp_in_use       (PLE-428 race, see below)
+00:26:05.325 AMediaCodec_configure() succeeded ...
+
+00:26:10.551 Stop JNI Session                                     (auto-retried Reconnect)
+00:26:10.552 Shutting down JNI Session
+00:26:10.604 Initializing decoder with mime video/hevc            (re-init #2)
+00:26:10.613 Session quit: reason=session_request_rp_in_use       (PLE-428 race again)
+00:26:10.628 AMediaCodec_configure() succeeded ...
+
+00:26:15.749 Stop JNI Session                                     (auto-retried Reconnect again)
+00:26:15.750 Shutting down JNI Session
+00:26:15.807 Initializing decoder with mime video/hevc            (re-init #3 -- this one holds)
+00:26:15.826 AMediaCodec_configure() succeeded ...
+00:26:19.167 Feedback stats: ... video received 49 decoded 49 ...  (real video, after this teardown)
+00:26:20.168 Feedback stats: ... video received 60 decoded 60 ...
+00:26:21.170 Feedback stats: ... video received 60 decoded 60 ...
+```
+
+`A_post_reconnect_tail.txt` is the tail of the log starting at the last "Shutting
+down JNI Session" line before success — i.e. it is anchored to the teardown that
+preceded the successful re-init, not to the moment Reconnect was first tapped, so
+it cannot include stale `Feedback stats:` lines from the session that was being
+left. `A_04_final.png` shows the PS5 home screen live on the phone with a
+"MegaJontero connected using Remote Play" toast, confirming the console's own view
+of a fresh, successful connection.
+
+**PLE-428 (a separate, already-filed defect) reproduced twice in this run**: the
+first two Reconnect attempts landed while the console had not yet released the
+prior session (`reason=session_request_rp_in_use`, which `chiaki_quit_reason_is_error()`
+treats as an error, so each one raised its own dialog). This is not this ticket's
+fix — `capture.sh` detects each new teardown and taps Reconnect again
+automatically, which is what a user retrying past the same on-screen message would
+do. `A_decoder_counts.txt`: `already_in_use_seen=1`, `decoder_init_count_before=1
+decoder_init_count_after=4` (1 initial + 3 across the two failed attempts and the
+one that held).
+
+**Verdict for Scenario A: the decoder is torn down and re-established, and real
+video resumes, after a genuine error-quit Reconnect.** `1acc5ab0`'s fix holds.
+
+### A methodology trap worth recording
+The first version of this run's capture script counted `Feedback stats:` lines
+appearing anywhere after the Reconnect tap as success. That is wrong: the
+**old** session keeps emitting `Feedback stats:` for a second or two after the tap,
+until its own `shutdown()` actually runs — so the first script version reported a
+false "OK" using stats from the session the user had just left, not the new one,
+and never even noticed the PLE-428 race playing out underneath it. The fix was to
+anchor the stats check to the most recently logged `Shutting down JNI Session`
+line, which moves forward every time a new teardown happens, and to keep
+re-tapping Reconnect for as long as new teardowns keep appearing. See `capture.sh`.
+
+## 3. Scenario B: clean quit → fresh connect (the control) — WORKS
+
 Left the stream with the hardware Back key (`adb shell input keyevent 4`).
-`StreamActivity.dispatchKeyEvent` does not intercept Back for navigation (it forwards
-to the controller input mapper first, then falls through to the default Activity
-back behaviour), so this reliably runs the same `finish()` the in-app Quit button's
-confirm dialog runs. Logcat for this run shows a fully graceful native teardown:
-```
-Stop JNI Session
-Join JNI Session
-StreamConnection is disconnecting
-StreamConnection sending Disconnect
-StreamConnection closed takion
-StreamConnection completed successfully
-Ctrl stopped
-Session has quit
-Session quit: reason=stopped remote_reason=""
-Shutting down JNI Session
-Video Decoder Input Thread exiting
-Video Decoder Output Thread exiting
-```
-Back at the console list (`MainActivity`), tapping PS5-466 again connects a brand
-new `StreamActivity`/`StreamSession`/`Surface` and `Feedback stats:` resume within
-10s (`B_RESULT.txt`: `OK: Feedback stats present on the fresh connect (control)`).
+`StreamActivity.dispatchKeyEvent` does not intercept Back for navigation, so this
+reliably runs the same `finish()` the in-app Quit button's confirm dialog runs.
+Logcat shows a fully graceful native teardown (`Stop JNI Session` → `Session quit:
+reason=stopped` → `Shutting down JNI Session`), then a fresh connect from
+`MainActivity`'s console list builds a brand-new `Surface`/`StreamSession` and
+`Feedback stats:` resume within 10s (`B_RESULT.txt`: `OK: Feedback stats present
+on the fresh connect (control)`; screenshot `B_03_control_streaming.png` shows the
+PS5 home screen live).
 
-This confirms connecting to the console still works after a clean stop, but — see
-next section — it does **not** exercise the lines `1acc5ab0` changed, because a
-fresh connect from the console list builds an entirely new `Surface`/`StreamSession`
-object graph. It is a weak sanity check, not evidence for the fix.
+This does not exercise the lines `1acc5ab0` changed (a fresh connect builds an
+entirely new object graph, so `surface` was never non-null-but-stale to begin
+with) — it is the control confirming that connecting to the console still works
+at all, not evidence for the fix itself.
 
-## 3. The two substitutes I tried, and why neither confirms the fix
+## 4. Both paths work — the fix is confirmed
 
-### Attempt 1: total network loss to force a genuine error quit — wedges, never quits
-`scripts/net/impairctl.py profile custom --loss 100% --ttl 40s --commit` (the same
-CT950/CT240 netem driver PLE-356/PLE-367 use for every A/B round on this phone;
-the phone's own Wi-Fi radio/association is never touched, exactly as the tool's
-docstring promises) cut the link for 40s mid-stream. Result, read from the source
-first and then confirmed on-device:
-
-- `lib/src/ctrl.c` and `lib/src/takion.c` have no local idle-timeout watchdog: a
-  `QuitReason` only gets set from an explicitly **received** disconnect/error
-  message (`lib/src/session.c:805`, `CHIAKI_ERR_DISCONNECTED` from
-  `chiaki_stream_connection_run`) or from a hard local socket error surfacing
-  through a blocking call. Under **symmetric** total loss, an explicit disconnect
-  from the console can never arrive (both directions are cut), and the only other
-  exit is the control socket's own TCP retransmission timeout, which is Linux's
-  default multi-minute `tcp_retries2` ceiling — far outside a practical test window.
-- On device this matched exactly: `video received`/`decoded` and `per_s takion`
-  dropped to 0 within ~10s of applying the loss (confirmed in logcat), and stayed
-  at 0 even after I restored `impair clean --commit` ~40s later. About 90s after
-  the cut, the socket itself failed (`Takion failed to send raw: Bad file
-  descriptor`, `StreamConnection failed to send heartbeat`, once per second) —
-  and it **still never raised a `Session has quit` event**. I re-checked the live
-  logcat ~4 minutes after the cut (23:29, cut applied at 23:23): still spinning
-  the same failed-heartbeat loop, `audio_underruns` past 180000, no quit, no
-  Reconnect dialog, and the console's frozen last frame stuck on screen (confirmed
-  with a screenshot whose on-screen PS5 clock had stopped advancing).
-- I recovered the phone with the hardware Back key (not force-stop — the app-state
-  memory note on this fork is that force-stopping mid-stream can wedge the PS5's
-  own `AvCap` for ~40 minutes; Back key still runs `StreamSession.shutdown()`'s
-  graceful `session.stop()`/`dispose()`, confirmed by the same
-  `StreamConnection sending Disconnect` / `Ctrl stopped` / `Session quit:
-  reason=stopped` sequence as section 2).
-
-This is a real, reproducible, hardware-confirmed finding (see Follow-ups), but it
-is the **wrong** substitute for this ticket: it never produces the error dialog, so
-Reconnect is never reachable this way. I do not have the raw logcat file for this
-run any more — I deleted the capture directory between runs before copying it out,
-which was a process mistake on my part (see Learnings). The timeline above is
-reconstructed from the run's own stdout log
-(`build/captures/ple393_run.log`) plus log lines I quoted verbatim while
-investigating, in the session transcript for this ticket.
-
-### Attempt 2: screen-off/screen-on pause/resume — exercises a different code path than Reconnect
-Reasoning going in: `StreamActivity.onPause()` (screen off, not a configuration
-change) calls `viewModel.pause()` and `onResume()` calls `viewModel.resume()` —
-textually the exact same two calls `reconnect()` makes, on the exact same
-`Surface`/`StreamSession` instance, no new `Activity`. On device this did call
-`shutdown()` (`Stop JNI Session` / `Session quit: reason=stopped` / `Shutting down
-JNI Session`, same sequence as section 2), but by the time the screen came back on
-several seconds later, `StreamActivity` had already gone — `topResumedActivity` was
-back at `MainActivity`'s console list with a "Last session" summary card, and there
-is no `StreamActivity` `onCreate`/"Stream window created" log line anywhere between
-the screen-off and the later Scenario B run, meaning it was not even recreated —
-its `finish()` ran while the screen was still off.
-
-Reading `StreamActivity.stateChanged()` explains why: the `QuitEvent` from the
-native session is delivered to the `StreamState` `LiveData` via `postValue()` from
-a **non-main thread** (the session's own worker thread, inside
-`chiaki_stream_connection_run`), so it is queued rather than delivered
-synchronously. `shutdown()`'s own `_state.value = StreamStateIdle` (a direct,
-synchronous `setValue()` from the main thread, inside `onPause()`) does not cancel
-that queued delivery. Once `onPause()` returns and the main Looper drains its
-queue, the queued `StreamStateQuit(reason=STOPPED, isError=false)` reaches the
-observer, and `stateChanged()`'s non-error branch calls `finish()` unconditionally
-— this is unrelated to `1acc5ab0` and does not depend on the screen being off; it
-would happen after **any** `pause()` that is not immediately followed by something
-that changes `dialogContents` to suppress it.
-
-I want to be careful not to over-claim a second bug here: `1acc5ab0`'s own commit
-message explicitly frames non-config-change `onPause()` as intentionally ending the
-session ("onPause no longer ends the session **when isChangingConfigurations**" —
-implying it still does otherwise), and the error-dialog's Reconnect path may avoid
-this exact race because `dialogContents` is still `StreamQuitDialog` at the moment
-`reconnect()` synchronously calls `pause()` (`dialogContents` is only cleared by the
-dialog's own dismiss listener, which Kotlin dispatches after `reconnect()`'s call
-stack, not before — I have not traced this precisely enough to be sure). Either
-way, this substitute does not put `StreamActivity` through the same lifecycle the
-Reconnect button does, so it doesn't confirm or refute the fix, and I don't have
-independent evidence it's a bug rather than intended design behind the button. It's
-listed as a Follow-up.
+Per the ticket's own instruction: "if both paths work, the fix is confirmed." Both
+did.
 
 ## Evidence paths
 
-- Second run (scenario B, and the failed/inconclusive scenario-A substitute):
-  `build/captures/ple393/session_logcat.txt` (full `adb logcat -v time` from launch
-  through both scenarios), `00_main.png`, `02_streaming_before_A.png`,
-  `A_fail_nostream.png` (screen back at the console list after screen-off/on, with
-  the "Last session 0:16" summary card), `B_01_back_at_list.png`,
-  `B_03_control_streaming.png`, `A_RESULT.txt`, `B_RESULT.txt`.
-- First run (network-blackout attempt): `build/captures/ple393_run.log` (script
-  stdout/timeline only; the raw session logcat for this run was not preserved —
-  see Learnings).
-- `docs/verification/PLE-393/capture.sh` — the script that produced the second run;
-  it documents both substitutes and why in its header comment.
+All under `build/captures/ple393/` (this run; `OUT_DIR=build/captures/ple393`,
+`--force` to overwrite this ticket's own earlier attempt in the same directory):
+- `session_logcat.txt` — full `adb logcat -v time` across the whole sequence
+  (initial connect, injection, three Reconnect taps including the two PLE-428
+  races, and the clean-quit control).
+- `00_main.png`, `02_streaming_before_A.png` — baseline.
+- `A_01_error_dialog.png` — the genuine error dialog after injection.
+- `A_02_dialog_ui.xml` — `uiautomator dump` proving `android:id/button1` is the
+  real "Reconnect" button (and `android:id/button2` is "Quit").
+- `A_post_reconnect_tail.txt` — log tail anchored to the teardown that preceded
+  the successful reconnect, containing the real post-Reconnect `Feedback stats:`
+  lines.
+- `A_04_final.png` — PS5 home screen live, "MegaJontero connected using Remote
+  Play" toast.
+- `A_decoder_counts.txt`, `A_RESULT.txt` — machine-readable summary.
+- `A_retry_at_line*_ui.xml` — dumps captured at each PLE-428 retry.
+- `B_01_back_at_list.png`, `B_02_main_ui.xml`, `B_03_control_streaming.png`,
+  `B_quit_reason.txt`, `B_RESULT.txt` — the clean-quit control.
+
+`docs/verification/PLE-393/capture.sh` is the script that produced this run and
+documents both scenarios in its header comment. An earlier, inconclusive run of
+this ticket (which could not reach a genuine error quit and tried two substitutes
+that turned out to exercise different code paths than Reconnect) is preserved in
+this branch's git history for reference; its findings became
+[PLE-422](https://linear.app/pleikkari/issue/PLE-422) (the injection hook used
+here), [PLE-423](https://linear.app/pleikkari/issue/PLE-423) (the network-loss
+wedge), and [PLE-424](https://linear.app/pleikkari/issue/PLE-424)/[PLE-425](https://linear.app/pleikkari/issue/PLE-425)
+(other follow-ups).
 
 ## Verdict
 
-**Not settled either way.** The fix's own logic (`surface?.takeIf { it.isValid }`
-instead of an unconditionally-nulled field) is sound reasoning for the bug the
-commit describes, and the adjacent path I *could* exercise on real hardware (clean
-quit → fresh connect) works. But I was not able to drive the phone into the actual
-"error dialog with a Reconnect button" state within this ticket's time/resource
-budget, on this hardware, with the tools available to me, so I never watched
-Reconnect either succeed or fail. That is a gap in verification, not a finding
-that the fix is broken.
+**The fix works.** Reconnect after a genuine error quit (`isError=true`, injected
+through the real `StreamSession.remoteEvent()` path) tears down the old decoder
+and re-establishes a new one that decodes real video — confirmed by
+`Shutting down JNI Session` → `Initializing decoder` → `AMediaCodec_configure()
+succeeded` → real `Feedback stats:` lines with `video received`/`decoded` climbing,
+plus a screenshot of live PS5 video with the console's own "connected" toast. The
+clean-quit-then-fresh-connect control also works. Both paths pass, per the
+ticket's own acceptance criterion.
 
-## Follow-ups
+## Follow-ups (not this ticket's scope, filed separately)
 
-- A genuine mid-stream error `QuitReason` needs a way to be induced deliberately
-  on this fork for testing (a devtools-only hook, gated per AGENTS.md rule 4, is
-  the shape other tickets have used for similar problems) — without one, "verify
-  the error-quit-and-Reconnect path on real hardware" is not reliably repeatable.
-- Total (or near-total) symmetric network loss during an active stream leaves the
-  session permanently wedged (`Takion failed to send raw: Bad file descriptor`,
-  `StreamConnection failed to send heartbeat` once a second, forever) instead of
-  raising a `Session has quit` event — confirmed for 4+ minutes post-cut. No
-  Reconnect dialog is ever offered; the only recovery is leaving the Activity
-  manually (Back key/Quit). Worth its own ticket with `lib/src/ctrl.c` /
-  `lib/src/takion.c` as the likely starting point (no idle-timeout watchdog
-  independent of an explicitly-received disconnect message or the kernel's own
-  multi-minute TCP retransmission ceiling).
-- Whether `StreamActivity` finishing shortly after **any** non-config-change
-  `onPause()` (confirmed for screen-off; Home-button likely identical, untested)
-  is intended is worth a one-line confirmation from whoever owns `StreamSession.kt`
-  — it matches the commit's own description of the intended behaviour, but it also
-  means "pause" is not a general-purpose background/foreground primitive for this
-  app outside the Reconnect-dialog's narrow use, which is easy to assume otherwise.
+- **PLE-428** (already filed): the first Reconnect after an error can race the
+  console's own session teardown and land on `session_request_rp_in_use`
+  ("Remote Play on Console is already in use"). This run reproduced it twice in a
+  row before the third attempt held. Worth checking whether the existing
+  `SessionHandoffRetry` machinery (currently only armed for the "just linked"
+  handoff, `StreamSession.kt:52`) should also cover a Reconnect-triggered
+  `rp_in_use`, so the user does not have to tap through it manually.
