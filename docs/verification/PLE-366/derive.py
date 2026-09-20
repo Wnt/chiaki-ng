@@ -11,17 +11,18 @@ rtt = probe_rtt_ms. Then we slide the classifier's own 5-sample window over the 
 and, for each candidate threshold, report the distribution of the tail rate
 (count of samples at or above the threshold, divided by the window size).
 
-Each capture's estimator generation is named on stderr (not folded into the
-pooled numbers below, which are unchanged from before PLE-405): a capture
-whose `Feedback stats:` lines predate PLE-356 (no `packet_jitter_raw_ms`
-field) has its `packet_jitter_ms` reading the *old* packet-gap EWMA, not the
-frame-boundary estimator the badge reads today -- see
-feedback_stats.capture_generation(). This is reporting, not filtering: this
-script's corpus and output are unchanged (PLE-405 is a refactor); a capture
-found to be the wrong generation is a decision for whoever picked the corpus,
-not something this script silently overrides.
+PLE-411: every capture's estimator generation is checked with
+feedback_stats.capture_generation() before anything is pooled. A capture whose
+`Feedback stats:` lines predate PLE-356 (no `packet_jitter_raw_ms` field) has its
+`packet_jitter_ms` reading the *old* packet-gap EWMA, not the frame-boundary estimator the
+badge reads today -- pooling it with a post-PLE-356 capture silently mixes two different
+metrics into one distribution (this is exactly how `ple357` ended up in the default corpus
+here: captured after PLE-356 landed in source, but with a stale APK still running the old
+estimator). PLE-405 made the generations visible on stderr; that was a warning, and a
+warning that scrolled past is how the mix survived. This script now refuses to run at all
+on a mixed-generation corpus rather than print pooled numbers next to a mismatch note.
 
-Usage: derive.py [capture-dir ...]   (defaults to the ple356 + ple357 corpus)
+Usage: derive.py [capture-dir ...]   (defaults to the ple356 + ple411 corpus)
 """
 import re
 import sys
@@ -40,7 +41,7 @@ import feedback_stats as fb  # noqa: E402
 
 DEFAULT_CAPTURES = [
     "/home/wnt/gta6/build/captures/ple356",
-    "/home/wnt/gta6/build/captures/ple357",
+    "/home/wnt/gta6/build/captures/ple411",
 ]
 WINDOW = 5  # NetworkQualityThresholds.FAST_WINDOW_SECONDS
 
@@ -88,12 +89,35 @@ def tail_rates(series, key, threshold):
     return [sum(1 for s in w if s[key] >= threshold) / float(WINDOW) for w in windows(series)]
 
 
+def check_generations(captures):
+    """Refuse a corpus whose captures were not all recorded on the same estimator
+    generation (PLE-411): a mix silently pools two different `packet_jitter_ms`
+    quantities into one distribution, and a warning on stderr is how that happened
+    the first time (ple357 in the pre-PLE-411 default corpus)."""
+    generations = {}
+    for cap in captures:
+        gen = fb.capture_generation(cap)
+        if gen is None:
+            sys.exit(f"derive.py: {cap} has no 'Feedback stats:' line with packet_jitter_ms "
+                      f"-- not a usable capture")
+        generations[cap] = gen
+    distinct = set(generations.values())
+    if len(distinct) > 1:
+        lines = "\n".join(f"  {cap}: {gen}" for cap, gen in generations.items())
+        sys.exit("derive.py: refusing a generation-mixed corpus -- these captures were not "
+                  f"all recorded on the same packet_jitter_ms estimator:\n{lines}\n"
+                  "Drop the capture(s) on the wrong generation, or replace them with a fresh "
+                  "capture on the current build (confirm the installed APK is current first).")
+    return generations
+
+
 def main():
     captures = sys.argv[1:] or DEFAULT_CAPTURES
+    generations = check_generations(captures)
     clean, blip = [], []
     print("== corpus ==")
     for cap in captures:
-        print(f"{cap}: {fb.capture_generation(cap)}", file=sys.stderr)
+        print(f"{cap}: {generations[cap]}", file=sys.stderr)
         spans, rows = load(cap)
         name = os.path.basename(cap)
         for tag in spans:
@@ -146,7 +170,11 @@ def main():
                   f"blip: {nblip:3d} samples over, {hit*100:5.1f}% of windows non-zero")
 
     print("\n== chosen arm, evaluated ==")
-    chosen = [("jit", 4.0), ("loss", 2.0), ("rtt", 30.0)]
+    # PLE-411: matches NetworkQuality.kt's shipped TAIL_JITTER_MS / TAIL_LOSS_PERCENT exactly
+    # (this line previously read loss=2.0 and included an rtt=30.0 arm neither of which the
+    # shipped classifier has -- README's "no RTT tail arm" decision -- so it was evaluating a
+    # different arm than the one that ships).
+    chosen = [("jit", 4.0), ("loss", 1.0)]
     cut = 1 / float(WINDOW)
     for g, name in ((clean, "clean"), (blip, "blip")):
         fired = 0
