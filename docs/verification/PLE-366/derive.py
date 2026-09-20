@@ -11,12 +11,32 @@ rtt = probe_rtt_ms. Then we slide the classifier's own 5-sample window over the 
 and, for each candidate threshold, report the distribution of the tail rate
 (count of samples at or above the threshold, divided by the window size).
 
+Each capture's estimator generation is named on stderr (not folded into the
+pooled numbers below, which are unchanged from before PLE-405): a capture
+whose `Feedback stats:` lines predate PLE-356 (no `packet_jitter_raw_ms`
+field) has its `packet_jitter_ms` reading the *old* packet-gap EWMA, not the
+frame-boundary estimator the badge reads today -- see
+feedback_stats.capture_generation(). This is reporting, not filtering: this
+script's corpus and output are unchanged (PLE-405 is a refactor); a capture
+found to be the wrong generation is a decision for whoever picked the corpus,
+not something this script silently overrides.
+
 Usage: derive.py [capture-dir ...]   (defaults to the ple356 + ple357 corpus)
 """
 import re
 import sys
 import os
 import statistics
+
+# PLE-405: shared with every other capture's analyze/derive script; imported
+# by an explicit path that fails loudly if it's missing (PLE-378's rule for
+# capture.sh's IMPAIR path, applied here too).
+REPO = os.environ.get("REPO", "/home/wnt/gta6")
+_FB_MODULE = os.path.join(REPO, "scripts", "dev", "feedback_stats.py")
+if not os.path.isfile(_FB_MODULE):
+    sys.exit(f"derive.py: feedback_stats.py not found at {_FB_MODULE} (set REPO= to override)")
+sys.path.insert(0, os.path.dirname(_FB_MODULE))
+import feedback_stats as fb  # noqa: E402
 
 DEFAULT_CAPTURES = [
     "/home/wnt/gta6/build/captures/ple356",
@@ -29,27 +49,11 @@ JIT = re.compile(r"packet_jitter_ms (\d+\.\d+)")
 PRB = re.compile(r"probe_rtt_ms (\d+\.\d+)")
 LOSS = re.compile(r"congestion_loss measured=(\d+\.\d+)")
 TAK = re.compile(r"takion_raw expected_per_s (\d+\.\d+) received_per_s (\d+\.\d+)")
-import datetime
-TZ = datetime.timezone(datetime.timedelta(hours=3))
-YEAR = 2026
-
-
-def stamp(s):
-    return datetime.datetime.strptime(f"{YEAR}-{s}", "%Y-%m-%d %H:%M:%S.%f").replace(
-        tzinfo=TZ).timestamp()
+stamp = fb.stamp
 
 
 def load(capture):
-    spans = {}
-    phases = []
-    for line in open(f"{capture}/phases.txt"):
-        kind, tag, ts = line.split()
-        phases.append((kind, tag, float(ts)))
-    for i, (kind, tag, ts) in enumerate(phases):
-        if kind == "PHASE_BEGIN":
-            end = next((t for k, g, t in phases[i + 1:] if k == "PHASE_END" and g == tag), None)
-            if end:
-                spans[tag] = (ts, end)
+    spans = fb.load_phases(capture)
     rows = []
     for line in open(f"{capture}/session_logcat.txt", errors="replace"):
         m = FS.search(line)
@@ -89,6 +93,7 @@ def main():
     clean, blip = [], []
     print("== corpus ==")
     for cap in captures:
+        print(f"{cap}: {fb.capture_generation(cap)}", file=sys.stderr)
         spans, rows = load(cap)
         name = os.path.basename(cap)
         for tag in spans:

@@ -7,12 +7,21 @@ what the badge said each second, next to the medians and tail rates it said it o
 import re
 import sys
 import os
-import datetime
-import statistics
+
+# PLE-405: the phases.txt/stamp() preamble and the Feedback-stats-line field
+# regexes used to be copied by hand into every capture's analyze/derive
+# script; this now lives once in the workspace, imported by an explicit path
+# that fails loudly if it's missing rather than silently drifting (the same
+# rule PLE-378 set for capture.sh's IMPAIR path).
+REPO = os.environ.get("REPO", "/home/wnt/gta6")
+_FB_MODULE = os.path.join(REPO, "scripts", "dev", "feedback_stats.py")
+if not os.path.isfile(_FB_MODULE):
+    sys.exit(f"analyze.py: feedback_stats.py not found at {_FB_MODULE} (set REPO= to override)")
+sys.path.insert(0, os.path.dirname(_FB_MODULE))
+import feedback_stats as fb  # noqa: E402
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/home/wnt/gta6/build/captures/ple366"
-TZ = datetime.timezone(datetime.timedelta(hours=3))
-YEAR = 2026
+stamp = fb.stamp
 
 Q = re.compile(
     r"^(\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d).*Quality badge: level (\w+) cause (\w+)"
@@ -24,21 +33,7 @@ PRB = re.compile(r"probe_rtt_ms (\d+\.\d+)")
 LOSS = re.compile(r"congestion_loss measured=(\d+\.\d+)")
 TAK = re.compile(r"takion_raw expected_per_s (\d+\.\d+) received_per_s (\d+\.\d+)")
 
-
-def stamp(s):
-    return datetime.datetime.strptime(f"{YEAR}-{s}", "%Y-%m-%d %H:%M:%S.%f").replace(
-        tzinfo=TZ).timestamp()
-
-
-spans, phases = {}, []
-for line in open(f"{OUT}/phases.txt"):
-    kind, tag, ts = line.split()
-    phases.append((kind, tag, float(ts)))
-for i, (kind, tag, ts) in enumerate(phases):
-    if kind == "PHASE_BEGIN":
-        end = next((t for k, g, t in phases[i + 1:] if k == "PHASE_END" and g == tag), None)
-        if end:
-            spans[tag] = (ts, end)
+spans = fb.load_phases(OUT)
 
 badges, raws = [], []
 for line in open(f"{OUT}/session_logcat.txt", errors="replace"):
