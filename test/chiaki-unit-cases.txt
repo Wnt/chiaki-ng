@@ -25,6 +25,16 @@
 /chiaki/takion/av_packet_parse_real_video
 /chiaki/takion/send_buffer
 /chiaki/takion/format_congestion
+/chiaki/link_watchdog/healthy_stream_never_expires
+/chiaki/link_watchdog/expires_once_the_deadline_passes
+/chiaki/link_watchdog/expires_exactly_once
+/chiaki/link_watchdog/one_late_packet_resets_the_deadline
+/chiaki/link_watchdog/no_packet_ever_still_expires
+/chiaki/link_watchdog/silence_never_predates_arming
+/chiaki/link_watchdog/receive_stamp_ahead_of_the_poll
+/chiaki/link_watchdog/survives_the_clock_wrap
+/chiaki/link_watchdog/impairment_gaps_leave_a_wide_margin
+/chiaki/link_watchdog/total_loss_is_reported_inside_the_device_bound
 /chiaki/fec/fec
 /chiaki/regist/aeropause_ps4_pre10
 /chiaki/regist/pin_bright_ps4_pre10
