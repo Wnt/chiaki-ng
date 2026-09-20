@@ -135,27 +135,51 @@ static MunitResult test_impairment_gaps_leave_a_wide_margin(const MunitParameter
 {
 	(void)params;
 	(void)user;
-	// The worst inbound gaps the rig's deliberate profiles produced, measured on
-	// device (docs/verification/PLE-423/README.md). Every one of them, replayed
-	// against the shipped constant, must leave the watchdog silent. If a profile
-	// is ever made harsher than the constant tolerates, this fails here rather
-	// than on a user's stream.
-	static const uint32_t worst_gap_ms[] = { 1000, 1000, 1000, 1000 }; // clean, blip-200ms, 4g, wifi-slow
-	for(size_t i = 0; i < sizeof(worst_gap_ms) / sizeof(*worst_gap_ms); i++)
+	// The worst inbound gap the rig's deliberate profiles produced, measured on
+	// device across clean, blip-200ms, 4g and wifi-slow
+	// (docs/verification/PLE-423/README.md). Replayed against the shipped
+	// constant, the watchdog must stay silent through a long stream in which
+	// *every* poll lands on that worst case -- far harsher than the real runs,
+	// where it happened once. If a profile is ever made harsher than the
+	// constant tolerates, this fails here rather than on a user's stream.
+	const uint32_t worst_gap_ms = 217;
+	munit_assert_uint32(worst_gap_ms * 4, <, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+	ChiakiLinkWatchdog watchdog;
+	chiaki_link_watchdog_init(&watchdog, 0, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+	for(uint32_t second = 1; second <= 3600; second++)
 	{
-		munit_assert_uint32(worst_gap_ms[i], <, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS / 4);
-		ChiakiLinkWatchdog watchdog;
-		chiaki_link_watchdog_init(&watchdog, 0, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
-		// A ten-minute stream in which every single poll lands at the worst gap.
-		for(uint32_t second = 1; second <= 600; second++)
+		uint32_t now_ms = second * 1000;
+		munit_assert_false(chiaki_link_watchdog_check(&watchdog, now_ms - worst_gap_ms, now_ms));
+	}
+	munit_assert_uint32(watchdog.max_silence_ms, ==, worst_gap_ms);
+	munit_assert_false(watchdog.expired);
+	return MUNIT_OK;
+}
+
+static MunitResult test_total_loss_is_reported_inside_the_device_bound(const MunitParameter params[], void *user)
+{
+	(void)params;
+	(void)user;
+	// The device capture: the rig cut the network, the watchdog reported 10691 ms
+	// of silence and the session quit. The bound that matters to a user is
+	// limit + one poll interval, and nothing may be slower than that.
+	const uint32_t poll_interval_ms = 1000;
+	ChiakiLinkWatchdog watchdog;
+	chiaki_link_watchdog_init(&watchdog, 0, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+	const uint32_t last_receive_ms = 1000;
+	uint32_t fired_at_ms = 0;
+	for(uint32_t now_ms = 2000; now_ms <= 120000; now_ms += poll_interval_ms)
+	{
+		if(chiaki_link_watchdog_check(&watchdog, last_receive_ms, now_ms))
 		{
-			uint32_t now_ms = second * 1000;
-			uint32_t last_receive_ms = now_ms - worst_gap_ms[i];
-			if(!last_receive_ms)
-				last_receive_ms = 1;
-			munit_assert_false(chiaki_link_watchdog_check(&watchdog, last_receive_ms, now_ms));
+			fired_at_ms = now_ms;
+			break;
 		}
 	}
+	munit_assert_uint32(fired_at_ms, !=, 0);
+	uint32_t silence_at_fire_ms = fired_at_ms - last_receive_ms;
+	munit_assert_uint32(silence_at_fire_ms, >=, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS);
+	munit_assert_uint32(silence_at_fire_ms, <, CHIAKI_LINK_WATCHDOG_TIMEOUT_MS + poll_interval_ms);
 	return MUNIT_OK;
 }
 
@@ -203,6 +227,11 @@ MunitTest tests_link_watchdog[] = {
 	{
 		"/impairment_gaps_leave_a_wide_margin",
 		test_impairment_gaps_leave_a_wide_margin,
+		NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL
+	},
+	{
+		"/total_loss_is_reported_inside_the_device_bound",
+		test_total_loss_is_reported_inside_the_device_bound,
 		NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL
 	},
 	{ NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }

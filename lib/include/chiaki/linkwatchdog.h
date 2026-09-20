@@ -24,11 +24,22 @@ extern "C" {
  * The figure is set by measurement, not by taste. A healthy stream puts
  * something on the socket roughly every 16 ms (video at 60 fps) and, even with
  * video stalled, the console still acks the 1 Hz heartbeat, so the *floor* on
- * inbound traffic is one packet per second. The worst inbound gaps the
- * impairment rig's deliberate profiles produce are measured per run and
- * reported in `docs/verification/PLE-423/`; this constant is an order of
- * magnitude above them, because a false quit mid-game is worse than the hang
- * it replaces.
+ * inbound traffic is one packet per second.
+ *
+ * Measured on the S22 Ultra against PS5-466 over the impairment rig
+ * (`docs/verification/PLE-423/`), worst inbound gap per profile:
+ *
+ *     clean        207 ms
+ *     blip-200ms   217 ms
+ *     4g          <217 ms   (never raised the cumulative max above blip's)
+ *     wifi-slow   <217 ms   (same)
+ *
+ * 10 s is 46x the worst of those, and ten consecutive missed heartbeat acks. It
+ * also leaves room for the real-world stalls the rig does not reproduce -- an
+ * AP roam, a DFS channel change -- because a false quit mid-game is worse than
+ * the hang this replaces. The cut-the-cable direction has all the margin it
+ * needs at this value: total loss was reported to the user 13.5 s after the
+ * cut, against the four minutes and counting it used to take.
  */
 #define CHIAKI_LINK_WATCHDOG_TIMEOUT_MS 10000
 
