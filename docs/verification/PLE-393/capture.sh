@@ -53,6 +53,7 @@ FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/capture-guard.sh"
 require_out_dir "$OUT" "$FORCE"
+PS5_NAME=${PS5_NAME:-PS5-466}
 source "$HERE/ui.sh"
 
 log(){ printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
@@ -84,8 +85,8 @@ LOG="$OUT/session_logcat.txt"
 "$ADB" logcat -v time > "$LOG" 2>/dev/null &
 LOGCAT_PID=$!
 
-log "tap PS5-466 to connect"
-ui_tap_resource_id "$PKG:id/playButton" "$OUT/01_main_ui.xml" "PS5-466" || { log "could not find PS5-466 tile"; exit 3; }
+log "tap $PS5_NAME to connect"
+ui_tap_resource_id "$PKG:id/playButton" "$OUT/01_main_ui.xml" "$PS5_NAME" || { log "could not find $PS5_NAME tile"; exit 3; }
 
 ok=0
 for _ in $(seq 1 25); do sleep 2; if streaming; then ok=1; break; fi; done
@@ -209,7 +210,7 @@ log "scenario B control: fresh connect from the console list"
 "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
 sleep 2
 BEFORE_B=$(stats_count "$LOG")
-ui_tap_resource_id "$PKG:id/playButton" "$OUT/B_02_main_ui.xml" "PS5-466" || { log "could not find PS5-466 tile for control connect"; exit 3; }
+ui_tap_resource_id "$PKG:id/playButton" "$OUT/B_02_main_ui.xml" "$PS5_NAME" || { log "could not find $PS5_NAME tile for control connect"; exit 3; }
 ok=0
 for _ in $(seq 1 25); do sleep 2; if streaming; then ok=1; break; fi; done
 [ "$ok" = 1 ] || { "$ADB" exec-out screencap -p > "$OUT/B_fail_nostream.png"; echo "BLOCKED: control connect never reached StreamActivity" > "$OUT/B_RESULT.txt"; }

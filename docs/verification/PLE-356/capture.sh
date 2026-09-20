@@ -30,7 +30,8 @@ require_out_dir "$OUT" "$FORCE"
 # PLE-410: refuse before spending any phone time if the installed APK
 # predates the stats fields this capture measures.
 require_current_apk "$ADB" "$PKG" || exit 1
-PS5=192.168.1.164
+PS5=${PS5:-192.168.1.164}
+PS5_NAME=${PS5_NAME:-PS5-466}
 PHASE_SECONDS=${PHASE_SECONDS:-60}
 PROFILES=${PROFILES:-"clean 5g wifi-slow clean blip-200ms clean"}
 source "$HERE/ui.sh"
@@ -119,7 +120,7 @@ connect_attempt(){
   sleep 3
   "$ADB" exec-out screencap -p > "$OUT/00_main_attempt${n}.png"
   log "tap play (attempt $n)"
-  ui_tap_resource_id "$PKG:id/playButton" "$OUT/00_main_ui_attempt${n}.xml" "PS5-466" || return 3
+  ui_tap_resource_id "$PKG:id/playButton" "$OUT/00_main_ui_attempt${n}.xml" "$PS5_NAME" || return 3
   local ok=0
   for _ in $(seq 1 25); do sleep 2; if streaming; then ok=1; break; fi; done
   [ "$ok" = 1 ] || { "$ADB" exec-out screencap -p > "$OUT/fail_nostream_attempt${n}.png"; log "no StreamActivity (attempt $n)"; return 3; }
