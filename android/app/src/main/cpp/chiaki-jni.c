@@ -483,7 +483,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.probe_rtt_us,
 					(jlong)event->stream_stats.probe_rtt_samples,
 					(jlong)event->stream_stats.probe_rtt_unacked,
-					(jlong)event->stream_stats.probe_rtt_ambiguous);
+					(jlong)event->stream_stats.probe_rtt_ambiguous,
+					(jboolean)event->stream_stats.video_packet_jitter_filled);
 			break;
 		}
 		default:
@@ -751,7 +752,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZDJJJJ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZDJJJJZ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");

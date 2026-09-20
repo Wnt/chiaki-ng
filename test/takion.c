@@ -319,6 +319,37 @@ static MunitResult test_takion_video_packet_jitter(const MunitParameter params[]
 		munit_assert_uint64(chiaki_takion_video_packet_jitter_get_raw(&jitter), ==, 0);
 	}
 
+	{
+		// PLE-403: the very first frame-boundary sample lands in jitter_us_q4 unsmoothed --
+		// gain*(0+8)>>4 is zero the first time -- so a one-off startup delay reads back as if
+		// it were the steady-state estimate. "Filled" must stay false through that sample and
+		// only become true once CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES have smoothed it.
+		ChiakiTakionVideoPacketJitter jitter = { 0 };
+		chiaki_takion_video_packet_jitter_push(&jitter, 1000000, 0, 60);
+		munit_assert_false(chiaki_takion_video_packet_jitter_filled(&jitter));
+		// The frame-index baseline packet contributes no smoothing sample.
+		uint64_t late = 1000000 + frame_us + 100000; // 100 ms startup delay
+		chiaki_takion_video_packet_jitter_push(&jitter, late, 1, 60);
+		// One EWMA update from a zero accumulator: 100000 us divided by the gain's shift,
+		// (100000+8)>>4 == 6250 -- an estimate built from a single sample, not yet a filter.
+		munit_assert_uint64(chiaki_takion_video_packet_jitter_get(&jitter), ==, 6250);
+		munit_assert_false(chiaki_takion_video_packet_jitter_filled(&jitter));
+		// Nominal cadence from here: each further push contributes one smoothing sample and no
+		// new delay variation, so only frame_sample_count, not the jitter value, is under test.
+		for(uint32_t i = 0; i < CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES - 1; i++)
+		{
+			munit_assert_false(chiaki_takion_video_packet_jitter_filled(&jitter));
+			chiaki_takion_video_packet_jitter_push(&jitter, late + (i + 1) * frame_us,
+				(ChiakiSeqNum16)(i + 2), 60);
+		}
+		munit_assert_true(chiaki_takion_video_packet_jitter_filled(&jitter));
+		// Filled never regresses back to unfilled as further samples keep arriving.
+		chiaki_takion_video_packet_jitter_push(&jitter,
+			late + CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES * frame_us,
+			(ChiakiSeqNum16)(CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES + 1), 60);
+		munit_assert_true(chiaki_takion_video_packet_jitter_filled(&jitter));
+	}
+
 	return MUNIT_OK;
 }
 

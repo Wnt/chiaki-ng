@@ -656,6 +656,8 @@ CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacke
 	jitter->jitter_us_q4 += frame_variation_us - ((jitter->jitter_us_q4 + 8) >> 4);
 	jitter->frame_arrival_us = arrival_us;
 	jitter->frame_index = frame_index;
+	if(jitter->frame_sample_count < CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES)
+		jitter->frame_sample_count++;
 }
 
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter)
@@ -680,6 +682,21 @@ CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_us(ChiakiTakion *ta
 	uint64_t jitter_us = chiaki_takion_video_packet_jitter_get(&takion->video_packet_jitter);
 	chiaki_mutex_unlock(&takion->diagnostics_mutex);
 	return jitter_us;
+}
+
+CHIAKI_EXPORT bool chiaki_takion_video_packet_jitter_filled(const ChiakiTakionVideoPacketJitter *jitter)
+{
+	return jitter && jitter->frame_sample_count >= CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES;
+}
+
+CHIAKI_EXPORT bool chiaki_takion_get_video_packet_jitter_filled(ChiakiTakion *takion)
+{
+	if(!takion->diagnostics_enabled)
+		return false;
+	chiaki_mutex_lock(&takion->diagnostics_mutex);
+	bool filled = chiaki_takion_video_packet_jitter_filled(&takion->video_packet_jitter);
+	chiaki_mutex_unlock(&takion->diagnostics_mutex);
+	return filled;
 }
 
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_packet_jitter_raw_us(ChiakiTakion *takion)

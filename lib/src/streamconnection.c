@@ -400,6 +400,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);
 			stats_event.stream_stats.video_packet_jitter_us = chiaki_takion_get_video_packet_jitter_us(&stream_connection->takion);
 			stats_event.stream_stats.video_packet_jitter_raw_us = chiaki_takion_get_video_packet_jitter_raw_us(&stream_connection->takion);
+			stats_event.stream_stats.video_packet_jitter_filled = chiaki_takion_get_video_packet_jitter_filled(&stream_connection->takion);
 			stats_event.stream_stats.takion_packets_received = packets_received - previous_packets_received;
 			stats_event.stream_stats.takion_packets_lost = packets_lost - previous_packets_lost;
 			stats_event.stream_stats.feedback_packets = feedback_packets - previous_feedback_packets;

@@ -183,6 +183,7 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t video_reorder_timeouts;
 	uint64_t video_packet_jitter_us; // PLE-356: frame-boundary delay variation; drives the badge
 	uint64_t video_packet_jitter_raw_us; // superseded per-packet EWMA, logged for comparison only
+	bool video_packet_jitter_filled; // PLE-403: false while video_packet_jitter_us is one unsmoothed sample
 	uint64_t takion_packets_received;
 	uint64_t takion_packets_lost;
 	uint64_t feedback_packets;

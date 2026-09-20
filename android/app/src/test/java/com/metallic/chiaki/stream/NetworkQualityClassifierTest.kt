@@ -369,4 +369,43 @@ class NetworkQualityClassifierTest
 		assertEquals(NetworkQualityCause.LAN, phaseCause(40.7, 2.89, 0.0, 8_175_000, 5_274_452))
 		assertEquals(NetworkQualityCause.NONE, phaseCause(5.5, 2.53, 0.0, 7_825_000, 5_230_172))
 	}
+
+	@Test
+	fun warmUpBeforeTheJitterEstimatorFillsReadsUnknownNotConstrained()
+	{
+		// PLE-403: build/captures/ple366's device run shows every session opening at
+		// CONSTRAINED for 7 s -- jitter 6.75 ms at t=0 decaying to 1.78 ms by t=5 -- on a clean
+		// LAN. The native estimator's first frame-boundary sample lands in its EWMA unsmoothed
+		// (the gain term is zero against a zero accumulator), so a one-off startup delay reads
+		// back indistinguishable from real jitter and both the median and the PLE-366 tail arm
+		// take it at face value. `videoPacketJitterFilled` is false for exactly that window, so
+		// suppressing on it (not a wall-clock delay) is what stops the false CONSTRAINED without
+		// touching how a genuine bad second is judged once the estimator has real history.
+		val classifier = NetworkQualityClassifier()
+		repeat(10)
+		{
+			val warmingUp = sample(6.75, 0.0).copy(videoPacketJitterFilled = false)
+			assertEquals(NetworkQualityLevel.UNKNOWN, classifier.update(warmingUp, ethernet).level)
+		}
+	}
+
+	@Test
+	fun aBadSecondImmediatelyAfterTheEstimatorFillsStillClassifiesAtOnce()
+	{
+		// Suppression must cost nothing once the estimator has real history: no invalid sample
+		// was ever pushed into the window (the early return happens before the classifier
+		// appends anything), so the first filled sample is also the window's first sample and
+		// alone decides the median -- exactly the "a single bad second must not have to wait"
+		// guarantee NetworkQuality.kt:174 already promises, undelayed by the warm-up suppression.
+		val classifier = NetworkQualityClassifier()
+		repeat(10)
+		{
+			assertEquals(NetworkQualityLevel.UNKNOWN,
+				classifier.update(base.copy(videoPacketJitterFilled = false), ethernet).level)
+		}
+		val stall = sample(9.87, 0.0)
+		val stalled = classifier.update(stall, ethernet)
+		assertEquals(NetworkQualityLevel.CONSTRAINED, stalled.level)
+		assertEquals(9.87, stalled.fastJitterMillis, 0.001)
+	}
 }
