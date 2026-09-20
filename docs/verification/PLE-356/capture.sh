@@ -190,4 +190,10 @@ for p in $PROFILES; do
   echo "PHASE_END $tag $(date -u +%s.%N)" >> "$OUT/phases.txt"
   log "phase $tag done"
 done
+# PLE-418: a dynamic profile's remote cycling loop can die mid-capture with
+# nothing reporting it; verify the raw samples actually show the pattern each
+# phase claims before this exits 0.
+if ! verify_dynamic_profile_pattern "$OUT" > "$OUT/pattern_check.txt" 2>&1; then
+  log "dynamic-profile pattern check failed"; cat "$OUT/pattern_check.txt"; exit 6
+fi
 log "capture complete"
