@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
 
 #include "video-decoder.h"
+#include "video-decoder-codec-header.h"
 
 #include <jni.h>
 
@@ -286,29 +287,10 @@ void android_chiaki_video_decoder_fini(AndroidChiakiVideoDecoder *decoder)
 	chiaki_mutex_fini(&decoder->codec_mutex);
 }
 
-/** Whether an Annex-B sample opens with a parameter set NAL: VPS/SPS/PPS for H.265, SPS/PPS for H.264. */
-static bool sample_is_codec_header(bool h265, const uint8_t *buf, size_t buf_size)
-{
-	size_t nal = 0;
-	if(buf_size >= 4 && buf[0] == 0 && buf[1] == 0 && buf[2] == 0 && buf[3] == 1)
-		nal = 4;
-	else if(buf_size >= 3 && buf[0] == 0 && buf[1] == 0 && buf[2] == 1)
-		nal = 3;
-	if(nal == 0 || nal >= buf_size)
-		return false;
-	if(h265)
-	{
-		unsigned int type = (buf[nal] >> 1) & 0x3f;
-		return type == 32 || type == 33 || type == 34;
-	}
-	unsigned int type = buf[nal] & 0x1f;
-	return type == 7 || type == 8;
-}
-
 /** Called with codec_mutex held. */
 static void remember_codec_header(AndroidChiakiVideoDecoder *decoder, const uint8_t *buf, size_t buf_size)
 {
-	if(!sample_is_codec_header(chiaki_codec_is_h265(decoder->target_codec), buf, buf_size))
+	if(!android_chiaki_sample_is_codec_header(chiaki_codec_is_h265(decoder->target_codec), buf, buf_size))
 		return;
 	uint8_t *header = realloc(decoder->codec_header, buf_size);
 	if(!header)
