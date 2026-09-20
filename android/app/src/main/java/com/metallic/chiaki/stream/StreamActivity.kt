@@ -750,8 +750,7 @@ class StreamActivity : AppCompatActivity()
 
 	private fun reconnect()
 	{
-		viewModel.pause()
-		viewModel.resume()
+		viewModel.reconnect()
 	}
 
 	/**

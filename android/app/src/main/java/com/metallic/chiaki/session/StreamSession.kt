@@ -92,6 +92,22 @@ class StreamSession(private val context: Context, val connectInfo: ConnectInfo, 
 		shutdown()
 	}
 
+	/**
+	 * The user tapped Reconnect. Arms the same settling-retry a just-linked console uses (PLE-428):
+	 * measured on device, the console can refuse the very next session request for several seconds
+	 * after it quit ours, and without this a Reconnect that lands in that window fails immediately
+	 * with a message that reads as "someone else is using your console" when nobody is. If the
+	 * console really is in use by someone else, [SessionHandoffRetry]'s own budget for
+	 * `rp_in_use` still expires and the real error reaches the user, just a few seconds later.
+	 * A no-op for an externally managed (PSN remote) session: that path has its own reconnect
+	 * handling and never arms this retry at all.
+	 */
+	fun armForReconnect()
+	{
+		if(!externallyManaged)
+			handoffRetry.armForReconnect()
+	}
+
 	fun resume()
 	{
 		if(externallyManaged)

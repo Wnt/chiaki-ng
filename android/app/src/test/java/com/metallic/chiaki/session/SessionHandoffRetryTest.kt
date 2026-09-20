@@ -238,4 +238,66 @@ class SessionHandoffRetryTest
 		assertFalse(handoff.handoffInProgress)
 		assertEquals(HandoffDecision.Report, handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED))
 	}
+
+	@Test
+	fun `a Reconnect tap is retried, not reported, on the console's own settling window`()
+	{
+		// PLE-428: without arming on Reconnect, this quit reason was never retried at all.
+		val handoff = retry()
+		handoff.armForReconnect()
+		val first = SessionHandoffRetryPolicy.FIRST_DELAY_MS
+		assertEquals(HandoffDecision.Retry(first, 1), handoff.onQuit(QUIT_REASON_SESSION_REQUEST_RP_IN_USE))
+		assertTrue(handoff.handoffInProgress)
+	}
+
+	@Test
+	fun `a Reconnect gets a full budget even after an earlier handoff spent one`()
+	{
+		val handoff = retry()
+		handoff.arm()
+		// Spend the whole connection-refused budget on an unrelated, earlier handoff.
+		while(handoff.onQuit(QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED) is HandoffDecision.Retry)
+			now += SessionHandoffRetryPolicy.STEADY_DELAY_MS
+		assertFalse(handoff.armed)
+
+		// A later Reconnect must not inherit that spent budget.
+		handoff.armForReconnect()
+		assertEquals(
+			HandoffDecision.Retry(SessionHandoffRetryPolicy.FIRST_DELAY_MS, 1),
+			handoff.onQuit(QUIT_REASON_SESSION_REQUEST_RP_IN_USE)
+		)
+	}
+
+	@Test
+	fun `tearing down the previous session for a Reconnect does not disarm the new attempt`()
+	{
+		// PLE-428: StreamSession.pause() stops the previous session before the new one is armed and
+		// started; if that previous session was still genuinely live, stopping it raises its own
+		// `stopped` quit through the very same callback the new attempt's rp_in_use will use.
+		val handoff = retry()
+		handoff.armForReconnect()
+		assertEquals(HandoffDecision.Report, handoff.onQuit(SessionHandoffRetryPolicy.QUIT_REASON_STOPPED))
+		assertTrue("a mere stop of the old session must not spend the new attempt's budget", handoff.armed)
+		assertEquals(
+			HandoffDecision.Retry(SessionHandoffRetryPolicy.FIRST_DELAY_MS, 1),
+			handoff.onQuit(QUIT_REASON_SESSION_REQUEST_RP_IN_USE)
+		)
+	}
+
+	@Test
+	fun `a console genuinely held by someone else still reports, once the Reconnect budget is spent`()
+	{
+		val handoff = retry()
+		handoff.armForReconnect()
+		var decisions = 0
+		while(handoff.onQuit(QUIT_REASON_SESSION_REQUEST_RP_IN_USE) is HandoffDecision.Retry)
+		{
+			decisions++
+			now += SessionHandoffRetryPolicy.STEADY_DELAY_MS
+			if(decisions > 100)
+				break
+		}
+		assertFalse("a spent Reconnect retry must report the real outcome", handoff.armed)
+		assertEquals(HandoffDecision.Report, handoff.onQuit(QUIT_REASON_SESSION_REQUEST_RP_IN_USE))
+	}
 }
