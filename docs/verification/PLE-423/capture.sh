@@ -25,7 +25,8 @@ for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/capture-guard.sh"
 require_out_dir "$OUT" "$FORCE"
 require_current_apk "$ADB" "$PKG" || exit 1
-PS5=192.168.1.164
+PS5=${PS5:-192.168.1.164}
+PS5_NAME=${PS5_NAME:-PS5-466}
 export ANDROID_SERIAL=${ANDROID_SERIAL:-192.168.40.101:5555}
 PHASE_SECONDS=${PHASE_SECONDS:-120}
 PROFILES=${PROFILES:-"clean blip-200ms 4g wifi-slow clean"}
@@ -77,7 +78,7 @@ PLEIKKARI_ALLOW_DANGEROUS=1 "$ADB" shell wm user-rotation lock 1
 sleep 3
 "$ADB" exec-out screencap -p > "$OUT/00_main.png"
 log "tap play"
-ui_tap_resource_id "$PKG:id/playButton" "$OUT/00_main_ui.xml" "PS5-466" || exit 3
+ui_tap_resource_id "$PKG:id/playButton" "$OUT/00_main_ui.xml" "$PS5_NAME" || exit 3
 ok=0
 for _ in $(seq 1 25); do sleep 2; if streaming; then ok=1; break; fi; done
 [ "$ok" = 1 ] || { "$ADB" exec-out screencap -p > "$OUT/fail_nostream.png"; log "no StreamActivity"; exit 3; }
