@@ -39,6 +39,28 @@ class StreamSummaryTest
 		assertEquals(StreamSummaryQuality.GOOD, result.quality)
 	}
 
+	// PLE-352: the home card's "Avg latency" is a duration-weighted mean of
+	// measuredRttMicros, computed independently of the chip/overlay's classifier -- this
+	// pins down in code what the device capture (docs/verification/PLE-352/) found by
+	// measurement: it never reads consoleRttRaw, the sawtooth PLE-343 disqualified.
+	@Test fun averageLatencyIgnoresConsoleRttRaw()
+	{
+		val accumulator = StreamSummaryAccumulator()
+		accumulator.connected(1_000)
+		accumulator.add(
+			stats(rttMicros = 10_000).copy(consoleRttRaw = 187.6),
+			NetworkLinkSample(NetworkLinkType.OTHER)
+		)
+		accumulator.add(
+			stats(rttMicros = 10_000).copy(consoleRttRaw = 0.4),
+			NetworkLinkSample(NetworkLinkType.OTHER)
+		)
+		accumulator.ended(3_000)
+
+		val result = accumulator.build(3_500)!!
+		assertEquals(10.0, result.averageLatencyMillis!!, 0.01)
+	}
+
 	@Test fun formatsCloudGamingMetrics()
 	{
 		assertEquals("2:05", StreamSummaryFormatter.duration(125_000))
