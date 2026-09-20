@@ -100,6 +100,14 @@ class StreamViewModel(
 		}
 	}
 
+	/** PLE-428: a Reconnect after a quit gets a fresh settling-retry budget before it starts. */
+	fun reconnect()
+	{
+		session.armForReconnect()
+		pause()
+		resume()
+	}
+
 	fun pause()
 	{
 		if(psnDevice == null)

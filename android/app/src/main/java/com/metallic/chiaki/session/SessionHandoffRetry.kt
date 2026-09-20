@@ -73,6 +73,7 @@ class SessionHandoffRetryPolicy(
 	companion object
 	{
 		// lib/include/chiaki/session.h ChiakiQuitReason, in declaration order.
+		const val QUIT_REASON_STOPPED = 1
 		const val QUIT_REASON_SESSION_REQUEST_CONNECTION_REFUSED = 3
 		const val QUIT_REASON_SESSION_REQUEST_RP_IN_USE = 4
 
@@ -140,9 +141,38 @@ class SessionHandoffRetry(
 		armed = true
 	}
 
+	/**
+	 * A Reconnect tap after a quit (PLE-428): the app's own previous session may not have finished
+	 * tearing down, and the console can refuse the new request with the same `rp_in_use` it uses for
+	 * a console genuinely held by someone else. Reusing [arm] here would work most of the time, but
+	 * if this instance had already spent a budget on an earlier, unrelated handoff and never saw
+	 * [onConnected] (its own retries were exhausted, or the last quit was some other error), its
+	 * leftover [retriesMade]/[firstFailureAt] would eat into this new attempt's budget. A Reconnect
+	 * is a fresh attempt, so it gets a fresh budget.
+	 */
+	fun armForReconnect()
+	{
+		armed = true
+		retriesMade = 0
+		firstFailureAt = null
+	}
+
 	fun onQuit(quitReason: Int): HandoffDecision
 	{
 		if(!armed)
+			return HandoffDecision.Report
+		/*
+		 * PLE-428: Reconnect tears down the previous session with `StreamSession.pause()` before
+		 * arming and starting the new one. If that previous session was still genuinely live (a real
+		 * error quit had not actually stopped its native side yet, or the devtools injection never
+		 * stops it at all), stopping it now raises its own [QUIT_REASON_STOPPED] through this same
+		 * callback, racing the new attempt. A stop is never itself the failure this handoff waits
+		 * out or gives up on — the real "user left" case is handled independently, by cancelling the
+		 * scheduled retry Handler callback in `StreamSession.shutdown()` — so it must leave `armed`
+		 * alone rather than spend it on a reason [SessionHandoffRetryPolicy.decide] was never asked
+		 * about.
+		 */
+		if(quitReason == SessionHandoffRetryPolicy.QUIT_REASON_STOPPED)
 			return HandoffDecision.Report
 		val now = clock()
 		val since = firstFailureAt ?: now
