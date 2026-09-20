@@ -22,7 +22,11 @@ ADB=$REPO/scripts/dev/device-bin/adb
 IMPAIR=${IMPAIR:-$REPO/scripts/net/impairctl.py}
 [ -x "$IMPAIR" ] || { echo "capture.sh: impairctl.py not found or not executable at $IMPAIR (set IMPAIR= to override)" >&2; exit 1; }
 PKG=com.metallic.chiaki
-OUT=${OUT_DIR:-$REPO/build/captures/ple356}
+OUT=${OUT_DIR:-}
+FORCE=${FORCE:-0}
+for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/capture-guard.sh"
+require_out_dir "$OUT" "$FORCE"
 PS5=192.168.1.164
 PHASE_SECONDS=${PHASE_SECONDS:-60}
 PROFILES=${PROFILES:-"clean 5g wifi-slow clean blip-200ms clean"}
