@@ -1,6 +1,30 @@
 # Network impairment runbook
 
-## 0. Access and addressing
+**The operating guide for the impairment tooling lives in the workspace, not
+this fork.** The tooling itself is workspace-side
+(`scripts/net/`: `impairctl.py`, `impair.sh`, `impair-vlan.sh`,
+`impair_vlan.py`, `unifi_rest.py`, `host/pleikkari-impair-revert`, plus the
+test suite) — [PLE-378](https://linear.app/pleikkari/issue/PLE-378) deleted
+this fork's dead copy of it (`e73bfc1f`). A runbook here that names
+workspace-only paths as if they belonged to this fork is exactly how a worker
+was misled into rewriting 441 lines of that dead copy instead of touching the
+real tooling ([PLE-373](https://linear.app/pleikkari/issue/PLE-373)). The
+day-to-day commands, the profile table, the safety contract, and the test
+invocation are documented at `scripts/net/README-IMPAIR-VLAN.md` in the
+workspace — on this box, `/home/wnt/gta6/scripts/net/README-IMPAIR-VLAN.md`.
+This fork does not, and should not, keep a second copy of that guide. The
+original topology plan is the workspace's `docs/IMPAIRMENT-VLAN-PLAN.md`.
+
+What follows is this fork's historical record of the initial deployment: how
+the lab network was addressed and claimed (§0), and the phone-free
+verification evidence from the first rollout (§3). It is **not** the
+operating guide, and parts of it no longer match what is deployed — each
+correction below is called out with what was checked and how, on
+2026-09-20, read-only via `ssh -n lab 'pct exec 240 -- <cmd>'` (one hop, no
+nesting) and locally on CT950. No impairment configuration was changed, no
+profile was applied or cleared, and CT 240 was not stopped or started.
+
+## 0. Access and addressing (verified 2026-09-16, historical)
 
 Verified from CT950 on 2026-09-16. Use `ssh -n lab '<cmd>'` as the only door
 to the Proxmox host; do not nest SSH. The host identifies itself as
@@ -10,7 +34,14 @@ to the Proxmox host; do not nest SSH. The host identifies itself as
 The lab host has `vmbr0`, `vmbr-rn`, `vmbr-wi`, and the per-client `wibr*`
 bridges. `vmbr0` is backed by `nic3`, has `bridge-vlan-aware yes`, and permits
 VLAN IDs 2–4094. It can therefore carry the impairment VLAN without a host
-bridge change.
+bridge change. **Correction (2026-09-20):** the impairment VLAN did not end
+up tagged on `vmbr0`. The deployed host bridge is a dedicated
+`vmbr-impair` (see §1) — `ssh -n lab 'ip -br link show vmbr-impair'` and
+`brctl show vmbr-impair` both confirm it holds only `nic0` and CT 240's
+`veth240i1`, matching the workspace's
+`scripts/net/README-IMPAIR-VLAN.md` design (a trunk dedicated to VLANs
+40–49, kept off `vmbr0` on purpose so the main LAN has no representation on
+that wire). This section's addressing history is otherwise unaffected.
 
 The UniFi Integration API is readable using the local
 `~/.config/unifi/config.env` configuration and an `X-API-KEY` loaded from
@@ -29,72 +60,13 @@ hostname `LGwebOSTV`. LXC 240 simultaneously had static MAC
 `bc:24:11:4b:fa:8b` on that address. The guest moved to `192.168.1.5`, after
 checks found no saved or live UniFi client, ARP response, ICMP response, or
 existing lab claim for `.5`. The LXC configuration, UDM static route, CT950
-direct route, and local impairment environment all use `.5` now. Do not reuse
-`.250` for the guest.
+direct route, and local impairment environment all use `.5` now
+(re-confirmed live on 2026-09-20: `pct config 240` still shows
+`net0: ...,ip=192.168.1.5/24`). Do not reuse `.250` for the guest.
 
 VLAN 40 is unused and is reserved for the impairment network. The Integration
 API client list identifies the Galaxy S22 Ultra as MAC
 `8e:75:9e:7b:ab:32`, IP `192.168.1.105`, with default network access.
-
-Read-only evidence (irrelevant bridge members are omitted):
-
-```text
-$ ssh -n lab 'hostname; pveversion; pct list; qm list; brctl show || ip -br link'
-pve-nvme
-pve-manager/9.2.4/5e5ae681198514d4 (running kernel: 7.0.14-4-pve)
-VMID  Status   Name
-112   stopped  serenity-build
-210   running  garage
-220   running  locator-kiosk-dev
-950   running  osgallery-dev
-951   running  retronet-gw
-952   running  walkin-gw
-VMID  NAME                  STATUS
-200   greenhouse-k3s        running
-221   locator-kiosk-vm      running
-222   locator-kiosk-alpine  running
-223   locator-kiosk-netbsd  stopped
-bridge name  interfaces
-vmbr-rn      ...
-vmbr-wi      ...
-vmbr0        nic3, tap200i0, tap200i1, tap221i0, tap222i0,
-             veth210i0, veth220i0, veth950i0
-wibr256...wibr280 ...
-
-$ ssh -n lab 'sed -n "/^auto vmbr0/,/^$/p" /etc/network/interfaces'
-auto vmbr0
-iface vmbr0 inet static
-        address 192.168.1.126/24
-        gateway 192.168.1.1
-        bridge-ports nic3
-        bridge-stp off
-        bridge-fd 0
-        bridge-vlan-aware yes
-        bridge-vids 2-4094
-```
-
-The API responses, filtered to non-secret addressing fields, were:
-
-```json
-{"sites":[{"name":"Default","internalReference":"default"}]}
-{"networks":[
-  {"name":"Default","vlanId":1,"enabled":true,"management":"GATEWAY"},
-  {"name":"Greenhouse","vlanId":30,"enabled":true,"management":"GATEWAY"}
-]}
-{"matching_s22":[{
-  "name":"Kayttajan-Jonni-S22-Ultra ab:32",
-  "macAddress":"8e:75:9e:7b:ab:32",
-  "ipAddress":"192.168.1.105",
-  "access":{"type":"DEFAULT"}
-}],"candidate_250_entries":[],"client_count":25}
-```
-
-CT950 cannot open a raw ping socket (`Operation not permitted`), so the free-IP
-probe ran through the one lab door. Three ICMP requests from `pve-nvme` to
-`192.168.1.250` received no replies. `labctl who` subsequently listed both
-`ip/192.168.1.250` and `vmid/240` as held by `ple-189`. This was only the
-Phase 0 snapshot; PLE-228 later found that the address was inside the Default
-DHCP pool and had been leased to the TV described above.
 
 Use these values in later phases:
 
@@ -104,76 +76,110 @@ Use these values in later phases:
 | `IMPAIR_VMID` | `240` | `kh-claim` class `vmid`, owner `ple-189` |
 | `IMPAIR_VLAN_ID` | `40` | absent from the UniFi network list |
 | `IMPAIR_SUBNET` | `192.168.40.0/24` | paired with VLAN 40 |
-| `IMPAIR_GW` | `192.168.40.1` | future netem guest VLAN-side address |
-| `IMPAIR_GUEST_LAN_IP` | `192.168.1.5` | outside the Default DHCP pool; no saved/live UniFi client, no ARP/ICMP response before assignment, and `kh-claim` class `ip` owned by `ple-194` |
+| `IMPAIR_GW` | `192.168.40.1` | netem guest VLAN-side address (live) |
+| `IMPAIR_GUEST_LAN_IP` | `192.168.1.5` | outside the Default DHCP pool; `kh-claim` class `ip` owned by `ple-194` |
 | `PHONE_MAC` | `8e:75:9e:7b:ab:32` | UniFi client at `192.168.1.105` |
-| `PS5_IP` | `192.168.1.164` | ticket-provided fixed address; availability not probed in phase 0 |
+| `PS5_IP` | `192.168.1.164` | ticket-provided fixed address |
 
-The populated, untracked copy is `~/.config/pleikkari/impair.env`; the checked-in
-template is `scripts/net/impair.env.example`. The VMID and LAN IP claims are
-intentionally retained for downstream PLE-194. Before provisioning, verify
-ownership with:
+**Correction (2026-09-20):** there is no checked-in `impair.env.example`
+template — `test -e scripts/net/impair.env.example` fails in the workspace,
+and no file by that name exists in either repo. The populated env file is
+`~/.config/pleikkari/impair.env` (untracked, as before); the keys it may set
+are exactly the four `impairctl.py` reads back —
+`LAB_SSH`, `IMPAIR_VMID`, `IMPAIR_EGRESS_IFACE`, `IMPAIR_INGRESS_IFB`
+(`scripts/net/impairctl.py`, `CONFIG_KEYS`) — plus CLI overrides
+(`--lab-ssh`, `--vmid`, `--egress-iface`, `--ingress-ifb`). If a template is
+wanted, it belongs next to that file in the workspace, not here; this is a
+documentation ticket, so none was added — see Follow-ups.
+
+Before provisioning, verify ownership with:
 
 ```sh
 ssh -n lab 'kh-claim who vmid 240; kh-claim who ip 192.168.1.5'
 ```
 
-Do not substitute a value after a check-then-create race. If either claim is no
-longer owned by the impairment work, atomically take a new value with
+Do not substitute a value after a check-then-create race. If either claim is
+no longer owned by the impairment work, atomically take a new value with
 `kh-claim` and update both the local env and this table.
 
-## 1. Running netem guest
+## 1. Running netem guest (updated 2026-09-20)
 
-Deployed by PLE-194 on 2026-09-16. The permanent guest is privileged Debian 13
-LXC **240**, hostname `pleikkari-netem`, on `pve-nvme`. It has 1 vCPU, 1 GiB
-RAM, a 4 GiB `data` rootfs, `onboot=1`, and `nesting=1`. The retained claims
-for VMID 240 and `192.168.1.5` are owned by `ple-194`; do not release them
-while the guest is the active impairment gateway.
-
-The LXC choice was tested before deployment: with the host `ifb` module loaded,
-the container created an IFB, attached `netem delay 1ms`, showed the live
-qdisc, and removed both successfully. A VM is therefore unnecessary.
+Deployed by PLE-194 on 2026-09-16, since re-plumbed for the transparent-VLAN
+design in the workspace's `scripts/net/README-IMPAIR-VLAN.md`. The permanent
+guest is privileged Debian 13 LXC **240**, hostname `pleikkari-netem`, on
+`pve-nvme`. Live-checked 2026-09-20 via `pct config 240` and
+`pct exec 240 -- ip -br addr`:
 
 | Guest NIC | Proxmox attachment | Guest address | Purpose |
 | --- | --- | --- | --- |
 | `eth0` | `vmbr0`, untagged | `192.168.1.5/24`, gateway `192.168.1.1` | main LAN, SSH, PS5 side |
-| `eth1` | `vmbr0`, VLAN tag 40 | `192.168.40.1/24`, no gateway | `ps-impair` gateway |
+| `eth1` | **`vmbr-impair`**, VLAN tag 40 | `192.168.40.1/24` | `ps-impair` gateway |
 
-Persistent configuration comes from `scripts/net/guest/`:
+The **`eth1` bridge changed from `vmbr0` (tagged) to a dedicated
+`vmbr-impair`** since this section was first written; see the §0 correction.
+Everything else about the NIC roles is unchanged and reconfirmed live.
 
-- `/etc/sysctl.d/99-pleikkari-netem.conf`: `net.ipv4.ip_forward=1`, no IPv4
-  redirects, and no IPv6/RA on `eth1`.
-- `/etc/dnsmasq.d/pleikkari-impair.conf`: authoritative DHCP
-  `192.168.40.100-199`, router/DNS `192.168.40.1`, bound to `eth1`; upstream
-  DNS is `192.168.1.1`.
-- Proxmox `/etc/modules-load.d/pleikkari-ifb.conf`: loads `ifb` after a host
-  reboot.
-- `/usr/local/sbin/impair.sh`: the tracked `scripts/net/impair.sh` installed
-  mode 0755.
+Persistent guest configuration, checked read-only on 2026-09-20:
 
-The guest has no NAT table or masquerade rule. Its nftables forwarding policy
-is accept; traffic retains the VLAN client's `192.168.40.x` source address.
-After a guest reboot, forwarding remained `1`, `eth1` remained IPv4-only,
-`ssh` and `dnsmasq` were active, and a live `5g` apply/clear succeeded.
+- IPv4 forwarding is on (`pct exec 240 -- cat /proc/sys/net/ipv4/ip_forward`
+  → `1`). **Unverified:** the persistence mechanism. The runbook previously
+  cited `/etc/sysctl.d/99-pleikkari-netem.conf`; that file does not exist on
+  the live guest today. Forwarding is on right now, but how it survives a
+  reboot was not checked (would require a reboot or reading systemd-sysctl
+  drop-ins not covered by this read-only pass) — do not assume the cited path
+  is where it comes from.
+- `/etc/dnsmasq.d/pleikkari-impair.conf` exists and `dnsmasq` is `active`.
+  Its live content (`pct exec 240 -- cat ...`):
+  `interface=eth1`, `except-interface=eth0`, `except-interface=lo`,
+  `bind-interfaces`, `dhcp-range=192.168.40.100,192.168.40.200,12h`,
+  `dhcp-option=3,192.168.40.1` (router), `dhcp-option=6,192.168.1.1` (DNS).
+  This narrows the previously documented `192.168.40.100-199` pool to
+  `.100`–`.200`, and the lease time (`12h`) was not documented before.
+- `/usr/local/sbin/pleikkari-impair` exists on the guest (`ls -la
+  /usr/local/sbin/`), mode `0755` — this is `GUEST_SCRIPT` in
+  `scripts/net/impairctl.py`, pushed there by `impairctl.py install` from the
+  workspace's tracked `scripts/net/impair.sh`. A separate
+  `/usr/local/sbin/impair.sh` is also present (an earlier install under the
+  old name) and a disabled `pleikkari-bridge-up.disabled-ple349`, an artifact
+  of an earlier PLE-349 design that is no longer active.
+- **`scripts/net/guest/` does not exist.** `test -e scripts/net/guest` fails
+  in the workspace, and no such directory exists in this fork either — it was
+  never checked in. The persistent files this runbook previously said came
+  "from `scripts/net/guest/`" (the sysctl drop-in, the dnsmasq conf, the
+  `ifb` modules-load conf) live only on the guest and the host, applied by
+  hand or by a since-removed provisioning step; they are not currently
+  reproducible from a tracked file in either repo. Treat that as a gap, not a
+  documentation error to silently paper over — see Follow-ups.
 
-Root SSH accepts CT950's `~/.ssh/id_ed25519` key. The untracked env contains:
+Root SSH accepts CT950's `~/.ssh/id_ed25519` key. The untracked env still
+contains:
 
 ```sh
 IMPAIR_HOST=root@192.168.1.5
 IMPAIR_PEER=192.168.1.164
 ```
 
-From CT950, this must print `active_profile=clean` when idle:
+To check the guest's idle state from CT950, run the workspace tool by its
+real path:
 
 ```sh
-scripts/net/impairctl.py status
+cd /home/wnt/gta6 && scripts/net/impairctl.py status
 ```
 
-Every apply from the controller requires `--ttl`. The guest uses the transient
-`pleikkari-impair-watchdog.timer`; there is no separate long-running watchdog
-daemon to maintain.
+This is read-only (it does not require `--commit`) but it was **not** run for
+this ticket: PLE-366 is using the rig for a live measurement right now, and
+even a read-only status call adds noise to a run in progress for no benefit
+to a documentation ticket. The facts checked instead were read directly via
+`pct exec 240` (hostname, interfaces, config, forwarding, dnsmasq, installed
+scripts), none of which touch `tc` state or the active profile.
 
-## 2. Routed return paths
+The TTL/watchdog behavior described lower in this doc is owned by
+`scripts/net/impair.sh` in the workspace and matches the deployed script
+(confirmed present on the guest, above); see
+`scripts/net/README-IMPAIR-VLAN.md` for the current, tested description of
+apply/clear semantics — it supersedes the paragraph that used to be here.
+
+## 2. Routed return paths (updated 2026-09-20)
 
 The UniFi Network application is `10.6.106` on the UDM Pro. PLE-194 created
 the enabled route `pleikkari-impair` with distance 1:
@@ -182,46 +188,49 @@ the enabled route `pleikkari-impair` with distance 1:
 192.168.40.0/24 via 192.168.1.5
 ```
 
-The authenticated local readback endpoint is
-`GET /proxy/network/api/s/default/rest/routing`; it returns an object with
-`type=static-route`, `static-route_type=nexthop-route`, the network and next
-hop above, and `enabled=true`. The modern Integration API exposes networks but
-not static-route CRUD on this controller, so creation used that local endpoint
-with the same `X-API-KEY` from `UNIFI_TOKEN_FILE`. Never put that key in a
-command transcript or repository.
+This section describes the UniFi-side route to the PS5; it was not
+re-verified against the UniFi API on 2026-09-20 (out of scope for this
+documentation pass, and it changes nothing about impairment state). What
+**was** re-verified, locally on CT950 (no ssh needed, no lab state touched):
 
-To recreate it in the UI instead, open UniFi Network and create a static route
-named `pleikkari-impair` under the routing/policy table: destination
-`192.168.40.0/24`, next-hop IP `192.168.1.5`, distance 1, enabled. Confirm the
-local API readback before moving a device.
-
-CT950 and the netem LXC are veth peers on the same Proxmox `vmbr0`. The UDM
-route works for the physical PS5, but its same-interface redirect was not a
-reliable CT950 return path: tcpdump saw CT950 emit replies that never reached
-the netem guest. CT950 therefore also has the deterministic direct route below
-as `/etc/systemd/network/eth0.network.d/pleikkari-impair-route.conf`, sourced
-from `scripts/net/guest/ct950-impair-route.conf`:
-
-```text
+```sh
+$ ip route show | grep 192.168.40
 192.168.40.0/24 via 192.168.1.5 dev eth0 metric 10
+$ cat /etc/systemd/network/eth0.network.d/pleikkari-impair-route.conf
+# Keep ADB/control return traffic on the direct path to the netem guest.
+[Route]
+Destination=192.168.40.0/24
+Gateway=192.168.1.5
+Metric=10
 ```
+
+The route is live and matches what this runbook always claimed. **Correction:**
+the file is not "sourced from `scripts/net/guest/ct950-impair-route.conf`" —
+that path does not exist in the workspace (`test -e` fails) and never has, as
+far as this pass could determine. The systemd-networkd drop-in on CT950 is
+the only copy; nothing in either repo currently reproduces it from source.
+Same gap as the guest-side files in §1 — see Follow-ups.
 
 This is the clean ADB/control return path. It does not bypass impairment for
 PS5 traffic because the classifier runs on the netem guest after VLAN traffic
 enters `eth1`.
 
-## 3. Phone-free verification
+## 3. Phone-free verification (historical, PLE-194, 2026-09-16)
 
 PLE-194 temporarily created LXC 241 at `192.168.40.2/24` on tagged VLAN 40,
 with default gateway `192.168.40.1`. The client claim and VM were destroyed
 after the run; LXC 241 and IP `.2` are now unclaimed. No phone setting or VLAN
-assignment changed.
+assignment changed. This section was not re-verified on 2026-09-20 — it is a
+point-in-time record of the first rollout and is unaffected by whether the
+traffic classifier has since changed (see the design doc's correction for
+that). Its raw evidence is still under
+`/home/wnt/gta6/build/dispatch/ple-194/evidence/` (existence not re-checked
+here; not cited elsewhere in this pass).
 
 Immediately before measurement,
 `scripts/dev/ps5-discover.py` found `PS5-466` at `192.168.1.164:9302`, target
 PS5, status `ready`. Each main result below used 1,000 timestamped ICMP probes
-from the temporary client; all raw output is under
-`/home/wnt/gta6/build/dispatch/ple-194/evidence/`.
+from the temporary client.
 
 | State | Target | Received | Loss | RTT avg | RTT mdev | Delta from clean |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -241,7 +250,12 @@ loss. It must not be interpreted as a one-way 1.7% setting.
 After the `4g` run, `tc -s` showed PS5 packets in impaired classes `1:2` and
 `2:2`, with 9 and 8 netem drops respectively. The concurrent CT950 probes were
 in clean classes `1:1` and `2:1`; their measured loss was zero. `clear` removed
-both IFBs and left only each physical NIC's `noqueue` qdisc.
+both IFBs and left only each physical NIC's `noqueue` qdisc. **Note:** this
+two-IFB, address-classified layout was the *design* (see
+`docs/design/NETWORK-IMPAIRMENT.md`); the currently deployed
+`scripts/net/impair.sh` classifies by ADB port on a single leg instead (see
+that doc's correction). This table is left as the historical record of the
+first rollout, not a claim about today's classifier internals.
 
 For the watchdog test, `4g --ttl 1m` armed the systemd timer with 59 seconds
 remaining. Polling from CT950 observed `active_profile=clean` at 62 seconds
@@ -249,18 +263,6 @@ without a clear call. Both post-expiry probe sets then matched baseline. Live
 apply/status/clear also succeeded for `5g`, `wifi-slow`, `loss-2`, and
 `blip-200ms`.
 
-Key evidence files:
-
-- `ps5-discover.txt`
-- `ping-clean-{ps5,ct950}.txt`
-- `ping-4g-{ps5,ct950}.txt`
-- `status-4g-after.txt`
-- `ping-clear-{ps5,ct950}.txt`
-- `watchdog-armed.txt`, `watchdog-poll.txt`, `watchdog-clean-state.txt`
-- `ping-watchdog-clean-{ps5,ct950}.txt`
-- `pct-config-240.txt`, `guest-final-state-after-reboot.txt`
-- `unifi-static-route.json`, `ct950-route.txt`
-
-This proves the PS5-only impairment classifier and the clean CT950
-**ADB-equivalent** path. Actual Wi-Fi ADB and streaming remain phone tests for
-later phases.
+This proves the PS5-only impairment classifier *as it existed on 2026-09-16*
+and the clean CT950 **ADB-equivalent** path. Actual Wi-Fi ADB and streaming
+remain phone tests for later phases.

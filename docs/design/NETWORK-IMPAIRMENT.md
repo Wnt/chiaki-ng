@@ -6,6 +6,16 @@ contract. PLE-191 owns the scripts, PLE-192 owns phone/ADB resilience, and
 PLE-194 owns deployment. This ticket changes no runtime code and used neither the
 phone nor the PS5.
 
+**This is a design record, not the operating guide.** The operating guide
+for the deployed tooling is the workspace's `scripts/net/README-IMPAIR-VLAN.md`
+(`/home/wnt/gta6/scripts/net/README-IMPAIR-VLAN.md`) — read that for what to
+run today. Two corrections below (PLE-373, checked read-only against the live
+guest on 2026-09-20, no impairment configuration changed): the **Traffic
+selection and `tc` tree** section describes a two-NIC, address-classified
+design that was not what got deployed, and the **Safety contract**'s TTL
+paragraph describes a `tc qdisc replace` that a later ticket found unsafe and
+changed.
+
 Values written as `IMPAIR_*` are read from
 `~/.config/pleikkari/impair.env`. The addresses below are the selected defaults;
 Phase 0 must collision-check and claim them before deployment and record any
@@ -88,6 +98,22 @@ normal routed mobile client. Routed mode makes source identity and asymmetric
 routing errors observable.
 
 ## Traffic selection and `tc` tree
+
+**Correction (PLE-373, 2026-09-20): this is not what got deployed.** This
+section's two-NIC design classifies traffic on *both* `eth0` and `eth1` by
+matching the PS5's and phone's IPv4 addresses, so that PS5-bound traffic on
+the shared main-LAN NIC can be told apart from everything else on it. The
+live guest instead has `eth1` on a *dedicated* bridge (`vmbr-impair`, trunk
+VLANs 40–49, confirmed via `pct config 240` and `ip -br link show
+vmbr-impair` on 2026-09-20) that carries only the impairment VLAN — nothing
+else is on that wire by construction, so there is no need to distinguish the
+PS5's traffic from anything else there. The deployed `scripts/net/impair.sh`
+therefore classifies only **one** leg (`eth1` egress plus one ingress `ifb`)
+and needs only a single exemption, ADB's TCP port, rather than address-pair
+flower filters on two IFBs; its qdisc state records this as
+`mode=routed-eth1-ifb`. See `scripts/net/README-IMPAIR-VLAN.md` for the
+deployed classifier. The rest of this section is retained as the original
+design rationale, not a description of the running system.
 
 Shaping an interface's egress alone is insufficient: traffic enters the guest
 on a different NIC in each direction. Redirect ingress from each NIC to its own
@@ -234,6 +260,13 @@ No step may require a human to pair ADB again or register the PS5 again.
    watchdog before installing qdiscs and cancels/replaces it only after a
    successful clear or later apply. On expiry it removes the ingress redirects,
    IFB qdiscs, and the blip loop. `clean` and `clear` do the same immediately.
+   **Correction (PLE-373, 2026-09-20):** this originally assumed a profile
+   switch could `tc qdisc replace` the existing netem qdisc in place. PLE-388
+   found that a `replace` on a handle that already exists is a kernel
+   *change*, which keeps any field the new command omits — a stale rate cap
+   survived a switch away from `wifi-slow`. The deployed `scripts/net/impair.sh`
+   now deletes each netem qdisc and adds it fresh on every switch instead; see
+   `scripts/net/README-IMPAIR-VLAN.md` ("Changing the network experience").
 6. Control traffic must remain in the clean band. If the guest cannot be
    reached, do not extend an impairment TTL and do not attempt another VLAN
    move; let both safety mechanisms expire.
