@@ -56,6 +56,9 @@
     <string name="psn_login_finish_hint">When the page goes blank, tap ✓ Finish sign-in at the top</string>
     <string name="action_psn_link_with_pin">Link with PIN instead</string>
     <string name="psn_login_link_expired">That sign-in link expired or was already used. Sign in again.</string>
+    <!-- PLE-296/PLE-294: a dropped connection during code exchange, distinct from an actually expired
+         or already-used code: the code is still good, so Retry re-sends it instead of restarting sign-in. -->
+    <string name="psn_login_network_failed">Couldn\'t reach PlayStation Network</string>
     <string name="action_retry">Retry</string>
     <string name="regist_pin_invalid">Please enter a valid %d-digit PIN</string>
     <string name="action_share_log">Share Log</string>

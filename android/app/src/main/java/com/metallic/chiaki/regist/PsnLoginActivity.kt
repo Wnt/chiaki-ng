@@ -560,6 +560,15 @@ class PsnLoginActivity : AppCompatActivity()
 		return when(redirect)
 		{
 			PsnRedirect.NotRedirect -> false
+			// PLE-296/PLE-293: a cancel is not an error, so it gets no dialog -- just the screen the user
+			// came from, same as its RESULT_CANCELED default when setResult is never called.
+			PsnRedirect.Cancelled -> {
+				Log.i(TAG, "sign-in cancelled (error=access_denied)")
+				handlingRedirect = true
+				PsnPendingRedirect.take()
+				finish()
+				true
+			}
 			PsnRedirect.Invalid -> {
 				showError(getString(R.string.psn_login_redirect_invalid))
 				true
@@ -596,13 +605,23 @@ class PsnLoginActivity : AppCompatActivity()
 					setResult(Activity.RESULT_OK, Intent().putExtra(EXTRA_ACCOUNT_ID, result.accountId))
 					finish()
 				}
-				.onFailure {
-					showError(getString(R.string.psn_login_link_expired))
+				.onFailure { error ->
+					// The raw status (or lack of one, for a dropped connection) stays in logcat; the
+					// dialog below never names it (PLE-296).
+					Log.w(TAG, "PSN code exchange failed: ${error.javaClass.simpleName}: ${error.message}", error)
+					if(error is PsnAuthNetworkException)
+						// The code is still good; retrying it (not restarting sign-in) keeps the user's place.
+						showError(getString(R.string.psn_login_network_failed)) {
+							handlingRedirect = false
+							exchangeCode(code)
+						}
+					else
+						showError(getString(R.string.psn_login_link_expired))
 				}
 		}
 	}
 
-	private fun showError(message: String)
+	private fun showError(message: String, onRetry: () -> Unit = ::restartLogin)
 	{
 		handlingRedirect = true
 		hideSignInExplainer()
@@ -615,7 +634,7 @@ class PsnLoginActivity : AppCompatActivity()
 		MaterialAlertDialogBuilder(this)
 			.setTitle(R.string.psn_login_failed)
 			.setMessage(message)
-			.setPositiveButton(R.string.action_retry) { _, _ -> restartLogin() }
+			.setPositiveButton(R.string.action_retry) { _, _ -> onRetry() }
 			.setNegativeButton(android.R.string.cancel) { _, _ -> finish() }
 			.setOnCancelListener { finish() }
 			.show()
