@@ -12,7 +12,11 @@ HERE=$REPO/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
 IMPAIR=$REPO/scripts/net/impairctl.py
 PKG=com.metallic.chiaki
-OUT=${OUT_DIR:-$REPO/build/captures/ple366}
+OUT=${OUT_DIR:-}
+FORCE=${FORCE:-0}
+for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/capture-guard.sh"
+require_out_dir "$OUT" "$FORCE"
 PS5=192.168.1.164
 # The emulator is up on this box, so every adb call needs a serial (see LEARNINGS).
 export ANDROID_SERIAL=${ANDROID_SERIAL:-192.168.40.101:5555}
