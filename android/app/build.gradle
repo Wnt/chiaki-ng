@@ -20,6 +20,30 @@ def chiakiVersionPatch = grepVersionComponent(rootCMakeListsContent, "CHIAKI_VER
 def chiakiVersion = "$chiakiVersionMajor.$chiakiVersionMinor.$chiakiVersionPatch"
 println("Determined Chiaki Version: $chiakiVersion")
 
+// PLE-410: docs/verification/lib/check-apk-freshness.py needs to know exactly which
+// commit this APK was compiled from, to answer "does this binary's source include the
+// last change to the stats fields it measures" -- a git-ancestry question, not a
+// timestamp comparison (dex entries are stamped with a fixed reproducible-build epoch,
+// so their mtimes carry no build-time signal at all). The marker prefix makes the value
+// trivially findable as a raw string in the compiled dex without parsing dex format.
+//
+// This must go through providers.exec(), not a plain .execute(): configuration cache is
+// on for this project (android/.gradle/configuration-cache exists), and a bare
+// `[...].execute()` here is invisible to it -- HEAD moves, the cache is judged still
+// valid on every other input, and the embedded sha silently keeps the value from
+// whichever build first populated the cache. providers.exec()'s output is a tracked
+// configuration-cache input, so a HEAD change correctly invalidates it. Caught by
+// actually rebuilding across a rebase during PLE-410 and finding the embedded sha had
+// gone stale exactly the way this ticket exists to catch.
+def gitShaProvider = providers.exec {
+    workingDir rootProject.projectDir
+    commandLine "git", "rev-parse", "HEAD"
+    ignoreExitValue = true
+}.standardOutput.asText
+def gitSha = gitShaProvider.getOrElse("").trim()
+if (!(gitSha ==~ /[0-9a-f]{40}/)) gitSha = "unknown"
+def buildGitShaMarker = "PLE410_BUILD_GIT_SHA:$gitSha"
+
 def takionReceiveBatching = (project.findProperty("chiakiTakionReceiveBatching") ?: "false").toBoolean()
 def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "false").toBoolean()
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
@@ -59,6 +83,7 @@ android {
             abiFilters.addAll(chiakiAbiFilters)
         }
         buildConfigField "boolean", "CHIAKI_ANDROID_EGL_RENDERER", androidEglRenderer.toString()
+        buildConfigField "String", "BUILD_GIT_SHA_MARKER", "\"$buildGitShaMarker\""
         externalNativeBuild {
             cmake {
                 arguments "-DCHIAKI_ENABLE_TESTS=OFF",

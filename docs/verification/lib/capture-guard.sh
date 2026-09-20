@@ -39,3 +39,41 @@ verify_dynamic_profile_pattern() {
   lib=$(dirname "${BASH_SOURCE[0]}")
   REPO="$repo" python3 "$lib/verify-blip-pattern.py" "$out"
 }
+
+# PLE-410: a capture with a stale installed APK ran to completion, exited 0,
+# and produced a well-formed directory measuring the *old* packet-gap EWMA
+# jitter estimator instead of PLE-356's per-frame one -- nothing caught it
+# until analysis noticed grep -c packet_jitter_raw_ms returned 0. Call this
+# right after confirming the package is what you expect and before spending
+# any phone time on the capture itself: a re-run is cheap now, impossible
+# once the phone has moved on. See check-apk-freshness.py's docstring for
+# what "current" means here and what it does not catch.
+#
+# Usage: require_current_apk "$ADB" "$PKG"
+# $ADB must be the adb wrapper/binary this capture.sh already uses. Exits
+# non-zero with a message naming the mismatch and the rebuild command on
+# failure; the caller should exit non-zero itself rather than continue.
+require_current_apk() {
+  local adb=$1 pkg=$2 lib apk_repo device_path tmp rc
+  lib=$(dirname "${BASH_SOURCE[0]}")
+  apk_repo=$(git -C "$lib" rev-parse --show-toplevel) || {
+    echo "capture.sh: could not resolve the git worktree containing $lib" >&2
+    return 1
+  }
+  device_path=$("$adb" shell pm path "$pkg" 2>/dev/null | head -1 | tr -d '\r')
+  device_path=${device_path#package:}
+  if [ -z "$device_path" ]; then
+    echo "capture.sh: package '$pkg' is not installed on the device (pm path returned nothing)." >&2
+    return 1
+  fi
+  tmp=$(mktemp /tmp/capture-guard-apk.XXXXXX) || return 1
+  if ! "$adb" pull "$device_path" "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    echo "capture.sh: could not pull the installed APK from the device ($device_path)." >&2
+    return 1
+  fi
+  python3 "$lib/check-apk-freshness.py" --apk "$tmp" --repo "$apk_repo"
+  rc=$?
+  rm -f "$tmp"
+  return $rc
+}
