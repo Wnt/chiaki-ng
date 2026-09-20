@@ -23,6 +23,25 @@ class NetworkQualityClassifierTest
 	)
 	private val ethernet = NetworkLinkSample(NetworkLinkType.OTHER)
 
+	// PLE-352: the chip reads this same classifier's fastRttMillis (StreamActivity feeds
+	// both from one stats event, in the same call), so this is also the chip's guarantee.
+	// A PLE-352 device capture (docs/verification/PLE-352/) found the chip tracking the
+	// phone's own ping through clean/5g/4g/wifi-slow while console_rtt_raw sat in its usual
+	// 0-207 sawtooth (median 83-126 across the same phases) -- this pins that down as a
+	// property of the code, not just of the one run that was captured.
+	@Test
+	fun consoleRttRawNeverMovesTheFastMedian()
+	{
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS)
+		{
+			classifier.update(base.copy(probeRttMicros = 5_000, consoleRttRaw = 187.6), ethernet)
+		}
+		val result = classifier.update(base.copy(probeRttMicros = 5_000, consoleRttRaw = 0.4), ethernet)
+		assertEquals(NetworkQualityLevel.GOOD, result.level)
+		assertEquals(5.0, result.fastRttMillis, 0.001)
+	}
+
 	@Test
 	fun noTransportSampleIsUnknown()
 	{
