@@ -16,7 +16,11 @@ set -uo pipefail
 REPO=/home/wnt/gta6
 HERE=$REPO/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
-IMPAIR=$REPO/scripts/net/impairctl.py
+# PLE-378: the fork used to carry its own dead scripts/net/impairctl.py (120
+# lines, no profile/clean/--commit/--no-verify/verify_switch); this must
+# resolve the workspace's live 327-line one, never fall back into the fork.
+IMPAIR=${IMPAIR:-$REPO/scripts/net/impairctl.py}
+[ -x "$IMPAIR" ] || { echo "capture.sh: impairctl.py not found or not executable at $IMPAIR (set IMPAIR= to override)" >&2; exit 1; }
 PKG=com.metallic.chiaki
 OUT=${OUT_DIR:-$REPO/build/captures/ple356}
 PS5=192.168.1.164
