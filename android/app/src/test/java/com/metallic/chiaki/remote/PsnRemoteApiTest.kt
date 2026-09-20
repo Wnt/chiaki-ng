@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -202,7 +203,8 @@ class PsnRemoteApiTest
 		assertTrue("got $error", error is PsnRemoteHttpException)
 		error as PsnRemoteHttpException
 		assertEquals(500, error.httpCode)
-		assertEquals("PSN request failed (HTTP 500)", error.message)
+		assertEquals("PlayStation Network isn't responding right now", error.message)
+		assertFalse("HTTP status leaked into the user-facing message", error.message!!.contains("500"))
 		assertEquals("{\"error\":{\"code\":2285, \"message\":\"server\"}}", error.detail)
 	}
 

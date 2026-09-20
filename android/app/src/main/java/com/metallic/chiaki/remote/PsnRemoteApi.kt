@@ -111,8 +111,10 @@ internal class PsnAccessTokenManager(
 		response.let {
 			val body = it.body
 			if(!it.isSuccessful)
+				// PLE-296/PLE-295: HTTP 400 invalid_grant means the session genuinely expired, so this
+				// reads as a plain re-auth, not an error code; the code stays in httpCode/detail for logs.
 				throw PsnRemoteAuthenticationException(
-					"PSN token refresh failed (HTTP ${it.code})",
+					"Your PlayStation Network sign-in has expired",
 					httpCode = it.code,
 					detail = errorExcerpt(body)
 				)
@@ -298,11 +300,13 @@ class PsnRemoteApi(
 				}
 				if(it.code == 401 || it.code == 403)
 					throw PsnRemoteAuthenticationException(
-						"PSN authorization was rejected after refresh (HTTP ${it.code})",
+						"Your PlayStation Network sign-in has expired",
 						httpCode = it.code,
 						detail = errorExcerpt(body)
 					)
-				throw PsnRemoteHttpException("PSN request failed (HTTP ${it.code})", it.code, errorExcerpt(body))
+				// PLE-296/PLE-295: e.g. the console list's HTTP 500 -- Sony's side failed, so this reads as
+				// a plain outage with a retry, never a status code; it.code/detail still go to the log.
+				throw PsnRemoteHttpException("PlayStation Network isn't responding right now", it.code, errorExcerpt(body))
 			}
 		}
 		throw PsnRemoteAuthenticationException("PSN authorization was rejected")

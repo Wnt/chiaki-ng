@@ -207,6 +207,10 @@ class PsnMockWebAuthnProbe : AppCompatActivity()
 			report("redirect captured without a code: ${Uri.parse(url).query}")
 			true
 		}
+		PsnRedirect.Cancelled -> {
+			report("redirect captured as a cancel (error=access_denied)")
+			true
+		}
 		is PsnRedirect.Code -> {
 			report("redirect captured with a code (${redirect.value.length} chars); not exchanged")
 			true

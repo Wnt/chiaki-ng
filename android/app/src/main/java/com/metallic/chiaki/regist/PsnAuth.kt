@@ -86,9 +86,22 @@ internal object PsnAuth
 
 			val status = connection.responseCode
 			if(status !in 200..299)
-				throw IOException("Sony authentication failed (HTTP $status)")
+			{
+				val errorBody = connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
+				throw PsnAuthHttpException(status, errorBody.take(200))
+			}
 			val response = connection.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
 			return JSONObject(response)
+		}
+		catch(httpError: PsnAuthHttpException)
+		{
+			throw httpError
+		}
+		catch(networkError: IOException)
+		{
+			// A stalled/reset connection (PLE-296: PSN mock's network-drop scenario) never reaches an HTTP
+			// status, so it must not be confused with a real Sony rejection like invalid_grant.
+			throw PsnAuthNetworkException(networkError)
 		}
 		finally
 		{
@@ -118,10 +131,19 @@ internal object PsnAuth
 	}
 }
 
+/** A network/timeout failure that never reached Sony's HTTP response, as opposed to [PsnAuthHttpException]. */
+internal class PsnAuthNetworkException(cause: Throwable) : IOException("Could not reach PlayStation Network", cause)
+
+/** Sony answered with a non-2xx status; [detail] is a raw body excerpt for logs only, never for the user. */
+internal class PsnAuthHttpException(val httpCode: Int, val detail: String?) :
+	IOException("Sony authentication failed (HTTP $httpCode)")
+
 internal sealed interface PsnRedirect
 {
 	data object NotRedirect : PsnRedirect
 	data object Invalid : PsnRedirect
+	/** The user declined on Sony's page (`error=access_denied`): not an error, just no code. */
+	data object Cancelled : PsnRedirect
 	data class Code(val value: String) : PsnRedirect
 }
 
@@ -133,15 +155,18 @@ internal fun parsePsnRedirect(url: String, endpoints: PsnServiceEndpoints = PsnS
 		uri.path != endpoints.redirectPath)
 		return PsnRedirect.NotRedirect
 
-	val code = try {
-		uri.rawQuery.orEmpty().split('&').asSequence()
-			.map { field -> field.split('=', limit = 2) }
-			.firstOrNull { parts -> URLDecoder.decode(parts[0], StandardCharsets.UTF_8.name()) == "code" }
-			?.getOrNull(1)
-			?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+	val params = try {
+		uri.rawQuery.orEmpty().split('&').associate { field ->
+			val parts = field.split('=', limit = 2)
+			URLDecoder.decode(parts[0], StandardCharsets.UTF_8.name()) to
+				parts.getOrNull(1)?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.name()) }
+		}
 	} catch(_: IllegalArgumentException) {
 		return PsnRedirect.Invalid
 	}
+	if(params["error"] == "access_denied")
+		return PsnRedirect.Cancelled
+	val code = params["code"]
 	return if(code.isNullOrBlank()) PsnRedirect.Invalid else PsnRedirect.Code(code)
 }
 

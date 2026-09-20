@@ -342,6 +342,15 @@ private const val PSN_PROGRESS_TICK_MS = 250L
 internal fun describePsnFailure(error: Throwable): String = buildString {
 	append(error.javaClass.simpleName)
 	error.message?.let { append(": ").append(it) }
+	// PLE-296: the messages above are now user-safe and never name the status, so it is spelled out here
+	// explicitly -- this function, not the on-screen text, is where the raw HTTP code belongs.
+	val httpCode = when(error)
+	{
+		is PsnRemoteHttpException -> error.httpCode
+		is PsnRemoteAuthenticationException -> error.httpCode
+		else -> null
+	}
+	httpCode?.let { append(" | HTTP ").append(it) }
 	val detail = when(error)
 	{
 		is PsnRemoteHttpException -> error.detail

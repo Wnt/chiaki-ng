@@ -33,6 +33,18 @@ class PsnAuthTest
 	}
 
 	@Test
+	fun redirectParser_recognizesUserCancel()
+	{
+		assertSame(
+			PsnRedirect.Cancelled,
+			parsePsnRedirect(
+				"https://remoteplay.dl.playstation.net/remoteplay/redirect" +
+					"?error=access_denied&error_description=User+cancelled"
+			)
+		)
+	}
+
+	@Test
 	fun redirectParser_ignoresLookalikeRedirect()
 	{
 		assertSame(
