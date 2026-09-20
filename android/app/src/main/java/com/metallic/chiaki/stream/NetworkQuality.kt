@@ -26,6 +26,36 @@ internal object NetworkQualityThresholds
 	const val POOR_EXIT_JITTER_MS = 7.0
 	const val POOR_EXIT_LOSS_PERCENT = 2.0
 
+	// PLE-366: the tail arm. A median over five one-second samples is by construction blind to
+	// a stall that is shorter than half the window, and `blip-200ms` -- 200 ms of 200 ms delay
+	// every 20 s, the profile that models a recurring hitch -- is exactly that shape: one bad
+	// second in twenty. Measured over build/captures/ple356 + ple357 (443 samples of the
+	// post-PLE-356 estimator; ple343/* carry the old packet-gap EWMA and are not comparable),
+	// the six blip events are one second wide each and read:
+	//   jitter ms | 3.71  4.85  9.87  89.77  1.95  2.03
+	//   loss %    | 1.76 12.02 14.53  16.94  1.73  1.94
+	//   probe rtt |  3.70  6.73  7.62   7.46  5.88  6.46
+	// against 335 clean samples whose jitter maxes at 3.71 ms, whose loss is exactly 0.0000 %
+	// in every one, and whose probe RTT maxes at 12.07 ms.
+	//
+	// So: no RTT tail arm. The probe is itself a ~1 Hz measurement and never once landed inside
+	// a 200 ms blip -- the blip phases' probe max, 11.74 ms, is *below* the clean phases' 12.07 ms.
+	// There is nothing in the capture to cut on, and a cut chosen without one is the intuition
+	// this ticket exists to replace.
+	//
+	// Jitter alone is not enough either: only three of the six events reach 4.0 ms, and the
+	// worst clean sample (3.71 ms) equals one of them. Loss is what separates them cleanly --
+	// every event reaches 1.73 %, every clean sample reads 0.
+	//
+	// Thresholds sit at the same boundaries the median arm calls CONSTRAINED, because both are
+	// derived from the same clean-LAN floor; what is new is that *one* sample in the window
+	// reaching them is enough. Replayed over the corpus that fires on 0 of 311 clean windows
+	// and catches 6 of 6 blip events (22 of 100 blip windows, i.e. the badge is non-good for
+	// ~8 s of every 20 s the stall recurs). Margin on clean is the whole cut: 0.00 vs 0.20.
+	const val TAIL_RATE_CUT = 0.2
+	const val TAIL_JITTER_MS = 4.0
+	const val TAIL_LOSS_PERCENT = 1.0
+
 	const val WEAK_WIFI_RSSI_DBM = -67
 	const val WIFI_TARGET_HEADROOM = 2.0
 }
@@ -45,7 +75,11 @@ internal data class NetworkQualitySnapshot(
 	val cause: NetworkQualityCause,
 	val fastRttMillis: Double = 0.0,
 	val fastJitterMillis: Double = 0.0,
-	val fastLossPercent: Double = 0.0
+	val fastLossPercent: Double = 0.0,
+	/** PLE-366: the worse of the two tail arms' rates, for the diagnostic log. The chip does
+	 * not show it -- it explains a verdict the medians alone cannot account for. */
+	val tailJitterRate: Double = 0.0,
+	val tailLossRate: Double = 0.0
 )
 {
 	companion object
@@ -121,15 +155,33 @@ internal class NetworkQualityClassifier
 			samples.removeFirst()
 
 		val fast = median(samples)
-		level = nextLevel(fast)
+		val tailJitterRate = tailRate(samples) { it.jitterMillis >= NetworkQualityThresholds.TAIL_JITTER_MS }
+		val tailLossRate = tailRate(samples) { it.lossPercent >= NetworkQualityThresholds.TAIL_LOSS_PERCENT }
+		level = nextLevel(fast, tailLevel(tailJitterRate, tailLossRate))
 		return NetworkQualitySnapshot(
 			level = level,
 			cause = cause(level, stats, link, fast),
 			fastRttMillis = fast.rttMillis,
 			fastJitterMillis = fast.jitterMillis,
-			fastLossPercent = fast.lossPercent
+			fastLossPercent = fast.lossPercent,
+			tailJitterRate = tailJitterRate,
+			tailLossRate = tailLossRate
 		)
 	}
+
+	/** PLE-366: the share of the window at or above a tail threshold. The window can be short
+	 * while it fills, so this is a rate over the samples actually held, not over
+	 * FAST_WINDOW_SECONDS -- a single bad second must not have to wait 5 s to be reportable. */
+	private fun tailRate(values: List<NetworkQualitySample>, over: (NetworkQualitySample) -> Boolean) =
+		if(values.isEmpty()) 0.0 else values.count(over) / values.size.toDouble()
+
+	// The cut is one sample in five, so `rate >= cut` is a comparison of 1.0/5.0 against the
+	// literal 0.2. Those are the same double today, but the window shortens while it fills and
+	// the epsilon costs nothing, so the arm does not hinge on that staying true.
+	private fun tailLevel(jitterRate: Double, lossRate: Double): NetworkQualityLevel =
+		if(jitterRate >= NetworkQualityThresholds.TAIL_RATE_CUT - 1e-9 ||
+			lossRate >= NetworkQualityThresholds.TAIL_RATE_CUT - 1e-9)
+			NetworkQualityLevel.CONSTRAINED else NetworkQualityLevel.GOOD
 
 	// PLE-357: there used to be a second, 30-sample "slow" window feeding the same candidate as
 	// the 5-sample fast one (`candidate = maxOf(enterLevel(fast), enterLevel(slow))`), so a
@@ -151,10 +203,24 @@ internal class NetworkQualityClassifier
 	// recoveryReturnsToGoodInEightSecondsNotThirty asserts the exact number. The same 5-sample
 	// median that already resists one outlier out of five (oneRetransmitSizedOutlierDoesNotReachPoor)
 	// resists it on the way down too, so a recurring single-sample blip never round-trips the
-	// badge (blipShapedSpikesNeverFlipTheLevel).
-	private fun nextLevel(fast: NetworkQualitySample): NetworkQualityLevel
+	// badge on the RTT arm (rttBlipShapedSpikesStillDoNotFlipTheLevel).
+	//
+	// PLE-366 adds the second arm this comment used to describe as a feature. The median's
+	// blindness to a one-in-five outlier is correct for a retransmit-sized RTT sample and wrong
+	// for a stall the player feels, and the two cannot be told apart by the median alone --
+	// that is what the tail arm is for. The worse of the two decides (`maxOf` below), so
+	// entering is unchanged for everything the median already caught and now also fires on a
+	// single bad second. Recovery needs no new code: while the outlier is still in the window
+	// the tail arm keeps `candidate` at CONSTRAINED, which lands on the `candidate.ordinal >=
+	// level.ordinal` branch and resets recoveryCount, so the badge cannot recover until the
+	// outlier has aged out (5 s) and RECOVERY_SAMPLES have confirmed (3 s) -- the same
+	// deterministic 8 s PLE-357 measured. One deliberate asymmetry: a tail firing does not
+	// block the step down from POOR to CONSTRAINED, only the step to GOOD. Otherwise a stall
+	// recurring every 20 s would pin the badge at POOR indefinitely after one bad spell, which
+	// is PLE-357's defect wearing a different hat.
+	private fun nextLevel(fast: NetworkQualitySample, tail: NetworkQualityLevel): NetworkQualityLevel
 	{
-		val candidate = enterLevel(fast)
+		val candidate = maxOf(enterLevel(fast), tail)
 		if(level == NetworkQualityLevel.UNKNOWN || candidate.ordinal > level.ordinal)
 		{
 			recoveryCount = 0

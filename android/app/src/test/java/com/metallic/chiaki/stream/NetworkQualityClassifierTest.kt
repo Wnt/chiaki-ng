@@ -23,6 +23,16 @@ class NetworkQualityClassifierTest
 	)
 	private val ethernet = NetworkLinkSample(NetworkLinkType.OTHER)
 
+	/** One second as the classifier reads it: `packet_jitter_ms` and the transport loss the
+	 * captures report, so a row of a capture table can be pasted in as-is. */
+	private fun sample(jitterMillis: Double, lossPercent: Double): StreamStatsEvent
+	{
+		val lost = Math.round(10_000 * lossPercent / 100.0)
+		return base.copy(
+			videoPacketJitterMicros = Math.round(jitterMillis * 1000),
+			takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost)
+	}
+
 	// PLE-352: the chip reads this same classifier's fastRttMillis (StreamActivity feeds
 	// both from one stats event, in the same call), so this is also the chip's guarantee.
 	// A PLE-352 device capture (docs/verification/PLE-352/) found the chip tracking the
@@ -224,18 +234,102 @@ class NetworkQualityClassifierTest
 	}
 
 	@Test
-	fun blipShapedSpikesNeverFlipTheLevel()
+	fun rttBlipShapedSpikesStillDoNotFlipTheLevel()
 	{
-		// PLE-357's adversarial case: blip-200ms is a single bad sample every ~20 s. The fast
-		// median already resists one outlier out of five (oneRetransmitSizedOutlierDoesNotReachPoor);
-		// this confirms that holds across a long run, so a shorter recovery window does not
-		// trade lag for flapping.
+		// PLE-357's adversarial case, kept because PLE-366 deliberately did not give RTT a tail
+		// arm: across ple356 + ple357 the ~1 Hz probe never once landed inside a 200 ms blip
+		// (blip phases' probe max 11.74 ms, *below* the clean phases' 12.07 ms), so there is no
+		// measured rate to cut on and a single high probe sample stays what PLE-343 called it --
+		// a retransmit, not a stall. The fast median resists it, on a long run.
 		val classifier = NetworkQualityClassifier()
 		for(second in 1..90)
 		{
 			val sample = if(second % 20 == 0) base.copy(probeRttMicros = 200_000) else base
 			assertEquals(NetworkQualityLevel.GOOD, classifier.update(sample, ethernet).level)
 		}
+	}
+
+	@Test
+	fun tailArmLeavesGoodOnASingleStalledSecondAndReturnsEightSecondsLater()
+	{
+		// PLE-366, the defect: the median over five one-second samples cannot see a stall
+		// narrower than half its window, and blip-200ms is one bad second in twenty. Measured
+		// on ple356's blip phase the worst second read 9.87 ms of jitter against a 2.52 ms
+		// clean ceiling, and the median over the window still read 1.63 ms -- GOOD, straight
+		// through a hitch the player felt.
+		val classifier = NetworkQualityClassifier()
+		repeat(10) { classifier.update(base, ethernet) }
+		val stall = base.copy(videoPacketJitterMicros = 9_870)
+		val stalled = classifier.update(stall, ethernet)
+		assertEquals(NetworkQualityLevel.CONSTRAINED, stalled.level)
+		// the median is untouched by the one bad sample -- the tail arm is what moved the badge
+		assertEquals(0.0, stalled.fastJitterMillis, 0.001)
+		assertEquals(NetworkQualityThresholds.TAIL_RATE_CUT, stalled.tailJitterRate, 0.001)
+		// it holds while the outlier is in the 5-sample window, then RECOVERY_SAMPLES confirm
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS - 1 +
+			NetworkQualityThresholds.RECOVERY_SAMPLES - 1)
+		{
+			assertEquals(NetworkQualityLevel.CONSTRAINED, classifier.update(base, ethernet).level)
+		}
+		assertEquals(NetworkQualityLevel.GOOD, classifier.update(base, ethernet).level)
+	}
+
+	@Test
+	fun tailArmCatchesEveryMeasuredBlipEventAndNoCleanSecond()
+	{
+		// PLE-366's derivation, replayed. build/captures/ple356 + ple357, the post-PLE-356
+		// estimator: blip-200ms fires six times across the two captures, 20 s apart, one
+		// second wide each. Clean, across all six clean phases, is 335 samples whose jitter
+		// maxes at 3.71 ms and whose loss is exactly 0 in every one.
+		val blipEvents = listOf(
+			3.71 to 1.76, 4.85 to 12.02, 9.87 to 14.53,
+			89.77 to 16.94, 1.95 to 1.73, 2.03 to 1.94)
+		for((jitter, loss) in blipEvents)
+		{
+			val classifier = NetworkQualityClassifier()
+			repeat(10) { classifier.update(base, ethernet) }
+			assertEquals("blip event $jitter ms / $loss % must leave GOOD",
+				NetworkQualityLevel.CONSTRAINED,
+				classifier.update(sample(jitter, loss), ethernet).level)
+		}
+		// The worst clean second in the corpus, repeated: jitter 3.71 ms (the corpus max, equal
+		// to one of the blip events -- which is why jitter alone cannot carry the arm) and no
+		// loss. It must not move the badge even sustained.
+		val clean = NetworkQualityClassifier()
+		var level = NetworkQualityLevel.UNKNOWN
+		repeat(30) { level = clean.update(sample(3.71, 0.0), ethernet).level }
+		assertEquals(NetworkQualityLevel.GOOD, level)
+	}
+
+	@Test
+	fun tailArmNeverOverridesAWorseMedianVerdict()
+	{
+		// The worse of the two arms decides, so the single-tier tail arm must not pull a POOR
+		// median down to CONSTRAINED: a sustained bad path is still POOR, and stays POOR while
+		// the tail keeps firing on top of it.
+		val classifier = NetworkQualityClassifier()
+		val bad = sample(12.0, 5.0)
+		var level = NetworkQualityLevel.UNKNOWN
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { level = classifier.update(bad, ethernet).level }
+		assertEquals(NetworkQualityLevel.POOR, level)
+	}
+
+	@Test
+	fun aRecurringStallDoesNotPinTheBadgeAtPoorForever()
+	{
+		// The one asymmetry in the recovery gate: the tail arm holds the badge off GOOD, but it
+		// must not hold it at POOR. A path that had one genuinely bad spell and then only
+		// hitches every 20 s has to settle at CONSTRAINED, not stay POOR indefinitely -- that
+		// would be PLE-357's stuck badge with a new cause.
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) {
+			classifier.update(base.copy(probeRttMicros = 60_000), ethernet)
+		}
+		var level = NetworkQualityLevel.UNKNOWN
+		for(second in 1..60)
+			level = classifier.update(
+				if(second % 20 == 0) sample(9.87, 14.53) else base, ethernet).level
+		assertEquals(NetworkQualityLevel.CONSTRAINED, level)
 	}
 
 	@Test
