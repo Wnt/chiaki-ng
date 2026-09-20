@@ -232,12 +232,32 @@ typedef struct chiaki_takion_t
 	ChiakiKeyState key_state;
 
 	bool enable_dualsense;
+
+	/**
+	 * PLE-423: truncated monotonic ms of the last datagram received on this
+	 * socket, 0 until the first one lands, and the longest gap between two of
+	 * them so far.
+	 *
+	 * Written by the Takion receive thread and read by StreamConnection's 1 Hz
+	 * loop without a lock. 32 bits on purpose: an aligned 32-bit load is
+	 * indivisible on every ABI built here, where a `uint64_t` load is not, and
+	 * every reader does unsigned arithmetic so the 49.7-day wrap costs nothing.
+	 * A lock per received packet is not worth paying at 60 fps for a counter
+	 * whose worst stale read delays a quit by one poll.
+	 */
+	uint32_t last_receive_ms;
+	uint32_t max_receive_gap_ms;
 } ChiakiTakion;
 
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, ChiakiTakionConnectInfo *info, chiaki_socket_t *sock);
 CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion);
 CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *takion);
+/** PLE-423: truncated monotonic ms of the last inbound datagram, 0 if none has arrived yet. */
+CHIAKI_EXPORT uint32_t chiaki_takion_get_last_receive_ms(ChiakiTakion *takion);
+/** PLE-423: longest observed gap between two inbound datagrams, in ms. Diagnostics: it is
+ * what sets CHIAKI_LINK_WATCHDOG_TIMEOUT_MS, so a rig run can report it. */
+CHIAKI_EXPORT uint32_t chiaki_takion_get_max_receive_gap_ms(ChiakiTakion *takion);
 CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
 	uint64_t arrival_us, ChiakiSeqNum16 frame_index, uint32_t video_fps);
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter);

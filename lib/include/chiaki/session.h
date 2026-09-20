@@ -128,6 +128,12 @@ typedef enum {
 	CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED,
 	CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN, // like REMOTE_DISCONNECTED, but because the server shut down
 	CHIAKI_QUIT_REASON_PSN_REGIST_FAILED,
+	/** PLE-423: nothing arrived from the console on the data socket for
+	 * CHIAKI_LINK_WATCHDOG_TIMEOUT_MS while streaming. Appended at the end
+	 * deliberately: the Android side hard-codes ordinals of this enum
+	 * (SessionHandoffRetry.kt, StreamEndCause.kt), so a value inserted above
+	 * would silently repoint them. */
+	CHIAKI_QUIT_REASON_STREAM_CONNECTION_TIMEOUT,
 } ChiakiQuitReason;
 
 CHIAKI_EXPORT const char *chiaki_quit_reason_string(ChiakiQuitReason reason);

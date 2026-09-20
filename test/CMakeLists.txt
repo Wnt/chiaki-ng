@@ -14,6 +14,7 @@ set(CHIAKI_UNIT_SOURCES
 				rpcrypt.c
 				gkcrypt.c
 				takion.c
+				linkwatchdog.c
 				seqnum.c
 				keystate.c
 				reorderqueue.c

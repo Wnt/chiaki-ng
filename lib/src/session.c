@@ -165,6 +165,8 @@ CHIAKI_EXPORT const char *chiaki_quit_reason_string(ChiakiQuitReason reason)
 			return "Remote has disconnected from Stream Connection the because Server shut down";
 		case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED:
 			return "The Console Registration using PSN has failed";
+		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_TIMEOUT:
+			return "The console stopped responding";
 		case CHIAKI_QUIT_REASON_NONE:
 		default:
 			return "Unknown";
@@ -191,6 +193,7 @@ static const char *quit_reason_token(ChiakiQuitReason reason)
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED: return "remote_disconnected";
 		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_SHUTDOWN: return "remote_shutdown";
 		case CHIAKI_QUIT_REASON_PSN_REGIST_FAILED: return "psn_regist_failed";
+		case CHIAKI_QUIT_REASON_STREAM_CONNECTION_TIMEOUT: return "stream_connection_timeout";
 		case CHIAKI_QUIT_REASON_NONE:
 		default: return "none";
 	}
@@ -804,6 +807,14 @@ ctrl_failed:
 		else
 			session->quit_reason = CHIAKI_QUIT_REASON_STREAM_CONNECTION_REMOTE_DISCONNECTED;
 		session->quit_reason_str = strdup(session->stream_connection.remote_disconnect_reason);
+	}
+	else if(err == CHIAKI_ERR_TIMEOUT)
+	{
+		// PLE-423: the link watchdog, not a generic failure. Its own reason so the
+		// user is told the console stopped responding rather than "unknown error",
+		// and so an A/B run can tell a network outage from a client-side fault.
+		CHIAKI_LOGE(session->log, "StreamConnection timed out: the console became unreachable");
+		session->quit_reason = CHIAKI_QUIT_REASON_STREAM_CONNECTION_TIMEOUT;
 	}
 	else if(err != CHIAKI_ERR_SUCCESS && err != CHIAKI_ERR_CANCELED)
 	{

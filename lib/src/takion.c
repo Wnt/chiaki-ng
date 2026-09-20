@@ -218,6 +218,7 @@ static void takion_write_message_header(uint8_t *buf, uint32_t tag, uint64_t key
 static ChiakiErrorCode takion_send_message_init(ChiakiTakion *takion, TakionMessagePayloadInit *payload);
 static ChiakiErrorCode takion_send_message_cookie(ChiakiTakion *takion, uint8_t *cookie);
 static ChiakiErrorCode takion_recv(ChiakiTakion *takion, uint8_t *buf, size_t *buf_size, uint64_t timeout_ms);
+static void takion_note_receive(ChiakiTakion *takion);
 #if CHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING
 static ChiakiErrorCode takion_recv_pooled(ChiakiTakion *takion, TakionReceiveBufferPool *pool, uint8_t **bufs, size_t *buf_sizes, size_t *buf_count, uint64_t timeout_ms);
 #endif
@@ -292,6 +293,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->disable_video_packet_reordering = info->disable_video_packet_reordering;
 	takion->diagnostics_enabled = info->diagnostics_enabled;
 	takion->video_reorder_timeouts = 0;
+	takion->last_receive_ms = 0;
+	takion->max_receive_gap_ms = 0;
 	takion->video_fps = info->video_fps;
 	memset(&takion->video_packet_jitter, 0, sizeof(takion->video_packet_jitter));
 
@@ -590,6 +593,16 @@ CHIAKI_EXPORT uint64_t chiaki_takion_get_video_reorder_timeouts(ChiakiTakion *ta
 	uint64_t total = takion->video_reorder_timeouts;
 	chiaki_mutex_unlock(&takion->diagnostics_mutex);
 	return total;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_takion_get_last_receive_ms(ChiakiTakion *takion)
+{
+	return takion->last_receive_ms;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_takion_get_max_receive_gap_ms(ChiakiTakion *takion)
+{
+	return takion->max_receive_gap_ms;
 }
 
 CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
@@ -1457,6 +1470,7 @@ static void *takion_thread_func(void *user)
 			}
 			break;
 		}
+		takion_note_receive(takion);
 		for(size_t i = 0; i < received_count; i++)
 			takion_handle_packet(takion, received_bufs[i], received_sizes[i]);
 #else
@@ -1475,6 +1489,7 @@ static void *takion_thread_func(void *user)
 			}
 			break;
 		}
+		takion_note_receive(takion);
 		uint8_t *resized_buf = realloc(buf, received_size);
 		if(!resized_buf)
 		{
@@ -1527,6 +1542,28 @@ beach:
 		}
 	}
 	return NULL;
+}
+
+// PLE-423: one stamp per successfully received datagram, whatever it turns out to
+// contain. Liveness is "the console is still putting bytes on this socket", so it
+// is deliberately taken before decryption and MAC checking: a packet we then reject
+// still proves the path is up, and making liveness depend on a successful MAC would
+// let a key-desync masquerade as a network outage.
+static void takion_note_receive(ChiakiTakion *takion)
+{
+	uint32_t now_ms = (uint32_t)chiaki_time_now_monotonic_ms();
+	uint32_t previous_ms = takion->last_receive_ms;
+	if(previous_ms)
+	{
+		uint32_t gap_ms = now_ms - previous_ms;
+		// Same different-instants guard as the watchdog's: a gap in the top half of
+		// the range is the clock read backwards, not a 25-day silence.
+		if(gap_ms <= (uint32_t)0x80000000u && gap_ms > takion->max_receive_gap_ms)
+			takion->max_receive_gap_ms = gap_ms;
+	}
+	if(!now_ms) // 0 means "nothing received yet"; never hand that back as a stamp
+		now_ms = 1;
+	takion->last_receive_ms = now_ms;
 }
 
 static ChiakiErrorCode takion_recv(ChiakiTakion *takion, uint8_t *buf, size_t *buf_size, uint64_t timeout_ms)
