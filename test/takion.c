@@ -11,6 +11,12 @@
 
 #include "test_log.h"
 
+#include "fake_console.h"
+
+#if defined(__linux__)
+#include <poll.h>
+#endif
+
 MunitResult test_network_stats_all(void);
 
 
@@ -447,6 +453,119 @@ static MunitResult test_takion_window_max_receive_gap_reset_race(const MunitPara
 	return MUNIT_OK;
 }
 
+#if defined(__linux__)
+typedef struct takion_teardown_probe_t
+{
+	ChiakiMutex mutex;
+	ChiakiCond cond;
+	bool connected;
+	bool disconnected;
+} TakionTeardownProbe;
+
+static void takion_teardown_probe_cb(ChiakiTakionEvent *event, void *user)
+{
+	TakionTeardownProbe *probe = user;
+	chiaki_mutex_lock(&probe->mutex);
+	if(event->type == CHIAKI_TAKION_EVENT_TYPE_CONNECTED)
+		probe->connected = true;
+	else if(event->type == CHIAKI_TAKION_EVENT_TYPE_DISCONNECT)
+		probe->disconnected = true;
+	chiaki_cond_signal(&probe->cond);
+	chiaki_mutex_unlock(&probe->mutex);
+}
+
+static bool takion_teardown_probe_connected(void *user)
+{
+	return ((TakionTeardownProbe *)user)->connected;
+}
+
+static bool takion_teardown_probe_disconnected(void *user)
+{
+	return ((TakionTeardownProbe *)user)->disconnected;
+}
+
+// PLE-490: the send buffer is owned by the takion thread, which finalises it the
+// moment its receive loop breaks -- on any recv error, not only on close. The data
+// send API stays callable by the owner until chiaki_takion_close(), and used to push
+// into that destroyed buffer (bionic: FORTIFY abort, "pthread_mutex_lock called on a
+// destroyed mutex"). This drives a real takion into exactly that state: the console
+// goes away, the ICMP port-unreachable surfaces as ECONNREFUSED on the takion thread's
+// recv, the thread exits. DISCONNECT is emitted after the send buffer is finalised, so
+// waiting for it orders the sends below after the teardown without any sleep.
+// The socket is caller-owned (close_socket = false), as for the PSN data socket in the
+// S25 capture; with a takion-owned socket the dying thread closes it and the send
+// fails with EBADF before it ever reaches the buffer.
+static MunitResult test_takion_send_after_receive_thread_exit(const MunitParameter params[], void *user)
+{
+	FakeConsole console;
+	fake_console_open(&console);
+
+	TakionTeardownProbe probe = { 0 };
+	munit_assert_int(chiaki_mutex_init(&probe.mutex, false), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(chiaki_cond_init(&probe.cond), ==, CHIAKI_ERR_SUCCESS);
+
+	ChiakiTakionConnectInfo info = { 0 };
+	info.log = get_test_log();
+	info.close_socket = false;
+	info.ip_dontfrag = false;
+	info.enable_crypt = false;
+	info.protocol_version = 7;
+	info.cb = takion_teardown_probe_cb;
+	info.cb_user = &probe;
+
+	ChiakiTakion takion;
+	memset(&takion, 0, sizeof(takion));
+	chiaki_key_state_init(&takion.key_state);
+	munit_assert_int(chiaki_takion_connect(&takion, &info, &console.client_sock), ==, CHIAKI_ERR_SUCCESS);
+
+	fake_console_handshake(&console);
+
+	chiaki_mutex_lock(&probe.mutex);
+	chiaki_cond_timedwait_pred(&probe.cond, &probe.mutex, 5000, takion_teardown_probe_connected, &probe);
+	munit_assert_true(probe.connected);
+	chiaki_mutex_unlock(&probe.mutex);
+
+	// A live takion accepts data.
+	uint8_t payload[] = { 0xde, 0xad, 0xbe, 0xef };
+	munit_assert_int(chiaki_takion_send_message_data(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(fake_console_recv(&console), >, 0);
+
+	// The console goes away. The next datagram draws an ICMP port unreachable, which
+	// the takion thread's recv reports as ECONNREFUSED; its loop breaks and it tears
+	// down the send buffer.
+	fake_console_close(&console);
+	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_SUCCESS);
+
+	chiaki_mutex_lock(&probe.mutex);
+	chiaki_cond_timedwait_pred(&probe.cond, &probe.mutex, 5000, takion_teardown_probe_disconnected, &probe);
+	munit_assert_true(probe.disconnected);
+	chiaki_mutex_unlock(&probe.mutex);
+
+	// The takion thread has exited and the send buffer is gone; the takion handle is
+	// still open. A data send must now fail cleanly instead of touching the buffer.
+	munit_assert_int(chiaki_takion_send_message_data(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_DISCONNECTED);
+	munit_assert_int(chiaki_takion_send_message_data_cont(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_DISCONNECTED);
+
+	// Raw sends tell Senkusha why they failed. Nothing reads the socket any more, so
+	// this datagram's ICMP stays pending; poll() waits for it and the next send
+	// reports it.
+	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_SUCCESS);
+	struct pollfd pfd = { .fd = console.client_sock, .events = 0 };
+	munit_assert_int(poll(&pfd, 1, 5000), ==, 1);
+	munit_assert_true(pfd.revents & POLLERR);
+	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_CONNECTION_REFUSED);
+	// Larger than any UDP datagram can be: the local "does not fit" answer.
+	static uint8_t too_big[70000];
+	munit_assert_int(chiaki_takion_send_raw(&takion, too_big, sizeof(too_big)), ==, CHIAKI_ERR_OVERFLOW);
+
+	chiaki_takion_close(&takion);
+	fake_console_fini(&console);
+	chiaki_cond_fini(&probe.cond);
+	chiaki_mutex_fini(&probe.mutex);
+	return MUNIT_OK;
+}
+#endif
+
 MunitTest tests_takion[] = {
 	{
 		"/av_packet_parse",
@@ -504,5 +623,15 @@ MunitTest tests_takion[] = {
 		MUNIT_TEST_OPTION_NONE,
 		NULL
 	},
+#if defined(__linux__)
+	{
+		"/send_after_receive_thread_exit",
+		test_takion_send_after_receive_thread_exit,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+#endif
 	{ NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL }
 };

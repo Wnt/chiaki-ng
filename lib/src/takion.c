@@ -208,6 +208,8 @@ struct takion_receive_buffer_pool_t
 #endif
 
 static void *takion_thread_func(void *user);
+static void takion_set_send_buffer_open(ChiakiTakion *takion, bool open);
+static ChiakiErrorCode takion_send_buffered(ChiakiTakion *takion, uint8_t *packet_buf, size_t packet_size, uint64_t key_pos, ChiakiSeqNum32 seq_num);
 static void takion_handle_packet(ChiakiTakion *takion, uint8_t *buf, size_t buf_size);
 static ChiakiErrorCode takion_handle_packet_mac(ChiakiTakion *takion, uint8_t base_type, uint8_t *buf, size_t buf_size);
 static void takion_handle_packet_message(ChiakiTakion *takion, uint8_t *buf, size_t buf_size);
@@ -336,6 +338,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	ret = chiaki_mutex_init(&takion->seq_num_local_mutex, false);
 	if(ret != CHIAKI_ERR_SUCCESS)
 		goto error_diagnostics_mutex;
+	takion->send_buffer_open = false;
+	ret = chiaki_mutex_init(&takion->send_buffer_state_mutex, false);
+	if(ret != CHIAKI_ERR_SUCCESS)
+		goto error_seq_num_local_mutex;
 	takion->tag_remote = 0;
 
 	takion->enable_crypt = info->enable_crypt;
@@ -353,7 +359,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(takion->log, "Takion failed to create stop pipe");
-		goto error_seq_num_local_mutex;
+		goto error_send_buffer_state_mutex;
 	}
 
 	if(sock)
@@ -565,6 +571,8 @@ error_sock:
 	}
 error_pipe:
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
+error_send_buffer_state_mutex:
+	chiaki_mutex_fini(&takion->send_buffer_state_mutex);
 error_seq_num_local_mutex:
 	chiaki_mutex_fini(&takion->seq_num_local_mutex);
 error_diagnostics_mutex:
@@ -580,6 +588,7 @@ CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion)
 	chiaki_stop_pipe_stop(&takion->stop_pipe);
 	chiaki_thread_join(&takion->thread, NULL);
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
+	chiaki_mutex_fini(&takion->send_buffer_state_mutex);
 	chiaki_mutex_fini(&takion->seq_num_local_mutex);
 	if(takion->diagnostics_enabled)
 		chiaki_mutex_fini(&takion->diagnostics_mutex);
@@ -773,7 +782,22 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_raw(ChiakiTakion *takion, const
 	int r = send(takion->sock, buf, buf_size, 0);
 	if(r < 0)
 	{
+		// PLE-490: Senkusha must tell "this size does not fit" from "the peer is gone";
+		// read the error before logging can clobber it.
+#ifdef _WIN32
+		int errsv = WSAGetLastError();
+		bool too_big = errsv == WSAEMSGSIZE;
+		bool refused = errsv == WSAECONNREFUSED || errsv == WSAECONNRESET;
+#else
+		int errsv = errno;
+		bool too_big = errsv == EMSGSIZE;
+		bool refused = errsv == ECONNREFUSED;
+#endif
 		CHIAKI_LOGE(takion->log, "Takion failed to send raw: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+		if(too_big)
+			return CHIAKI_ERR_OVERFLOW;
+		if(refused)
+			return CHIAKI_ERR_CONNECTION_REFUSED;
 		return CHIAKI_ERR_NETWORK;
 	}
 	return CHIAKI_ERR_SUCCESS;
@@ -855,6 +879,53 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send(ChiakiTakion *takion, uint8_t *
 	return chiaki_takion_send_raw(takion, buf, buf_size);
 }
 
+static void takion_set_send_buffer_open(ChiakiTakion *takion, bool open)
+{
+	chiaki_mutex_lock(&takion->send_buffer_state_mutex);
+	takion->send_buffer_open = open;
+	chiaki_mutex_unlock(&takion->send_buffer_state_mutex);
+}
+
+/**
+ * Send a data packet and hand it to the send buffer for re-sending until it is acked.
+ * Takes ownership of packet_buf in every case.
+ *
+ * PLE-490: the send and the push happen under send_buffer_state_mutex, so the takion
+ * thread cannot finalise the send buffer between them. Once the takion thread has
+ * ended (send_buffer_open is false) nothing can ack this packet any more and the
+ * buffer is gone, so it is refused with CHIAKI_ERR_DISCONNECTED rather than sent.
+ */
+static ChiakiErrorCode takion_send_buffered(ChiakiTakion *takion, uint8_t *packet_buf, size_t packet_size, uint64_t key_pos, ChiakiSeqNum32 seq_num)
+{
+	ChiakiErrorCode err = chiaki_mutex_lock(&takion->send_buffer_state_mutex);
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		free(packet_buf);
+		return err;
+	}
+
+	if(!takion->send_buffer_open)
+	{
+		chiaki_mutex_unlock(&takion->send_buffer_state_mutex);
+		CHIAKI_LOGE(takion->log, "Takion refusing to send data packet: takion is not connected");
+		free(packet_buf);
+		return CHIAKI_ERR_DISCONNECTED;
+	}
+
+	err = chiaki_takion_send(takion, packet_buf, packet_size, key_pos); // will alter packet_buf with gmac
+	if(err != CHIAKI_ERR_SUCCESS)
+	{
+		chiaki_mutex_unlock(&takion->send_buffer_state_mutex);
+		CHIAKI_LOGE(takion->log, "Takion failed to send data packet: %s", chiaki_error_string(err));
+		free(packet_buf);
+		return err;
+	}
+
+	chiaki_takion_send_buffer_push(&takion->send_buffer, seq_num, packet_buf, packet_size);
+	chiaki_mutex_unlock(&takion->send_buffer_state_mutex);
+	return CHIAKI_ERR_SUCCESS;
+}
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_message_data(ChiakiTakion *takion, uint8_t chunk_flags, uint16_t channel, uint8_t *buf, size_t buf_size, ChiakiSeqNum32 *seq_num)
 {
 	// TODO: can we make this more memory-efficient?
@@ -887,15 +958,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_message_data(ChiakiTakion *taki
 	*(msg_payload + 8) = 0;
 	memcpy(msg_payload + 9, buf, buf_size);
 
-	err = chiaki_takion_send(takion, packet_buf, packet_size, key_pos); // will alter packet_buf with gmac
+	err = takion_send_buffered(takion, packet_buf, packet_size, key_pos, seq_num_val);
 	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		CHIAKI_LOGE(takion->log, "Takion failed to send data packet: %s", chiaki_error_string(err));
-		free(packet_buf);
 		return err;
-	}
-
-	chiaki_takion_send_buffer_push(&takion->send_buffer, seq_num_val, packet_buf, packet_size);
 
 	if(seq_num)
 		*seq_num = seq_num_val;
@@ -934,15 +999,9 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_message_data_cont(ChiakiTakion 
 	*((chiaki_unaligned_uint16_t *)(msg_payload + 6)) = 0;
 	memcpy(msg_payload + 8, buf, buf_size);
 
-	err = chiaki_takion_send(takion, packet_buf, packet_size, key_pos); // will alter packet_buf with gmac
+	err = takion_send_buffered(takion, packet_buf, packet_size, key_pos, seq_num_val);
 	if(err != CHIAKI_ERR_SUCCESS)
-	{
-		CHIAKI_LOGE(takion->log, "Takion failed to send data packet: %s", chiaki_error_string(err));
-		free(packet_buf);
 		return err;
-	}
-
-	chiaki_takion_send_buffer_push(&takion->send_buffer, seq_num_val, packet_buf, packet_size);
 
 	if(seq_num)
 		*seq_num = seq_num_val;
@@ -1402,6 +1461,7 @@ static void *takion_thread_func(void *user)
 	// The send buffer size MUST be consistent with the acked seqnums array size in takion_handle_packet_message_data_ack()
 	if(chiaki_takion_send_buffer_init(&takion->send_buffer, takion, TAKION_SEND_BUFFER_SIZE) != CHIAKI_ERR_SUCCESS)
 		goto error_reoder_queue;
+	takion_set_send_buffer_open(takion, true);
 
 #if CHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING
 	receive_buffer_pool = calloc(1, sizeof(TakionReceiveBufferPool));
@@ -1523,6 +1583,9 @@ static void *takion_thread_func(void *user)
 #if CHIAKI_LIB_ENABLE_TAKION_RECEIVE_BATCHING
 error_send_buffer:
 #endif
+	// PLE-490: close the door before finalising, so no sender is inside the buffer
+	// when its mutex is destroyed and none can enter afterwards.
+	takion_set_send_buffer_open(takion, false);
 	chiaki_takion_send_buffer_fini(&takion->send_buffer);
 
 	if(takion->video_queue_initialized)

@@ -86,6 +86,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_init(ChiakiSenkusha *senkusha, Chi
 	senkusha->state_finished = false;
 	senkusha->state_failed = false;
 	senkusha->should_stop = false;
+	senkusha->takion_disconnected = false;
 	senkusha->data_ack_seq_num_expected = 0;
 	senkusha->ping_tag = 0;
 	senkusha->pong_time_us = 0;
@@ -109,7 +110,22 @@ CHIAKI_EXPORT void chiaki_senkusha_fini(ChiakiSenkusha *senkusha)
 static bool state_finished_cond_check(void *user)
 {
 	ChiakiSenkusha *senkusha = user;
-	return senkusha->state_finished || senkusha->should_stop;
+	return senkusha->state_finished || senkusha->should_stop || senkusha->takion_disconnected;
+}
+
+/**
+ * The error for a wait that ended without state_finished and without should_stop.
+ * Such a wait used to end only by timeout; since PLE-490 a takion DISCONNECT wakes
+ * it too, and that must never fall through as a success.
+ */
+static ChiakiErrorCode senkusha_unfinished_err(ChiakiSenkusha *senkusha, ChiakiErrorCode wait_err)
+{
+	if(senkusha->takion_disconnected)
+	{
+		CHIAKI_LOGE(senkusha->log, "Senkusha takion disconnected");
+		return CHIAKI_ERR_DISCONNECTED;
+	}
+	return wait_err == CHIAKI_ERR_TIMEOUT ? CHIAKI_ERR_TIMEOUT : CHIAKI_ERR_UNKNOWN;
 }
 
 CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint32_t *mtu_in, uint32_t *mtu_out, uint64_t *rtt_us, chiaki_socket_t *socket)
@@ -166,6 +182,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 	senkusha->state = STATE_TAKION_CONNECT;
 	senkusha->state_finished = false;
 	senkusha->state_failed = false;
+	senkusha->takion_disconnected = false;
 
 	err = chiaki_takion_connect(&senkusha->takion, &takion_info, socket);
 	if(!socket)
@@ -187,7 +204,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 		if(senkusha->should_stop)
 			err = CHIAKI_ERR_CANCELED;
 		else
+		{
 			CHIAKI_LOGE(session->log, "Senkusha Takion connect failed");
+			err = senkusha_unfinished_err(senkusha, err);
+		}
 
 		QUIT(quit_takion);
 	}
@@ -215,7 +235,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 		if(senkusha->should_stop)
 			err = CHIAKI_ERR_CANCELED;
 		else
+		{
 			CHIAKI_LOGE(session->log, "Senkusha didn't receive protocol request ack");
+			err = senkusha_unfinished_err(senkusha, err);
+		}
 
 		QUIT(quit_takion);
 	}
@@ -245,7 +268,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 		if(senkusha->should_stop)
 			err = CHIAKI_ERR_CANCELED;
 		else
+		{
 			CHIAKI_LOGE(session->log, "Senkusha didn't receive bang");
+			err = senkusha_unfinished_err(senkusha, err);
+		}
 
 		QUIT(quit_takion);
 	}
@@ -358,8 +384,9 @@ static ChiakiErrorCode senkusha_run_rtt_test(ChiakiSenkusha *senkusha, uint16_t 
 
 			if(senkusha->should_stop)
 				return CHIAKI_ERR_CANCELED;
-			else
-				CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive pong");
+			if(senkusha->takion_disconnected)
+				return senkusha_unfinished_err(senkusha, err);
+			CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive pong");
 
 			continue;
 		}
@@ -435,8 +462,8 @@ static ChiakiErrorCode senkusha_run_mtu_in_test(ChiakiSenkusha *senkusha, uint32
 
 				if(senkusha->should_stop)
 					return CHIAKI_ERR_CANCELED;
-				else
-					CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive MTU response");
+				CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive MTU response");
+				return senkusha_unfinished_err(senkusha, err);
 			}
 
 			CHIAKI_LOGI(senkusha->log, "Senkusha MTU %u success", (unsigned int)cur);
@@ -498,10 +525,8 @@ static ChiakiErrorCode senkusha_run_mtu_out_test(ChiakiSenkusha *senkusha, uint3
 
 		if(senkusha->should_stop)
 			return CHIAKI_ERR_CANCELED;
-		else
-			CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive Client MTU command");
-
-		return CHIAKI_ERR_UNKNOWN;
+		CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive Client MTU command");
+		return senkusha_unfinished_err(senkusha, err);
 	}
 
 	size_t packet_buf_size = max - MTU_UDP_PACKET_ADD;
@@ -549,19 +574,32 @@ static ChiakiErrorCode senkusha_run_mtu_out_test(ChiakiSenkusha *senkusha, uint3
 			*((chiaki_unaligned_uint32_t *)(packet_buf + MTU_AV_PACKET_ADD)) = 0;
 			*((chiaki_unaligned_uint32_t *)(packet_buf + MTU_AV_PACKET_ADD + 4)) = htonl(tag);
 
+			if(senkusha->takion_disconnected)
+			{
+				err = senkusha_unfinished_err(senkusha, CHIAKI_ERR_SUCCESS);
+				goto beach;
+			}
+
 			CHIAKI_LOGI(senkusha->log, "Senkusha MTU %u out ping attempt %u", (unsigned int)cur, (unsigned int)attempt);
 
+			// PLE-490: a send failure is not a pong timeout. EMSGSIZE is the local end of
+			// the path saying this size cannot leave, a real answer that retrying cannot
+			// change. Anything else (ECONNREFUSED from a peer that is gone, above all)
+			// says nothing about the MTU, so the search stops instead of walking down a
+			// ladder of probes that never left.
 			err = chiaki_takion_send_raw(&senkusha->takion, packet_buf, cur - MTU_UDP_PACKET_ADD);
+			if(err == CHIAKI_ERR_OVERFLOW)
+			{
+				CHIAKI_LOGI(senkusha->log, "Senkusha MTU %u does not fit the local path", (unsigned int)cur);
+				break;
+			}
 			if(err != CHIAKI_ERR_SUCCESS)
 			{
-				CHIAKI_LOGE(senkusha->log, "Senkusha failed to send ping");
-				err = CHIAKI_ERR_TIMEOUT;
-			}
-			else
-			{
-				err = chiaki_cond_timedwait_pred(&senkusha->state_cond, &senkusha->state_mutex, timeout_ms, state_finished_cond_check, senkusha);
+				CHIAKI_LOGE(senkusha->log, "Senkusha failed to send ping, abandoning MTU out test: %s", chiaki_error_string(err));
+				goto beach;
 			}
 
+			err = chiaki_cond_timedwait_pred(&senkusha->state_cond, &senkusha->state_mutex, timeout_ms, state_finished_cond_check, senkusha);
 			assert(err == CHIAKI_ERR_SUCCESS || err == CHIAKI_ERR_TIMEOUT);
 
 			if(!senkusha->state_finished)
@@ -577,8 +615,9 @@ static ChiakiErrorCode senkusha_run_mtu_out_test(ChiakiSenkusha *senkusha, uint3
 					err = CHIAKI_ERR_CANCELED;
 					goto beach;
 				}
-				else
-					CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive MTU pong");
+				CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive MTU pong");
+				err = senkusha_unfinished_err(senkusha, err);
+				goto beach;
 			}
 
 			CHIAKI_LOGI(senkusha->log, "Senkusha MTU ping %u success", (unsigned int)cur);
@@ -623,6 +662,14 @@ static void senkusha_takion_cb(ChiakiTakionEvent *event, void *user)
 			{
 				senkusha->state_finished = event->type == CHIAKI_TAKION_EVENT_TYPE_CONNECTED;
 				senkusha->state_failed = event->type == CHIAKI_TAKION_EVENT_TYPE_DISCONNECT;
+				chiaki_cond_signal(&senkusha->state_cond);
+			}
+			// PLE-490: the takion thread can end in any state (a recv error ends it), and
+			// every wait from then on would otherwise run to its timeout and be read as
+			// a lost probe.
+			if(event->type == CHIAKI_TAKION_EVENT_TYPE_DISCONNECT)
+			{
+				senkusha->takion_disconnected = true;
 				chiaki_cond_signal(&senkusha->state_cond);
 			}
 			chiaki_mutex_unlock(&senkusha->state_mutex);
@@ -958,7 +1005,10 @@ static ChiakiErrorCode senkusha_send_data_wait_for_ack(ChiakiSenkusha *senkusha,
 		if(senkusha->should_stop)
 			err = CHIAKI_ERR_CANCELED;
 		else
+		{
 			CHIAKI_LOGE(senkusha->log, "Senkusha failed to receive data ack for echo command");
+			err = senkusha_unfinished_err(senkusha, err);
+		}
 	}
 
 	return err;

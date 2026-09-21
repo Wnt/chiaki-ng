@@ -14,6 +14,9 @@ set(CHIAKI_UNIT_SOURCES
 				rpcrypt.c
 				gkcrypt.c
 				takion.c
+				senkusha.c
+				fake_console.c
+				fake_console.h
 				linkwatchdog.c
 				frameloss.c
 				videoreceiver.c

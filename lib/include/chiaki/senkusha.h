@@ -21,6 +21,11 @@ typedef struct senkusha_t
 	bool state_finished;
 	bool state_failed;
 	bool should_stop;
+	/**
+	 * PLE-490: the takion thread has ended (it reported DISCONNECT), so nothing more
+	 * can arrive and every probe from here on carries no information.
+	 */
+	bool takion_disconnected;
 	ChiakiSeqNum32 data_ack_seq_num_expected;
 	uint64_t pong_time_us;
 	uint16_t ping_test_index;
@@ -29,12 +34,12 @@ typedef struct senkusha_t
 	uint32_t mtu_id;
 
 	/**
-	 * signaled on change of state_finished or should_stop
+	 * signaled on change of state_finished, should_stop or takion_disconnected
 	 */
 	ChiakiCond state_cond;
 
 	/**
-	 * protects state, state_finished, state_failed and should_stop
+	 * protects state, state_finished, state_failed, should_stop and takion_disconnected
 	 */
 	ChiakiMutex state_mutex;
 } ChiakiSenkusha;
