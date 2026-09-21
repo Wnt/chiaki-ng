@@ -39,3 +39,9 @@ chiaki.conf
 .cache/
 *.vscode
 site/
+
+# Python bytecode from running docs/verification/lib/test_*.py in place
+# (PLE-465); the .py sources under docs/verification/lib are real content.
+__pycache__/
+*.py[cod]
+.pytest_cache/
