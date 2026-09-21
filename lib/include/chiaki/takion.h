@@ -209,6 +209,16 @@ typedef struct chiaki_takion_t
 	uint32_t video_fps;
 	ChiakiTakionVideoPacketJitter video_packet_jitter;
 	ChiakiTakionSendBuffer send_buffer;
+	/**
+	 * PLE-490: send_buffer is owned by the takion thread, which initialises it after the
+	 * handshake and finalises it as soon as its receive loop ends -- on any recv error,
+	 * not only on chiaki_takion_close(). The data send API stays callable until close,
+	 * so it may only touch send_buffer while send_buffer_open is true, and must hold
+	 * send_buffer_state_mutex while it does. The takion thread clears the flag under the
+	 * same mutex before finalising. The mutex itself lives from connect to close.
+	 */
+	ChiakiMutex send_buffer_state_mutex;
+	bool send_buffer_open;
 
 	ChiakiTakionCallback cb;
 	void *cb_user;
