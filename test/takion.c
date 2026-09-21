@@ -14,7 +14,13 @@
 #include "fake_console.h"
 
 #if defined(__linux__)
+#include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
 #include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 MunitResult test_network_stats_all(void);
@@ -564,6 +570,196 @@ static MunitResult test_takion_send_after_receive_thread_exit(const MunitParamet
 	chiaki_mutex_fini(&probe.mutex);
 	return MUNIT_OK;
 }
+
+// PLE-502: holds one send() on a chosen fd inside the call, after the sender has
+// already read takion->sock -- the window no scheduler hands out on demand. The
+// executable's send() wins over libc's for the statically linked chiaki-lib; every
+// other send() passes straight through to sendto(), which is the same call.
+typedef struct takion_send_hold_t
+{
+	ChiakiMutex mutex;
+	ChiakiCond cond;
+	int fd; // armed while >= 0; disarms itself on the first send it holds
+	bool held;
+	int witness_fd; // what "reuses" the fd number once the takion thread has closed it
+	bool saw_close;
+} TakionSendHold;
+
+static TakionSendHold takion_send_hold = { .fd = -1, .witness_fd = -1 };
+
+static void takion_send_hold_in_flight(int fd)
+{
+	chiaki_mutex_lock(&takion_send_hold.mutex);
+	__atomic_store_n(&takion_send_hold.fd, -1, __ATOMIC_RELEASE);
+	takion_send_hold.held = true;
+	chiaki_cond_signal(&takion_send_hold.cond);
+	chiaki_mutex_unlock(&takion_send_hold.mutex);
+
+	// Give the takion thread every chance to close the fd while this send is in
+	// flight. If the fd closes, reuse its number the way any other open() in the
+	// process would; the send below then lands on the reused socket.
+	for(int i = 0; i < 1000; i++)
+	{
+		if(fcntl(fd, F_GETFD) < 0 && errno == EBADF)
+		{
+			chiaki_mutex_lock(&takion_send_hold.mutex);
+			takion_send_hold.saw_close = true;
+			dup2(takion_send_hold.witness_fd, fd);
+			chiaki_mutex_unlock(&takion_send_hold.mutex);
+			return;
+		}
+		usleep(1000);
+	}
+}
+
+ssize_t send(int fd, const void *buf, size_t len, int flags)
+{
+	if(fd >= 0 && __atomic_load_n(&takion_send_hold.fd, __ATOMIC_ACQUIRE) == fd)
+		takion_send_hold_in_flight(fd);
+	return sendto(fd, buf, len, flags, NULL, 0);
+}
+
+typedef struct takion_congestion_sender_t
+{
+	ChiakiTakion *takion;
+	ChiakiErrorCode err;
+} TakionCongestionSender;
+
+static void *takion_congestion_sender_run(void *user)
+{
+	TakionCongestionSender *sender = user;
+	ChiakiTakionCongestionPacket packet = { 0 };
+	sender->err = chiaki_takion_send_congestion(sender->takion, &packet);
+	return NULL;
+}
+
+static bool takion_send_hold_is_held(void *user)
+{
+	return ((TakionSendHold *)user)->held;
+}
+
+// PLE-502: with a takion-owned socket (close_socket = true, every LAN stream) the
+// takion thread closes the fd as soon as its receive loop breaks, while the
+// congestion, feedback and mic senders and Senkusha's raw probes keep sending until
+// their owners stop them much later. A sender that has read takion->sock and is
+// about to send() when the close happens sends on whatever reuses that number next.
+// This holds a real congestion send inside send(), drives the takion thread through
+// its ECONNREFUSED teardown (as PLE-490's test does), and lets a witness socket take
+// the fd number the moment it is closed. The close must wait for the send, so the
+// witness must see nothing; and every send after the teardown must be refused with
+// CHIAKI_ERR_DISCONNECTED rather than fail on a stale descriptor.
+static MunitResult test_takion_socket_close_waits_for_senders(const MunitParameter params[], void *user)
+{
+	FakeConsole console;
+	fake_console_open(&console);
+	int takion_fd = console.client_sock;
+	console.client_sock = -1; // the takion owns it now
+	int trigger_fd = dup(takion_fd);
+	munit_assert_int(trigger_fd, >=, 0);
+
+	// The unrelated socket that would inherit the fd number: connected to a
+	// receiver, so anything sent on it is observable.
+	int witness_rx = socket(AF_INET, SOCK_DGRAM, 0);
+	munit_assert_int(witness_rx, >=, 0);
+	struct sockaddr_in witness_addr = { 0 };
+	witness_addr.sin_family = AF_INET;
+	witness_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+	munit_assert_int(bind(witness_rx, (struct sockaddr *)&witness_addr, sizeof(witness_addr)), ==, 0);
+	socklen_t witness_addr_len = sizeof(witness_addr);
+	munit_assert_int(getsockname(witness_rx, (struct sockaddr *)&witness_addr, &witness_addr_len), ==, 0);
+	int witness_tx = socket(AF_INET, SOCK_DGRAM, 0);
+	munit_assert_int(witness_tx, >=, 0);
+	munit_assert_int(connect(witness_tx, (struct sockaddr *)&witness_addr, sizeof(witness_addr)), ==, 0);
+
+	munit_assert_int(chiaki_mutex_init(&takion_send_hold.mutex, false), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(chiaki_cond_init(&takion_send_hold.cond), ==, CHIAKI_ERR_SUCCESS);
+	takion_send_hold.held = false;
+	takion_send_hold.saw_close = false;
+	takion_send_hold.witness_fd = witness_tx;
+
+	TakionTeardownProbe probe = { 0 };
+	munit_assert_int(chiaki_mutex_init(&probe.mutex, false), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(chiaki_cond_init(&probe.cond), ==, CHIAKI_ERR_SUCCESS);
+
+	ChiakiTakionConnectInfo info = { 0 };
+	info.log = get_test_log();
+	info.close_socket = true;
+	info.ip_dontfrag = false;
+	info.enable_crypt = false;
+	info.protocol_version = 7;
+	info.cb = takion_teardown_probe_cb;
+	info.cb_user = &probe;
+
+	ChiakiTakion takion;
+	memset(&takion, 0, sizeof(takion));
+	chiaki_key_state_init(&takion.key_state);
+	chiaki_socket_t sock = takion_fd;
+	munit_assert_int(chiaki_takion_connect(&takion, &info, &sock), ==, CHIAKI_ERR_SUCCESS);
+
+	fake_console_handshake(&console);
+
+	chiaki_mutex_lock(&probe.mutex);
+	chiaki_cond_timedwait_pred(&probe.cond, &probe.mutex, 5000, takion_teardown_probe_connected, &probe);
+	munit_assert_true(probe.connected);
+	chiaki_mutex_unlock(&probe.mutex);
+
+	// A congestion sender, as the congestion control thread runs one, enters send().
+	__atomic_store_n(&takion_send_hold.fd, takion_fd, __ATOMIC_RELEASE);
+	TakionCongestionSender sender = { .takion = &takion, .err = CHIAKI_ERR_UNKNOWN };
+	ChiakiThread sender_thread;
+	munit_assert_int(chiaki_thread_create(&sender_thread, takion_congestion_sender_run, &sender), ==, CHIAKI_ERR_SUCCESS);
+	chiaki_mutex_lock(&takion_send_hold.mutex);
+	chiaki_cond_timedwait_pred(&takion_send_hold.cond, &takion_send_hold.mutex, 5000, takion_send_hold_is_held, &takion_send_hold);
+	munit_assert_true(takion_send_hold.held);
+	chiaki_mutex_unlock(&takion_send_hold.mutex);
+
+	// While it is in flight the console goes away. A datagram sent on the socket
+	// directly (not through takion, so not ordered against the held send) draws the
+	// ICMP port unreachable that ends the takion thread's receive loop. It goes out
+	// on a dup of the fd, taken before the takion existed: same socket, but the test
+	// itself never touches the number the takion thread closes.
+	fake_console_close(&console);
+	uint8_t trigger[] = { 0xde, 0xad, 0xbe, 0xef };
+	munit_assert_int((int)sendto(trigger_fd, trigger, sizeof(trigger), 0, NULL, 0), ==, (int)sizeof(trigger));
+
+	chiaki_thread_join(&sender_thread, NULL);
+
+	chiaki_mutex_lock(&probe.mutex);
+	chiaki_cond_timedwait_pred(&probe.cond, &probe.mutex, 5000, takion_teardown_probe_disconnected, &probe);
+	munit_assert_true(probe.disconnected);
+	chiaki_mutex_unlock(&probe.mutex);
+
+	// The in-flight send went out on the takion's own socket, not on a reused fd.
+	uint8_t witness_buf[1500];
+	ssize_t witnessed = recv(witness_rx, witness_buf, sizeof(witness_buf), MSG_DONTWAIT);
+	int witnessed_errno = errno;
+	if(takion_send_hold.saw_close)
+		close(takion_fd); // our dup of the witness, not the takion's socket
+	munit_assert_int((int)witnessed, ==, -1);
+	munit_assert_int(witnessed_errno, ==, EAGAIN);
+	munit_assert_false(takion_send_hold.saw_close);
+	munit_assert_int(sender.err, ==, CHIAKI_ERR_SUCCESS);
+
+	// The socket is gone: every sender gets a clean DISCONNECTED. (Feedback and mic
+	// packets reach the socket through the same chiaki_takion_send_raw(), but encrypt
+	// unconditionally first, and this takion has no crypt.)
+	ChiakiTakionCongestionPacket congestion = { 0 };
+	munit_assert_int(chiaki_takion_send_congestion(&takion, &congestion), ==, CHIAKI_ERR_DISCONNECTED);
+	munit_assert_int(chiaki_takion_send_raw(&takion, trigger, sizeof(trigger)), ==, CHIAKI_ERR_DISCONNECTED);
+	uint8_t payload[] = { 0xde, 0xad, 0xbe, 0xef };
+	munit_assert_int(chiaki_takion_send_message_data(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_DISCONNECTED);
+
+	chiaki_takion_close(&takion);
+	fake_console_fini(&console);
+	close(trigger_fd);
+	close(witness_tx);
+	close(witness_rx);
+	chiaki_cond_fini(&probe.cond);
+	chiaki_mutex_fini(&probe.mutex);
+	chiaki_cond_fini(&takion_send_hold.cond);
+	chiaki_mutex_fini(&takion_send_hold.mutex);
+	return MUNIT_OK;
+}
 #endif
 
 MunitTest tests_takion[] = {
@@ -627,6 +823,14 @@ MunitTest tests_takion[] = {
 	{
 		"/send_after_receive_thread_exit",
 		test_takion_send_after_receive_thread_exit,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/socket_close_waits_for_senders",
+		test_takion_socket_close_waits_for_senders,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

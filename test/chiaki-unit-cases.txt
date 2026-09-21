@@ -29,6 +29,7 @@
 /chiaki/takion/window_max_receive_gap
 /chiaki/takion/window_max_receive_gap_reset_race
 /chiaki/takion/send_after_receive_thread_exit
+/chiaki/takion/socket_close_waits_for_senders
 /chiaki/senkusha/ends_on_takion_disconnect
 /chiaki/link_watchdog/healthy_stream_never_expires
 /chiaki/link_watchdog/expires_once_the_deadline_passes
