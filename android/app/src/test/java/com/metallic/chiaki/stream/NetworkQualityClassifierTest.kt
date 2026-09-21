@@ -408,4 +408,120 @@ class NetworkQualityClassifierTest
 		assertEquals(NetworkQualityLevel.CONSTRAINED, stalled.level)
 		assertEquals(9.87, stalled.fastJitterMillis, 0.001)
 	}
+
+	// ---- PLE-464: the stall arm -------------------------------------------------------
+	//
+	// `takionPacketsLost` cannot see a total outage (it is only raised when a packet
+	// arrives), so these feed the gap field the native layer now reports and assert that a
+	// blackout is no longer GOOD while the profiles that are merely slow still are. The
+	// numbers are the worst per-profile gaps measured in build/captures/ple404,
+	// ple404b, ple423-blip and ple423-impair.
+
+	/** One second in which the console's socket was silent for `stallMillis`, with every
+	 * other input reading exactly as it does on a clean LAN -- which is what PLE-404
+	 * measured during the outages: jitter under 3.12 ms and loss a structural 0. */
+	private fun stalled(stallMillis: Long) = base.copy(takionMaxReceiveGapMillis = stallMillis)
+
+	@Test
+	fun aTotalBlackoutIsNotGood()
+	{
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+		// roam-3000ms, worst gap measured in ple404b.
+		val result = classifier.update(stalled(2706), ethernet)
+		assertEquals(NetworkQualityLevel.POOR, result.level)
+		assertEquals(2706.0, result.stallMillis, 0.001)
+	}
+
+	@Test
+	fun aSecondWithNothingAtAllIsStillClassified()
+	{
+		// The window in which the outage is total: no packets counted either way, and the
+		// console's quality payload did not arrive either. Before PLE-464 this returned
+		// UNKNOWN and the one sample that carries the fault was discarded.
+		val blackout = base.copy(connectionQualityValid = false, takionPacketsReceived = 0,
+			takionPacketsLost = 0, takionMaxReceiveGapMillis = 1200)
+		assertEquals(NetworkQualityLevel.POOR,
+			NetworkQualityClassifier().update(blackout, ethernet).level)
+	}
+
+	@Test
+	fun theShorterRoamOutageAlsoReachesPoor()
+	{
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+		// roam-1200ms: the outage is 1.2 s wide on the wire.
+		assertEquals(NetworkQualityLevel.POOR, classifier.update(stalled(1200), ethernet).level)
+	}
+
+	@Test
+	fun theProfilesThatAreMerelySlowStayGood()
+	{
+		// clean 19 ms, 4g 29 ms, wifi-slow 31 ms -- the worst gap each profile produced
+		// across six captured phases. None of them may move this arm.
+		for(gap in longArrayOf(19, 29, 31))
+		{
+			val classifier = NetworkQualityClassifier()
+			repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+			assertEquals("gap $gap ms", NetworkQualityLevel.GOOD,
+				classifier.update(stalled(gap), ethernet).level)
+		}
+	}
+
+	@Test
+	fun aTwoHundredMillisecondHitchDoesNotReachTheStallArm()
+	{
+		// blip-200ms's worst gap, 199 ms: the tail arm's business, not this one. The badge
+		// still reports it -- via jitter and loss, unchanged -- but the stall arm, whose
+		// cut is 2.5x higher, must not be what fires, or the cut is inside a distribution.
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+		assertEquals(NetworkQualityLevel.GOOD, classifier.update(stalled(199), ethernet).level)
+	}
+
+	@Test
+	fun theStallArmRecoversInTheSameEightSecondsAsTheTailArm()
+	{
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+		assertEquals(NetworkQualityLevel.POOR, classifier.update(stalled(3000), ethernet).level)
+		// The bad sample has to age out of the 5 s window first (4 more clean samples),
+		// then RECOVERY_SAMPLES confirm the step down to CONSTRAINED -- POOR never steps
+		// straight to GOOD (PLE-357) -- and 3 more confirm the step to GOOD: 4+3+3 = 10 s,
+		// deterministic, the same arithmetic PLE-357 and PLE-366 measured.
+		var level = NetworkQualityLevel.POOR
+		var seconds = 0
+		while(level != NetworkQualityLevel.GOOD && seconds < 30)
+		{
+			level = classifier.update(base, ethernet).level
+			seconds++
+		}
+		assertEquals(NetworkQualityLevel.GOOD, level)
+		assertEquals(10, seconds)
+	}
+
+	@Test
+	fun theSilenceFieldIsReadWhenTheWindowMaxIsAbsent()
+	{
+		// PLE-423's instantaneous reading, which is all an older native layer reports. It
+		// truncates an outage that ends between polls, so it is the fallback, not the input.
+		val classifier = NetworkQualityClassifier()
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { classifier.update(base, ethernet) }
+		assertEquals(NetworkQualityLevel.POOR,
+			classifier.update(base.copy(takionSilenceMillis = 2570), ethernet).level)
+	}
+
+	@Test
+	fun theStallArmLeavesTheOtherTwoArmsAlone()
+	{
+		// A clean window with no gap reported at all reads exactly as it did before this
+		// arm existed: the existing cuts are untouched (PLE-411).
+		val classifier = NetworkQualityClassifier()
+		var result = NetworkQualitySnapshot.UNKNOWN
+		repeat(NetworkQualityThresholds.FAST_WINDOW_SECONDS) { result = classifier.update(base, ethernet) }
+		assertEquals(NetworkQualityLevel.GOOD, result.level)
+		assertEquals(0.0, result.stallMillis, 0.001)
+		assertEquals(0.0, result.tailJitterRate, 0.001)
+		assertEquals(0.0, result.tailLossRate, 0.001)
+	}
 }

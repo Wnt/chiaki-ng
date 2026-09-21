@@ -353,6 +353,58 @@ static MunitResult test_takion_video_packet_jitter(const MunitParameter params[]
 	return MUNIT_OK;
 }
 
+// PLE-464: the quality classifier's only view of a total outage is the gap between two
+// inbound datagrams, so the fold that maintains it -- including its clock-race guard --
+// is worth pinning on the host, where no socket is needed.
+static MunitResult test_takion_receive_gap_fold(const MunitParameter params[], void *user)
+{
+	// Nothing received yet: there is no interval to measure, whatever "now" says.
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(0, 0, 5000), ==, 0);
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(1200, 0, 5000), ==, 1200);
+
+	// A plain gap, and one that does not beat the running maximum.
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(0, 1000, 1016), ==, 16);
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(3000, 1000, 1016), ==, 3000);
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(16, 1000, 4000), ==, 3000);
+
+	// The two stamps are read on different threads, so the newer one can read older.
+	// That is the clock, not a 25-day silence: the running maximum must not move.
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(16, 1000, 990), ==, 16);
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(0, 1000, 990), ==, 0);
+
+	// The 32-bit wrap is unsigned arithmetic and stays a small gap across it.
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(0, UINT32_MAX - 100, 100), ==, 201);
+
+	return MUNIT_OK;
+}
+
+// The window accumulator the stats poll drains: each window reports its own worst gap
+// exactly once, so a closed outage is still seen and is not re-reported forever after.
+static MunitResult test_takion_window_max_receive_gap(const MunitParameter params[], void *user)
+{
+	ChiakiTakion takion;
+	memset(&takion, 0, sizeof(takion));
+
+	munit_assert_uint32(chiaki_takion_take_window_max_receive_gap_ms(&takion), ==, 0);
+
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 1000, 1016);
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 1016, 4016);
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 4016, 4032);
+
+	munit_assert_uint32(chiaki_takion_take_window_max_receive_gap_ms(&takion), ==, 3000);
+	// Drained: the next window starts clean rather than inheriting the outage.
+	munit_assert_uint32(chiaki_takion_take_window_max_receive_gap_ms(&takion), ==, 0);
+
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 4032, 4048);
+	munit_assert_uint32(chiaki_takion_take_window_max_receive_gap_ms(&takion), ==, 16);
+
+	return MUNIT_OK;
+}
+
 MunitTest tests_takion[] = {
 	{
 		"/av_packet_parse",
@@ -381,6 +433,22 @@ MunitTest tests_takion[] = {
 	{
 		"/format_congestion",
 		test_takion_format_congestion,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/receive_gap_fold",
+		test_takion_receive_gap_fold,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/window_max_receive_gap",
+		test_takion_window_max_receive_gap,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

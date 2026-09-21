@@ -445,7 +445,15 @@ data class StreamStatsEvent(
 	/** PLE-403: false while videoPacketJitterMicros is one unsmoothed sample rather than an
 	 * average -- see the comment on CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES. Defaults true so
 	 * a caller not exercising warm-up (every existing test) keeps today's behaviour. */
-	val videoPacketJitterFilled: Boolean = true
+	val videoPacketJitterFilled: Boolean = true,
+	/** PLE-464: ms of silence on the console's socket still running at this 1 Hz poll. */
+	val takionSilenceMillis: Long = 0,
+	/** PLE-464: the longest gap between two inbound datagrams anywhere inside this window,
+	 * in ms -- including one that opened and closed between two polls, which
+	 * [takionSilenceMillis] cannot see. This is the classifier's only view of a total
+	 * outage: [takionPacketsLost] counts units missing from frames that partly arrived, so
+	 * a second in which *nothing* arrived registers as 0 received and 0 lost, i.e. clean. */
+	val takionMaxReceiveGapMillis: Long = 0
 ): Event()
 {
 	/** The round trip we can defend: the in-stream probe, else senkusha's startup ping, else nothing. */
@@ -612,7 +620,9 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		probeRttSamples: Long,
 		probeRttUnacked: Long,
 		probeRttAmbiguous: Long,
-		videoPacketJitterFilled: Boolean
+		videoPacketJitterFilled: Boolean,
+		takionSilenceMillis: Long,
+		takionMaxReceiveGapMillis: Long
 	)
 	{
 		event(StreamStatsEvent(
@@ -656,7 +666,9 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			probeRttSamples = probeRttSamples,
 			probeRttUnacked = probeRttUnacked,
 			probeRttAmbiguous = probeRttAmbiguous,
-			videoPacketJitterFilled = videoPacketJitterFilled
+			videoPacketJitterFilled = videoPacketJitterFilled,
+			takionSilenceMillis = takionSilenceMillis,
+			takionMaxReceiveGapMillis = takionMaxReceiveGapMillis
 		))
 	}
 

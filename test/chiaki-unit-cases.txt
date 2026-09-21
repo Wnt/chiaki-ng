@@ -25,6 +25,8 @@
 /chiaki/takion/av_packet_parse_real_video
 /chiaki/takion/send_buffer
 /chiaki/takion/format_congestion
+/chiaki/takion/receive_gap_fold
+/chiaki/takion/window_max_receive_gap
 /chiaki/link_watchdog/healthy_stream_never_expires
 /chiaki/link_watchdog/expires_once_the_deadline_passes
 /chiaki/link_watchdog/expires_exactly_once

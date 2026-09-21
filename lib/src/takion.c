@@ -295,6 +295,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	takion->video_reorder_timeouts = 0;
 	takion->last_receive_ms = 0;
 	takion->max_receive_gap_ms = 0;
+	takion->window_max_receive_gap_ms = 0;
 	takion->video_fps = info->video_fps;
 	memset(&takion->video_packet_jitter, 0, sizeof(takion->video_packet_jitter));
 
@@ -603,6 +604,25 @@ CHIAKI_EXPORT uint32_t chiaki_takion_get_last_receive_ms(ChiakiTakion *takion)
 CHIAKI_EXPORT uint32_t chiaki_takion_get_max_receive_gap_ms(ChiakiTakion *takion)
 {
 	return takion->max_receive_gap_ms;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_takion_take_window_max_receive_gap_ms(ChiakiTakion *takion)
+{
+	uint32_t gap_ms = takion->window_max_receive_gap_ms;
+	takion->window_max_receive_gap_ms = 0;
+	return gap_ms;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_takion_receive_gap_fold(uint32_t max_gap_ms, uint32_t previous_ms, uint32_t now_ms)
+{
+	if(!previous_ms) // nothing received yet: there is no gap to measure from
+		return max_gap_ms;
+	uint32_t gap_ms = now_ms - previous_ms;
+	// Same different-instants guard as the watchdog's: a gap in the top half of
+	// the range is the clock read backwards, not a 25-day silence.
+	if(gap_ms > (uint32_t)0x80000000u)
+		return max_gap_ms;
+	return gap_ms > max_gap_ms ? gap_ms : max_gap_ms;
 }
 
 CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
@@ -1553,14 +1573,12 @@ static void takion_note_receive(ChiakiTakion *takion)
 {
 	uint32_t now_ms = (uint32_t)chiaki_time_now_monotonic_ms();
 	uint32_t previous_ms = takion->last_receive_ms;
-	if(previous_ms)
-	{
-		uint32_t gap_ms = now_ms - previous_ms;
-		// Same different-instants guard as the watchdog's: a gap in the top half of
-		// the range is the clock read backwards, not a 25-day silence.
-		if(gap_ms <= (uint32_t)0x80000000u && gap_ms > takion->max_receive_gap_ms)
-			takion->max_receive_gap_ms = gap_ms;
-	}
+	takion->max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion->max_receive_gap_ms, previous_ms, now_ms);
+	// PLE-464: the same fold over a window the reader empties, so a gap that has
+	// already closed is still reportable once.
+	takion->window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion->window_max_receive_gap_ms, previous_ms, now_ms);
 	if(!now_ms) // 0 means "nothing received yet"; never hand that back as a stamp
 		now_ms = 1;
 	takion->last_receive_ms = now_ms;
