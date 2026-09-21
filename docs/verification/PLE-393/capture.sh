@@ -154,6 +154,13 @@ RECONNECT_COORDS=$(python3 "$HERE/ui_selector.py" "$OUT/A_02_dialog_ui.xml" "and
 A_INUSE_SEEN=0
 TAPPED_FOR_TEARDOWN_LINE=0
 ok=0
+# PLE-450: this loop retries the Reconnect tap past whatever the previous
+# attempt hit, silently -- classify each retried-past failure with the same
+# AvCap-window-aware classifier capture.sh's other retry loops use, and leave
+# a durable record naming what was retried past instead of only the terminal
+# already_in_use_seen flag in A_decoder_counts.txt.
+RETRY_LOG="$OUT/A_retry_classifications.tsv"
+[ -s "$RETRY_LOG" ] || printf 'utc\tteardown_line\tclass_code\tclassification\n' > "$RETRY_LOG"
 for _ in $(seq 1 45); do
   sleep 2
   CUR_TEARDOWN_LINE=$(tail -n +$((A_RECONNECT_LINE+1)) "$LOG" | grep -n "Shutting down JNI Session" | tail -1 | cut -d: -f1)
@@ -162,12 +169,14 @@ for _ in $(seq 1 45); do
     tail -n +$((CUR_TEARDOWN_LINE+1)) "$LOG" > "$OUT/A_post_reconnect_tail.txt"
     [ "$(grep -c "Feedback stats:" "$OUT/A_post_reconnect_tail.txt")" -ge 3 ] && { ok=1; break; }
     if [ "$CUR_TEARDOWN_LINE" != "$TAPPED_FOR_TEARDOWN_LINE" ]; then
-      tail -n +$((CUR_TEARDOWN_LINE+1)) "$LOG" | grep -qi "rp_in_use" && A_INUSE_SEEN=1
+      class=$(classify_connect_failure "$OUT/A_post_reconnect_tail.txt"); class_rc=$?
+      [ "$class_rc" = 11 ] && A_INUSE_SEEN=1
+      printf '%s\t%s\t%s\t%s\n' "$(date -u +%H:%M:%SZ)" "$CUR_TEARDOWN_LINE" "$class_rc" "$class" >> "$RETRY_LOG"
       "$ADB" shell uiautomator dump /data/local/tmp/chiaki-ab-window.xml >/dev/null 2>&1
       "$ADB" exec-out cat /data/local/tmp/chiaki-ab-window.xml > "$OUT/A_retry_at_line${CUR_TEARDOWN_LINE}_ui.xml" 2>/dev/null
       "$ADB" shell rm /data/local/tmp/chiaki-ab-window.xml >/dev/null 2>&1
       if RECONNECT_COORDS=$(python3 "$HERE/ui_selector.py" "$OUT/A_retry_at_line${CUR_TEARDOWN_LINE}_ui.xml" "android:id/button1" 2>/dev/null); then
-        log "scenario A: new teardown at log line $CUR_TEARDOWN_LINE, tapping Reconnect again (rp_in_use=$A_INUSE_SEEN)"
+        log "scenario A: new teardown at log line $CUR_TEARDOWN_LINE, tapping Reconnect again ($class)"
         # shellcheck disable=SC2086
         "$ADB" shell input tap $RECONNECT_COORDS
       fi

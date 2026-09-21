@@ -143,24 +143,40 @@ connect_attempt(){
   return 0
 }
 
+# PLE-450: retrying past a failed connect must not be silent. Classify the
+# failed attempt's own log (wedge-probe.sh's contract via capture-guard.sh)
+# and append it to a durable record before retrying, so an AvCap wedge that
+# clears on retry still leaves evidence it happened.
+RETRY_LOG="$OUT/connect_retries.tsv"
+[ -s "$RETRY_LOG" ] || printf 'utc\tfailed_attempt\tclass_code\tclassification\n' > "$RETRY_LOG"
+
 SESSION_LOG="$OUT/session_logcat.txt"
 connected=0
+prev_attempt_log=""
 for attempt in 1 2; do
   if [ "$attempt" -gt 1 ]; then
-    log "connect attempt 1 failed; waiting 60s before retry (PLE-357 evidence: a bare retry ~60s later cleared the same wedge)"
+    class=$(classify_connect_failure "$prev_attempt_log"); class_rc=$?
+    printf '%s\t%s\t%s\t%s\n' "$(date -u +%H:%M:%SZ)" "$((attempt-1))" "$class_rc" "$class" >> "$RETRY_LOG"
+    log "connect attempt $((attempt-1)) failed ($class); waiting 60s before retry (PLE-357 evidence: a bare retry ~60s later cleared the same wedge)"
     sleep 60
     exit_stream_gracefully || true
     "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null 2>&1 || true
     sleep 2
   fi
   attempt_log="$OUT/session_logcat_attempt${attempt}.txt"
+  prev_attempt_log="$attempt_log"
   if connect_attempt "$attempt" "$attempt_log"; then
     connected=1
     SESSION_LOG="$attempt_log"
     break
   fi
 done
-[ "$connected" = 1 ] || exit 4
+if [ "$connected" != 1 ]; then
+  class=$(classify_connect_failure "$prev_attempt_log"); class_rc=$?
+  printf '%s\t%s\t%s\t%s\n' "$(date -u +%H:%M:%SZ)" 2 "$class_rc" "$class" >> "$RETRY_LOG"
+  log "connect attempt 2 also failed ($class)"
+  exit 4
+fi
 log "streaming with stats; settling 20 s"
 sleep 20
 
