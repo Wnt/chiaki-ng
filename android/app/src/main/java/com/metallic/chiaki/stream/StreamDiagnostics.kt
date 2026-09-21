@@ -59,7 +59,7 @@ internal object StreamDiagnosticsFormatter
 			Locale.US,
 			"stream %.1f fps | decoder %.1f fps\n" +
 				"decode %.2f ms mean | %.2f ms p95 | q %d\n" +
-				"drop-in %d | late %d | lost %d | reorder %d\n" +
+				"drop-in %d | late %d | lost %d | discarded-for-idr %d | reorder %d\n" +
 				"network %s (%s) | %.2f/%.2f Mbps actual/target\n" +
 				"loss %.2f/%.2f%% measured/reported | RTT %.2f ms %s (ambiguous %d) | jitter %.2f ms | console-rtt %.1f (unverified)\n" +
 				"Takion %.1f pkt/s | loss %.2f%% | feedback %.1f pkt/s | server-loss %d\n" +
@@ -76,6 +76,7 @@ internal object StreamDiagnosticsFormatter
 			stats?.decoderInputFramesDropped ?: 0L,
 			stats?.presenterFramesDropped ?: 0L,
 			stats?.videoFramesLost ?: 0L,
+			stats?.videoFramesDiscardedForIdr ?: 0L,
 			stats?.reorderQueueTimeouts ?: 0L,
 			quality.level.name,
 			cause,

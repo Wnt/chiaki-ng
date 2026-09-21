@@ -66,6 +66,14 @@ typedef struct chiaki_video_receiver_t
 	int32_t frames_lost_total; // each lost frame index once, including frames no unit of which arrived (PLE-474)
 	ChiakiFrameLossTracker frame_loss_tracker;
 	uint64_t frames_received_total;
+	/**
+	 * PLE-485: frames that arrived and were fully assembled, but were thrown away by
+	 * chiaki_video_receiver_flush_frame() because they were a P-frame decoded while still
+	 * waiting for an IDR ("Skipping P-frame"). These are not transport loss -- every unit
+	 * arrived -- so they are deliberately kept out of frames_lost_total, which PLE-474 and
+	 * PLE-475 pinned to mean exactly that.
+	 */
+	uint64_t frames_discarded_for_idr_total;
 	int32_t reference_frames[16];
 	ChiakiBitstream bitstream;
 	ChiakiMutex waiting_for_idr_mutex;
@@ -90,6 +98,7 @@ CHIAKI_EXPORT void chiaki_video_receiver_set_waiting_for_idr(ChiakiVideoReceiver
 CHIAKI_EXPORT bool chiaki_video_receiver_get_waiting_for_idr(ChiakiVideoReceiver *video_receiver);
 CHIAKI_EXPORT int32_t chiaki_video_receiver_get_frames_lost_total(ChiakiVideoReceiver *video_receiver);
 CHIAKI_EXPORT uint64_t chiaki_video_receiver_get_frames_received_total(ChiakiVideoReceiver *video_receiver);
+CHIAKI_EXPORT uint64_t chiaki_video_receiver_get_frames_discarded_for_idr_total(ChiakiVideoReceiver *video_receiver);
 
 static inline ChiakiVideoReceiver *chiaki_video_receiver_new(struct chiaki_session_t *session, ChiakiPacketStats *packet_stats)
 {

@@ -433,6 +433,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.rtt_us = session->rtt_us_measured ? session->rtt_us : 0;
 			stats_event.stream_stats.stream_frames = stream_frames - previous_stream_frames;
 			stats_event.stream_stats.video_frames_lost = (uint64_t)chiaki_video_receiver_get_frames_lost_total(stream_connection->video_receiver);
+			stats_event.stream_stats.video_frames_discarded_for_idr = chiaki_video_receiver_get_frames_discarded_for_idr_total(stream_connection->video_receiver);
 			stats_event.stream_stats.video_reorder_timeouts = chiaki_takion_get_video_reorder_timeouts(&stream_connection->takion);
 			stats_event.stream_stats.video_packet_jitter_us = chiaki_takion_get_video_packet_jitter_us(&stream_connection->takion);
 			stats_event.stream_stats.video_packet_jitter_raw_us = chiaki_takion_get_video_packet_jitter_raw_us(&stream_connection->takion);

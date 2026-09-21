@@ -16,6 +16,7 @@ set(CHIAKI_UNIT_SOURCES
 				takion.c
 				linkwatchdog.c
 				frameloss.c
+				videoreceiver.c
 				seqnum.c
 				keystate.c
 				reorderqueue.c

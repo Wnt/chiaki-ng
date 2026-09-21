@@ -193,6 +193,13 @@ typedef struct chiaki_stream_stats_event_t
 	 * resumes, not while it lasts.
 	 */
 	uint64_t video_frames_lost;
+	/**
+	 * PLE-485: session-cumulative, like video_frames_lost above -- frames that arrived
+	 * intact and were fully assembled, but were thrown away because they were a P-frame
+	 * decoded while the receiver was still waiting for an IDR. Not transport loss, so kept
+	 * out of video_frames_lost; nothing reads this yet (that is PLE-486's question).
+	 */
+	uint64_t video_frames_discarded_for_idr;
 	uint64_t video_reorder_timeouts;
 	uint64_t video_packet_jitter_us; // PLE-356: frame-boundary delay variation; drives the badge
 	uint64_t video_packet_jitter_raw_us; // superseded per-packet EWMA, logged for comparison only

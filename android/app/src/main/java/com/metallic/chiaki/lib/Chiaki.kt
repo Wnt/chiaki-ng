@@ -453,7 +453,12 @@ data class StreamStatsEvent(
 	 * [takionSilenceMillis] cannot see. This is the classifier's only view of a total
 	 * outage: [takionPartialFrameUnitsMissing] counts units missing from frames that partly arrived, so
 	 * a second in which *nothing* arrived registers as 0 received and 0 lost, i.e. clean. */
-	val takionMaxReceiveGapMillis: Long = 0
+	val takionMaxReceiveGapMillis: Long = 0,
+	/** PLE-485: session-cumulative count of frames that arrived intact and were fully
+	 * assembled, but discarded because they were a P-frame decoded while still waiting for
+	 * an IDR. Not transport loss, so kept out of [videoFramesLost]. Nothing reads this yet
+	 * -- whether the classifier should is PLE-486's question. */
+	val videoFramesDiscardedForIdr: Long = 0
 ): Event()
 {
 	/** The round trip we can defend: the in-stream probe, else senkusha's startup ping, else nothing. */
@@ -622,7 +627,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		probeRttAmbiguous: Long,
 		videoPacketJitterFilled: Boolean,
 		takionSilenceMillis: Long,
-		takionMaxReceiveGapMillis: Long
+		takionMaxReceiveGapMillis: Long,
+		videoFramesDiscardedForIdr: Long
 	)
 	{
 		event(StreamStatsEvent(
@@ -668,7 +674,8 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			probeRttAmbiguous = probeRttAmbiguous,
 			videoPacketJitterFilled = videoPacketJitterFilled,
 			takionSilenceMillis = takionSilenceMillis,
-			takionMaxReceiveGapMillis = takionMaxReceiveGapMillis
+			takionMaxReceiveGapMillis = takionMaxReceiveGapMillis,
+			videoFramesDiscardedForIdr = videoFramesDiscardedForIdr
 		))
 	}
 
