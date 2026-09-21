@@ -406,6 +406,13 @@ typedef struct chiaki_session_t
 	ChiakiControllerState controller_state;
 } ChiakiSession;
 
+/**
+ * PLE-499: MTU Senkusha's failure path falls back to for a local interface MTU
+ * (interface_mtu <= 0 means undeterminable). Exposed for host testing; production
+ * code reaches it only through the Senkusha-failed branch in session.c.
+ */
+CHIAKI_EXPORT uint32_t chiaki_session_mtu_fallback(ChiakiLog *log, int interface_mtu);
+
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_init(ChiakiSession *session, ChiakiConnectInfo *connect_info, ChiakiLog *log);
 CHIAKI_EXPORT void chiaki_session_fini(ChiakiSession *session);
 CHIAKI_EXPORT ChiakiErrorCode chiaki_session_start(ChiakiSession *session);
