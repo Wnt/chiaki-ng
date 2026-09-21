@@ -13,12 +13,25 @@ of silent: it reads every `PHASE_BEGIN`/`PHASE_END` pair in a capture's
 that was reused across a retry -- e.g. build/captures/ple403 -- is checked once
 per occurrence, not just its last one), and for each pair:
 
-  * a "blip" phase (profile name contains "blip") must show close to the
-    expected number of excursions for its duration -- one every ~20s, the
-    period `blip_loop` cycles on. Tolerance is +/-1 cycle: tight enough that a
-    phase which only caught 3 of 6 expected excursions still fails, loose
-    enough to absorb the +/-1 boundary jitter every real capture on this box
-    shows (a cycle landing 1s either side of a phase edge, PLE-411 section 3).
+  * a *dynamic* phase -- one whose profile is marked `dynamic` in
+    scripts/net/impair_profiles.py -- must show close to the expected number
+    of excursions for its duration, one every `cycle_seconds`. Tolerance is
+    +/-1 cycle: tight enough that a phase which only caught 3 of 6 expected
+    excursions still fails, loose enough to absorb the +/-1 boundary jitter
+    every real capture on this box shows (a cycle landing 1s either side of a
+    phase edge, PLE-411 section 3).
+  * ...and its excursions must be the *width* that profile's pulse implies
+    (PLE-404). Counting alone cannot tell two dynamic profiles apart: a
+    1.2 s outage (`roam-1200ms`) and a 200 ms hitch (`blip-200ms`) both fire
+    once every 20 s, so a capture that claims the first while the second was
+    actually in force passes a count-only check. The expected width comes from
+    the profile's own `on_seconds` rather than from this file: a pulse of P
+    seconds sampled at 1 Hz occupies ceil(P) samples, and the band allows two
+    more for a pulse straddling a tick and for the estimator's own settling.
+    Checked on the median excursion width so one merged pair cannot fail a
+    phase. Across every blip-200ms capture on this box (ple356, ple366,
+    ple403, ple411, ple423-blip, ple423-impair) every excursion is exactly 1
+    sample wide, which is what ceil(0.2)=1 predicts.
   * every phase whose name contains "clean" must show *zero* excursions after
     a short settle window (default 5s, covering the netem qdisc-switch
     settling documented in PLE-366/analyze.py) -- any excursion inside a
@@ -27,6 +40,21 @@ per occurrence, not just its last one), and for each pair:
     also didn't stop on command. Other statically-impaired profiles (5g,
     wifi-slow, loss-2, ...) are supposed to show sustained impairment
     throughout and are not checked -- out of scope for this ticket.
+
+PLE-404 added a second, independent witness for one specific reason. The check
+above reads the *app's* metrics, so it cannot tell "the impairment never
+happened" from "the impairment happened and the app's metrics are blind to
+it" -- and the second is real: five 1.2 s total outages (`roam-1200ms`,
+build/captures/ple404) moved `video received` from 60/s to 0-20/s and lost
+4-13 frames each, while the three numbers the badge reads (takion loss,
+packet jitter, probe RTT) stayed at their clean-phase values in four of the
+five. Failing that capture as "the loop died" would have been wrong, and
+retrying it forever would never fix it. So when the metric excursions are not
+there, the phone's own `ping` log -- which every capture.sh on this box
+already records alongside the stream, against the console, over the same
+impaired leg -- is consulted as the witness of what the *wire* did. Cadence
+present on the wire but absent from the metrics is reported as exactly that,
+and passes; absent from both is a dead loop, and still fails.
 
 An "excursion" here is our own raw-sample threshold (jitter_ms >= 3.0 or
 loss_pct >= 2.0, adjacent hits within 2s merged into one event) -- not
@@ -44,7 +72,10 @@ Exit 0 and a pass report if every phase matches its expected pattern, exit 1
 and a report naming every failing phase otherwise.
 """
 import argparse
+import math
 import os
+import re
+import statistics
 import sys
 
 REPO = os.environ.get("REPO", "/home/wnt/gta6")
@@ -54,6 +85,73 @@ if not os.path.isfile(_FB_MODULE):
               "(set REPO= to override)")
 sys.path.insert(0, os.path.dirname(_FB_MODULE))
 import feedback_stats as fb  # noqa: E402
+
+# PLE-404: the dynamic profiles and their pulse shapes are the impairment
+# tool's own table, not a copy kept here -- a new dynamic profile teaches this
+# guard its shape by being defined there (scripts/net/impair_profiles.py has
+# on_netem/cycle_seconds/on_seconds, and scripts/net/test_impair.py holds the
+# guest script's table against it).
+_PROFILES_MODULE = os.path.join(REPO, "scripts", "net", "impair_profiles.py")
+if not os.path.isfile(_PROFILES_MODULE):
+    sys.exit(f"verify-blip-pattern.py: impair_profiles.py not found at {_PROFILES_MODULE} "
+              "(set REPO= to override)")
+sys.path.insert(0, os.path.dirname(_PROFILES_MODULE))
+import impair_profiles  # noqa: E402
+
+WIDTH_SLACK_SAMPLES = 2
+_RE_PING = re.compile(r"^\[(\d+\.\d+)\].*icmp_seq=(\d+)")
+
+
+def profile_of(tag):
+    """The impairment profile a phase tag names, or None.
+
+    Capture tags are `NN_<profile>` (`02_blip-200ms`), the form every
+    capture.sh on this box builds them in.
+    """
+    name = tag.split("_", 1)[1] if "_" in tag else tag
+    return impair_profiles.PROFILES.get(name)
+
+
+def expected_width_band(profile):
+    """[min, max] excursion width in samples for one pulse of `profile`."""
+    low = max(1, math.ceil(profile.on_seconds))
+    return low, low + WIDTH_SLACK_SAMPLES
+
+
+def excursion_widths(excursions):
+    """Each excursion's width in 1 Hz samples (a single-sample hit is 1)."""
+    return [round(end - start) + 1 for start, end in excursions]
+
+
+def load_ping_gaps(capture_dir, ping_name="phone_ping.txt"):
+    """Outages seen by the phone's own ping to the console, as (start, end) spans.
+
+    capture.sh runs `ping -D -i 1` from the phone to the PS5 for the whole
+    capture, over the same impaired leg the stream uses, and its timestamps
+    come from the same clock as logcat's. A missing `icmp_seq` run is an
+    outage the wire actually had, independent of anything the app measured.
+    Returns [] (not an error) when the file is absent: an older capture simply
+    has no witness, and the metric check stands alone as before.
+    """
+    path = os.path.join(capture_dir, ping_name)
+    if not os.path.isfile(path):
+        return None
+    seen = {}
+    with open(path, errors="replace") as handle:
+        for line in handle:
+            m = _RE_PING.search(line)
+            if m:
+                seen[int(m.group(2))] = float(m.group(1))
+    if len(seen) < 2:
+        return None
+    order = sorted(seen)
+    gaps = []
+    for previous, current in zip(order, order[1:]):
+        if current == previous + 1:
+            continue
+        # The gap spans from the last reply before it to the first after it.
+        gaps.append((seen[previous], seen[current]))
+    return gaps
 
 
 def load_phase_occurrences(capture_dir):
@@ -80,7 +178,8 @@ def load_phase_occurrences(capture_dir):
 
 
 def check_dynamic_phase(tag, begin, end, samples, *, cycle_seconds, tolerance,
-                         jitter_threshold_ms, loss_threshold_pct, merge_gap_s):
+                         jitter_threshold_ms, loss_threshold_pct, merge_gap_s,
+                         profile=None, ping_gaps=None):
     window = [s for s in samples if begin <= s[0] <= end]
     if not window:
         return False, f"{tag}: no raw samples in [{begin:.1f}, {end:.1f}] " \
@@ -90,11 +189,42 @@ def check_dynamic_phase(tag, begin, end, samples, *, cycle_seconds, tolerance,
     excursions = fb.find_excursions(window, jitter_threshold_ms, loss_threshold_pct, merge_gap_s)
     got = len(excursions)
     lo, hi = expected - tolerance, expected + tolerance
-    if lo <= got <= hi:
-        return True, f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} +/-{tolerance}) -- OK"
-    return False, (f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} "
-                    f"+/-{tolerance}) -- the dynamic profile's cyclic pattern is not present, "
-                    "this capture measured something other than what it claims")
+    if not lo <= got <= hi:
+        # PLE-404: before calling this a dead loop, ask the wire.
+        if ping_gaps is not None:
+            on_wire = [g for g in ping_gaps if begin <= g[0] <= end]
+            if lo <= len(on_wire) <= hi:
+                return True, (
+                    f"{tag}: only {got} excursions in the app's metrics (expected {expected} "
+                    f"+/-{tolerance}), but the phone's ping to the console lost contact "
+                    f"{len(on_wire)} times in the same window -- the impairment ran, the "
+                    "metrics this capture reads are blind to it. That is a measurement "
+                    "result, not a broken capture; read it as one")
+            return False, (f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} "
+                            f"+/-{tolerance}), and the phone's ping shows {len(on_wire)} "
+                            "outage(s) in the same window -- neither the metrics nor the wire "
+                            "show the profile's cadence, so the cycling loop was not running")
+        return False, (f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} "
+                        f"+/-{tolerance}) -- the dynamic profile's cyclic pattern is not present, "
+                        "this capture measured something other than what it claims")
+    widths = excursion_widths(excursions)
+    if profile is None or profile.on_seconds is None:
+        # A phase whose tag names no known profile (an old capture, a renamed
+        # profile): the count is all this can check, and saying so is better
+        # than silently checking less than the caller thinks.
+        return True, (f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} "
+                       f"+/-{tolerance}), widths {widths} -- OK (no profile table entry, "
+                       "width not checked)")
+    low, high = expected_width_band(profile)
+    median_width = statistics.median(widths)
+    if not low <= median_width <= high:
+        return False, (f"{tag}: {got} excursions in {duration:.1f}s (count OK) but their widths "
+                        f"are {widths} -- median {median_width:g} samples, expected {low}-{high} "
+                        f"for a {profile.on_seconds:g}s pulse. The cadence is right and the shape "
+                        "is not: this is a different impairment than the phase claims")
+    return True, (f"{tag}: {got} excursions in {duration:.1f}s (expected {expected} "
+                   f"+/-{tolerance}), widths {widths} (expected {low}-{high} for a "
+                   f"{profile.on_seconds:g}s pulse) -- OK")
 
 
 def check_static_phase(tag, begin, end, samples, *, settle_seconds,
@@ -114,15 +244,28 @@ def verify(capture_dir, *, cycle_seconds, tolerance, jitter_threshold_ms, loss_t
     if not occurrences:
         return False, ["no PHASE_BEGIN/PHASE_END pairs found in phases.txt"]
     samples = fb.load_raw_samples(capture_dir)
+    ping_gaps = load_ping_gaps(capture_dir)
     ok = True
     lines = []
     for tag, begin, end in occurrences:
-        if dynamic_marker in tag:
+        profile = profile_of(tag)
+        # The profile table decides what a phase is; the "blip" string match
+        # is the fallback for a tag the table does not know (PLE-404 -- before
+        # this, a dynamic profile whose name did not contain "blip" fell
+        # through to "not checked", which is the exemption PLE-418 exists to
+        # refuse).
+        is_dynamic = profile.dynamic if profile is not None else dynamic_marker in tag
+        is_clean = (profile is not None and not profile.netem and profile.rate is None) \
+            if profile is not None else clean_marker in tag
+        if is_dynamic:
             passed, line = check_dynamic_phase(
-                tag, begin, end, samples, cycle_seconds=cycle_seconds, tolerance=tolerance,
+                tag, begin, end, samples,
+                cycle_seconds=(profile.cycle_seconds if profile is not None
+                                and profile.cycle_seconds else cycle_seconds),
+                tolerance=tolerance,
                 jitter_threshold_ms=jitter_threshold_ms, loss_threshold_pct=loss_threshold_pct,
-                merge_gap_s=merge_gap_s)
-        elif clean_marker in tag:
+                merge_gap_s=merge_gap_s, profile=profile, ping_gaps=ping_gaps)
+        elif is_clean:
             passed, line = check_static_phase(
                 tag, begin, end, samples, settle_seconds=settle_seconds,
                 jitter_threshold_ms=jitter_threshold_ms, loss_threshold_pct=loss_threshold_pct,
