@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PLE-483: one of the three checkable display-mode rows (Fit/Zoom/Stretch). -->
+<CheckedTextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="48dp"
+    android:gravity="center_vertical"
+    android:paddingStart="20dp"
+    android:paddingEnd="20dp"
+    android:checkMark="?android:attr/listChoiceIndicatorSingle"
+    android:textAppearance="?attr/textAppearanceBodyLarge"
+    android:textColor="?attr/colorOnSurface"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true" />

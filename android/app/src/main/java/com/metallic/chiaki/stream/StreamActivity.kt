@@ -20,13 +20,14 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
-import android.text.SpannableString
-import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.*
+import android.widget.CheckedTextView
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.PopupMenu
+import android.widget.LinearLayout
+import android.widget.PopupWindow
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -951,48 +952,77 @@ class StreamActivity : AppCompatActivity()
 	// packed into a 3-button horizontal dock anchored to the screen's top-right corner -- there is
 	// no room in it for mode + peer address + MTU alongside the existing RTT/jitter/loss line
 	// without the dock's card overflowing off-screen at phone width in portrait. This menu is the
-	// ticket's named alternative surface: each fact gets its own disabled (read-only) row, which
-	// wraps and lays out safely regardless of phone width or orientation.
+	// ticket's named alternative surface: each fact gets its own row, which wraps and lays out
+	// safely regardless of phone width or orientation.
+	//
+	// PLE-483: a stock android.widget.PopupMenu has no res/layout of its own -- its item height
+	// and positioning are fixed by the system's dropdown-list style, and it silently turned
+	// scrollable once PLE-473 added a seventh row, with no visible cue that a row was off-screen
+	// in landscape (measured: the six-row popup already used 1080 of the ~1089 px available below
+	// the anchor in landscape; a seventh row cannot fit there at all). This builds the same rows
+	// into a custom PopupWindow over popup_stream_menu.xml instead, so the container can be sized
+	// to the space actually available and, if the row count ever outgrows that, scrolls with a
+	// scrollbar that never fades rather than clipping invisibly.
 	private fun showDisplayModeMenu()
 	{
-		PopupMenu(this, binding.streamMenuButton).also { menu ->
-			menu.inflate(R.menu.stream_display_mode)
-			menu.menu.findItem(when(streamTransformMode)
-			{
-				TransformMode.FIT -> R.id.display_mode_normal_button
-				TransformMode.ZOOM -> R.id.display_mode_zoom_button
-				TransformMode.STRETCH -> R.id.display_mode_stretch_button
-			}).isChecked = true
-			addConnectionInfoItems(menu.menu)
-			menu.setOnMenuItemClickListener { item ->
-				if(!item.isEnabled)
-					return@setOnMenuItemClickListener true
-				streamTransformMode = TransformMode.fromButton(item.itemId)
-				item.isChecked = true
+		val anchor = binding.streamMenuButton
+		val content = layoutInflater.inflate(R.layout.popup_stream_menu, null)
+		val rows = content.findViewById<LinearLayout>(R.id.streamMenuRows)
+
+		val popup = PopupWindow(content, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
+		popup.isOutsideTouchable = true
+		popup.isFocusable = true
+
+		val modeRows = mutableListOf<CheckedTextView>()
+		fun addToggleRow(labelRes: Int, mode: TransformMode)
+		{
+			val row = layoutInflater.inflate(R.layout.popup_stream_menu_toggle_row, rows, false) as CheckedTextView
+			row.text = getString(labelRes)
+			row.isChecked = streamTransformMode == mode
+			row.setOnClickListener {
+				streamTransformMode = mode
+				modeRows.forEach { it.isChecked = false }
+				row.isChecked = true
 				adjustStreamViewAspect()
 				showOverlay()
-				true
+				popup.dismiss()
 			}
-			menu.show()
+			modeRows += row
+			rows.addView(row)
 		}
+		addToggleRow(R.string.stream_display_fit, TransformMode.FIT)
+		addToggleRow(R.string.stream_display_zoom, TransformMode.ZOOM)
+		addToggleRow(R.string.stream_display_stretch, TransformMode.STRETCH)
+		addConnectionInfoRows(rows)
+
+		// Cap the popup at the room actually available below the anchor so the ScrollView inside
+		// popup_stream_menu.xml engages instead of the window overflowing past the screen edge.
+		content.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+		val anchorLocation = IntArray(2)
+		anchor.getLocationOnScreen(anchorLocation)
+		val bottomMargin = resources.getDimensionPixelSize(R.dimen.stream_menu_bottom_margin)
+		val available = resources.displayMetrics.heightPixels - (anchorLocation[1] + anchor.height) - bottomMargin
+		popup.height = minOf(content.measuredHeight, available)
+
+		popup.showAsDropDown(anchor)
 		showOverlay()
 	}
 
-	// PLE-456: PopupMenu's stock disabled-item styling dims the title to the theme's
+	// PLE-456: PopupMenu's stock disabled-item styling dimmed the title to the theme's
 	// disabled-text colour (measured #616268 on this popup's #121318 background, 3.05:1 --
-	// fails WCAG AA's 4.5:1). These rows are read-only, not disabled: isEnabled=false only
-	// exists to keep them non-interactive (see the click listener below), so the title gets
-	// an explicit colorOnSurface span to match the value text's colour, which already passes.
-	private fun addConnectionInfoItems(menu: Menu)
+	// fails WCAG AA's 4.5:1). These rows are read-only, not disabled, so they get an explicit
+	// colorOnSurface text colour to match the value text's colour, which already passes.
+	private fun addConnectionInfoRows(rows: LinearLayout)
 	{
 		val readOnlyLabelColor = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
 		val snapshot = connectionMode
 		val lines = connectionInfoLines(snapshot) + listOfNotNull(stallInfoLine())
 		for(line in lines)
 		{
-			val title = SpannableString(line)
-			title.setSpan(ForegroundColorSpan(readOnlyLabelColor), 0, title.length, 0)
-			menu.add(Menu.NONE, Menu.NONE, Menu.NONE, title).isEnabled = false
+			val row = layoutInflater.inflate(R.layout.popup_stream_menu_info_row, rows, false) as TextView
+			row.text = line
+			row.setTextColor(readOnlyLabelColor)
+			rows.addView(row)
 		}
 	}
 
@@ -1335,18 +1365,7 @@ enum class TransformMode
 {
 	FIT,
 	STRETCH,
-	ZOOM;
-
-	companion object
-	{
-		fun fromButton(displayModeButtonId: Int)
-			= when (displayModeButtonId)
-			{
-				R.id.display_mode_stretch_button -> STRETCH
-				R.id.display_mode_zoom_button -> ZOOM
-				else -> FIT
-			}
-	}
+	ZOOM
 }
 
 class TextureViewTransform(private val videoProfile: ConnectVideoProfile, private val textureView: TextureView)

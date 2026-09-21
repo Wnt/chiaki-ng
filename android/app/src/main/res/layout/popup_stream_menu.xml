@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     PLE-483: replaces the stock android.widget.PopupMenu (no res/layout of its
+     own, height fixed by the system's dropdown list item style) with a custom
+     scrollable container. The list can outgrow the landscape window's available
+     height; when it does, this ScrollView keeps every row reachable with a
+     scrollbar that never fades (android:fadeScrollbars="false") and a fading
+     content edge, so the overflow is visible the instant the popup opens
+     instead of only discoverable by touching it.
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/streamMenuScroll"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:background="@drawable/popup_stream_menu_background"
+    android:elevation="8dp"
+    android:scrollbars="vertical"
+    android:scrollbarStyle="outsideOverlay"
+    android:fadeScrollbars="false"
+    android:requiresFadingEdge="vertical"
+    android:fadingEdgeLength="24dp"
+    android:overScrollMode="ifContentScrolls"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:id="@+id/streamMenuRows"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="240dp"
+        android:orientation="vertical" />
+
+</ScrollView>
