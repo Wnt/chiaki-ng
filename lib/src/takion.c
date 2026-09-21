@@ -782,7 +782,22 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_raw(ChiakiTakion *takion, const
 	int r = send(takion->sock, buf, buf_size, 0);
 	if(r < 0)
 	{
+		// PLE-490: Senkusha must tell "this size does not fit" from "the peer is gone";
+		// read the error before logging can clobber it.
+#ifdef _WIN32
+		int errsv = WSAGetLastError();
+		bool too_big = errsv == WSAEMSGSIZE;
+		bool refused = errsv == WSAECONNREFUSED || errsv == WSAECONNRESET;
+#else
+		int errsv = errno;
+		bool too_big = errsv == EMSGSIZE;
+		bool refused = errsv == ECONNREFUSED;
+#endif
 		CHIAKI_LOGE(takion->log, "Takion failed to send raw: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
+		if(too_big)
+			return CHIAKI_ERR_OVERFLOW;
+		if(refused)
+			return CHIAKI_ERR_CONNECTION_REFUSED;
 		return CHIAKI_ERR_NETWORK;
 	}
 	return CHIAKI_ERR_SUCCESS;

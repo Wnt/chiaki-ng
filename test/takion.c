@@ -11,12 +11,10 @@
 
 #include "test_log.h"
 
+#include "fake_console.h"
+
 #if defined(__linux__)
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
+#include <poll.h>
 #endif
 
 MunitResult test_network_stats_all(void);
@@ -456,10 +454,6 @@ static MunitResult test_takion_window_max_receive_gap_reset_race(const MunitPara
 }
 
 #if defined(__linux__)
-// PLE-490: a fake console on loopback, just enough of one to take a real ChiakiTakion
-// through its handshake. The takion thread is the real one; nothing here is mocked.
-#define FAKE_CONSOLE_TAG_REMOTE 0x2c25ada
-
 typedef struct takion_teardown_probe_t
 {
 	ChiakiMutex mutex;
@@ -490,43 +484,6 @@ static bool takion_teardown_probe_disconnected(void *user)
 	return ((TakionTeardownProbe *)user)->disconnected;
 }
 
-static void fake_console_write_header(uint8_t *buf, uint32_t tag, uint8_t chunk_type, size_t payload_size)
-{
-	buf[0] = 0; // TAKION_PACKET_TYPE_CONTROL
-	memset(buf + 1, 0, 0x10);
-	*((chiaki_unaligned_uint32_t *)(buf + 1)) = htonl(tag);
-	buf[1 + 0xc] = chunk_type;
-	*((chiaki_unaligned_uint16_t *)(buf + 1 + 0xe)) = htons((uint16_t)(payload_size + 4));
-}
-
-// Answers INIT with INIT_ACK and COOKIE with COOKIE_ACK.
-static void fake_console_handshake(int console_sock)
-{
-	uint8_t buf[1500];
-	CHIAKI_SSIZET_TYPE r = recv(console_sock, buf, sizeof(buf), 0);
-	munit_assert_int((int)r, ==, 1 + 0x10 + 0x10);
-	munit_assert_uint8(buf[1 + 0xc], ==, 1); // INIT
-	uint32_t tag_local = ntohl(*((chiaki_unaligned_uint32_t *)(buf + 1 + 0x10)));
-
-	uint8_t init_ack[1 + 0x10 + 0x10 + 0x20] = { 0 };
-	fake_console_write_header(init_ack, tag_local, 2, 0x10 + 0x20);
-	uint8_t *pl = init_ack + 1 + 0x10;
-	*((chiaki_unaligned_uint32_t *)(pl + 0)) = htonl(FAKE_CONSOLE_TAG_REMOTE);
-	*((chiaki_unaligned_uint32_t *)(pl + 4)) = htonl(0x19000);
-	*((chiaki_unaligned_uint16_t *)(pl + 8)) = htons(0x64);
-	*((chiaki_unaligned_uint16_t *)(pl + 0xa)) = htons(0x64);
-	*((chiaki_unaligned_uint32_t *)(pl + 0xc)) = htonl(FAKE_CONSOLE_TAG_REMOTE);
-	munit_assert_int((int)send(console_sock, init_ack, sizeof(init_ack), 0), ==, (int)sizeof(init_ack));
-
-	r = recv(console_sock, buf, sizeof(buf), 0);
-	munit_assert_int((int)r, ==, 1 + 0x10 + 0x20);
-	munit_assert_uint8(buf[1 + 0xc], ==, 0xa); // COOKIE
-
-	uint8_t cookie_ack[1 + 0x10];
-	fake_console_write_header(cookie_ack, tag_local, 0xb, 0);
-	munit_assert_int((int)send(console_sock, cookie_ack, sizeof(cookie_ack), 0), ==, (int)sizeof(cookie_ack));
-}
-
 // PLE-490: the send buffer is owned by the takion thread, which finalises it the
 // moment its receive loop breaks -- on any recv error, not only on close. The data
 // send API stays callable by the owner until chiaki_takion_close(), and used to push
@@ -540,24 +497,8 @@ static void fake_console_handshake(int console_sock)
 // fails with EBADF before it ever reaches the buffer.
 static MunitResult test_takion_send_after_receive_thread_exit(const MunitParameter params[], void *user)
 {
-	int console_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	munit_assert_int(console_sock, >=, 0);
-	struct timeval tv = { .tv_sec = 5, .tv_usec = 0 }; // guard against a hang, not a timing assumption
-	munit_assert_int(setsockopt(console_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)), ==, 0);
-	struct sockaddr_in console_addr = { 0 };
-	console_addr.sin_family = AF_INET;
-	console_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	munit_assert_int(bind(console_sock, (struct sockaddr *)&console_addr, sizeof(console_addr)), ==, 0);
-	socklen_t console_addr_len = sizeof(console_addr);
-	munit_assert_int(getsockname(console_sock, (struct sockaddr *)&console_addr, &console_addr_len), ==, 0);
-
-	chiaki_socket_t client_sock = socket(AF_INET, SOCK_DGRAM, 0);
-	munit_assert_int(client_sock, >=, 0);
-	munit_assert_int(connect(client_sock, (struct sockaddr *)&console_addr, sizeof(console_addr)), ==, 0);
-	struct sockaddr_in client_addr;
-	socklen_t client_addr_len = sizeof(client_addr);
-	munit_assert_int(getsockname(client_sock, (struct sockaddr *)&client_addr, &client_addr_len), ==, 0);
-	munit_assert_int(connect(console_sock, (struct sockaddr *)&client_addr, sizeof(client_addr)), ==, 0);
+	FakeConsole console;
+	fake_console_open(&console);
 
 	TakionTeardownProbe probe = { 0 };
 	munit_assert_int(chiaki_mutex_init(&probe.mutex, false), ==, CHIAKI_ERR_SUCCESS);
@@ -575,9 +516,9 @@ static MunitResult test_takion_send_after_receive_thread_exit(const MunitParamet
 	ChiakiTakion takion;
 	memset(&takion, 0, sizeof(takion));
 	chiaki_key_state_init(&takion.key_state);
-	munit_assert_int(chiaki_takion_connect(&takion, &info, &client_sock), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(chiaki_takion_connect(&takion, &info, &console.client_sock), ==, CHIAKI_ERR_SUCCESS);
 
-	fake_console_handshake(console_sock);
+	fake_console_handshake(&console);
 
 	chiaki_mutex_lock(&probe.mutex);
 	chiaki_cond_timedwait_pred(&probe.cond, &probe.mutex, 5000, takion_teardown_probe_connected, &probe);
@@ -587,12 +528,12 @@ static MunitResult test_takion_send_after_receive_thread_exit(const MunitParamet
 	// A live takion accepts data.
 	uint8_t payload[] = { 0xde, 0xad, 0xbe, 0xef };
 	munit_assert_int(chiaki_takion_send_message_data(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_SUCCESS);
-	munit_assert_int((int)recv(console_sock, (uint8_t[1500]){ 0 }, 1500, 0), >, 0);
+	munit_assert_int(fake_console_recv(&console), >, 0);
 
 	// The console goes away. The next datagram draws an ICMP port unreachable, which
 	// the takion thread's recv reports as ECONNREFUSED; its loop breaks and it tears
 	// down the send buffer.
-	close(console_sock);
+	fake_console_close(&console);
 	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_SUCCESS);
 
 	chiaki_mutex_lock(&probe.mutex);
@@ -605,8 +546,20 @@ static MunitResult test_takion_send_after_receive_thread_exit(const MunitParamet
 	munit_assert_int(chiaki_takion_send_message_data(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_DISCONNECTED);
 	munit_assert_int(chiaki_takion_send_message_data_cont(&takion, 1, 1, payload, sizeof(payload), NULL), ==, CHIAKI_ERR_DISCONNECTED);
 
+	// Raw sends tell Senkusha why they failed. Nothing reads the socket any more, so
+	// this datagram's ICMP stays pending; poll() waits for it and the next send
+	// reports it.
+	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_SUCCESS);
+	struct pollfd pfd = { .fd = console.client_sock, .events = 0 };
+	munit_assert_int(poll(&pfd, 1, 5000), ==, 1);
+	munit_assert_true(pfd.revents & POLLERR);
+	munit_assert_int(chiaki_takion_send_raw(&takion, payload, sizeof(payload)), ==, CHIAKI_ERR_CONNECTION_REFUSED);
+	// Larger than any UDP datagram can be: the local "does not fit" answer.
+	static uint8_t too_big[70000];
+	munit_assert_int(chiaki_takion_send_raw(&takion, too_big, sizeof(too_big)), ==, CHIAKI_ERR_OVERFLOW);
+
 	chiaki_takion_close(&takion);
-	close(client_sock);
+	fake_console_fini(&console);
 	chiaki_cond_fini(&probe.cond);
 	chiaki_mutex_fini(&probe.mutex);
 	return MUNIT_OK;

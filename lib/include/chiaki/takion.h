@@ -334,6 +334,11 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_crypt_advance_key_pos(ChiakiTakion *
  * Send a datagram directly on the socket.
  *
  * Thread-safe while Takion is running.
+ *
+ * @return CHIAKI_ERR_OVERFLOW if the datagram is larger than the local end of the path
+ * allows (EMSGSIZE with the Don't Fragment bit set), CHIAKI_ERR_CONNECTION_REFUSED if
+ * the peer's port refused an earlier datagram (a pending ICMP port unreachable),
+ * CHIAKI_ERR_NETWORK for any other socket error.
  */
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_raw(ChiakiTakion *takion, const uint8_t *buf, size_t buf_size);
 
