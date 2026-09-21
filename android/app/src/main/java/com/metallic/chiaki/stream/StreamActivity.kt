@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.PixelFormat
@@ -19,6 +20,8 @@ import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.opengl.GLSurfaceView
 import android.os.*
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.*
 import android.widget.EditText
@@ -40,6 +43,7 @@ import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.metallic.chiaki.BuildConfig
 import com.metallic.chiaki.remote.ConnectPhase
@@ -960,11 +964,21 @@ class StreamActivity : AppCompatActivity()
 		showOverlay()
 	}
 
+	// PLE-456: PopupMenu's stock disabled-item styling dims the title to the theme's
+	// disabled-text colour (measured #616268 on this popup's #121318 background, 3.05:1 --
+	// fails WCAG AA's 4.5:1). These rows are read-only, not disabled: isEnabled=false only
+	// exists to keep them non-interactive (see the click listener below), so the title gets
+	// an explicit colorOnSurface span to match the value text's colour, which already passes.
 	private fun addConnectionInfoItems(menu: Menu)
 	{
+		val readOnlyLabelColor = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
 		val snapshot = connectionMode
 		for(line in connectionInfoLines(snapshot))
-			menu.add(Menu.NONE, Menu.NONE, Menu.NONE, line).isEnabled = false
+		{
+			val title = SpannableString(line)
+			title.setSpan(ForegroundColorSpan(readOnlyLabelColor), 0, title.length, 0)
+			menu.add(Menu.NONE, Menu.NONE, Menu.NONE, title).isEnabled = false
+		}
 	}
 
 	private fun connectionInfoLines(snapshot: ConnectionModeSnapshot): List<String>
