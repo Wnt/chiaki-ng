@@ -38,6 +38,13 @@
 /chiaki/link_watchdog/survives_the_clock_wrap
 /chiaki/link_watchdog/impairment_gaps_leave_a_wide_margin
 /chiaki/link_watchdog/total_loss_is_reported_inside_the_device_bound
+/chiaki/frame_loss/steady_stream_loses_nothing
+/chiaki/frame_loss/first_frame_owes_nothing
+/chiaki/frame_loss/fully_lost_frames_are_counted
+/chiaki/frame_loss/undecodable_frames_after_a_gap_are_counted_once
+/chiaki/frame_loss/back_to_back_fec_failures_count_each_frame_once
+/chiaki/frame_loss/a_long_clean_run_does_not_age_out
+/chiaki/frame_loss/partly_lost_frame_counts_units_and_one_frame
 /chiaki/fec/fec
 /chiaki/regist/aeropause_ps4_pre10
 /chiaki/regist/pin_bright_ps4_pre10
