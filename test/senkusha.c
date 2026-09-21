@@ -67,6 +67,52 @@ static MunitResult test_senkusha_ends_on_takion_disconnect(const MunitParameter 
 	fake_console_fini(&console);
 	return MUNIT_OK;
 }
+
+// PLE-501: the console answers MTU command id N with a video packet whose frame_index
+// is N and whose packet_index is 0, every time. Senkusha's takion ran those through
+// video packet reordering, which started at the first answer and from then on read
+// every later one as a late duplicate of index 0 and dropped it ("Takion dropping AV
+// packet with index 0"). The in-search then saw one success followed by nothing but
+// timeouts, and on the S25 VPN capture settled on 1015 over a path that carried 1234
+// (its out-search, whose pongs are audio and never reordered, found 1234). Here the
+// path carries 1234 both ways and the search starts at 1454, so it takes two
+// successes (1015, then 1234) to get there.
+#define SENKUSHA_TEST_PATH_MTU 1234
+#define SENKUSHA_TEST_PATH_DELAY_MS 10 // every answer; Senkusha's MTU timeout is 5 x its RTT
+
+static MunitResult test_senkusha_mtu_search_reaches_path_mtu(const MunitParameter params[], void *user)
+{
+	FakeConsole console;
+	fake_console_open(&console);
+
+	ChiakiSession session;
+	memset(&session, 0, sizeof(session));
+	session.log = get_test_log();
+
+	SenkushaRunCtx ctx;
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.sock = console.client_sock;
+	ctx.result = CHIAKI_ERR_UNKNOWN;
+	munit_assert_int(chiaki_senkusha_init(&ctx.senkusha, &session), ==, CHIAKI_ERR_SUCCESS);
+
+	ChiakiThread thread;
+	munit_assert_int(chiaki_thread_create(&thread, senkusha_run_thread, &ctx), ==, CHIAKI_ERR_SUCCESS);
+
+	fake_console_handshake(&console);
+	FakeConsoleSenkushaStats stats;
+	fake_console_serve_senkusha(&console, SENKUSHA_TEST_PATH_MTU, SENKUSHA_TEST_PATH_DELAY_MS, &stats);
+
+	munit_assert_int(chiaki_thread_join(&thread, NULL), ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_int(ctx.result, ==, CHIAKI_ERR_SUCCESS);
+	munit_assert_true(stats.disconnected);
+	munit_assert_uint(stats.mtu_in_answered, >=, 2);
+	munit_assert_uint32(ctx.mtu_in, ==, SENKUSHA_TEST_PATH_MTU);
+	munit_assert_uint32(ctx.mtu_out, ==, SENKUSHA_TEST_PATH_MTU);
+
+	chiaki_senkusha_fini(&ctx.senkusha);
+	fake_console_fini(&console);
+	return MUNIT_OK;
+}
 #endif
 
 MunitTest tests_senkusha[] = {
@@ -74,6 +120,14 @@ MunitTest tests_senkusha[] = {
 	{
 		"/ends_on_takion_disconnect",
 		test_senkusha_ends_on_takion_disconnect,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/mtu_search_reaches_path_mtu",
+		test_senkusha_mtu_search_reaches_path_mtu,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,

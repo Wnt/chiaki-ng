@@ -30,6 +30,7 @@
 /chiaki/takion/window_max_receive_gap_reset_race
 /chiaki/takion/send_after_receive_thread_exit
 /chiaki/senkusha/ends_on_takion_disconnect
+/chiaki/senkusha/mtu_search_reaches_path_mtu
 /chiaki/link_watchdog/healthy_stream_never_expires
 /chiaki/link_watchdog/expires_once_the_deadline_passes
 /chiaki/link_watchdog/expires_exactly_once

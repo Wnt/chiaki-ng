@@ -172,7 +172,12 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_senkusha_run(ChiakiSenkusha *senkusha, uint
 	takion_info.disable_audio_video = false;
 	takion_info.enable_dualsense = session->connect_info.enable_dualsense;
 	takion_info.protocol_version = 7;
-	takion_info.disable_video_packet_reordering = false;
+	// PLE-501: Senkusha's only video packets are the answers to its MTU commands, and
+	// the console sends each one with packet_index 0 (it is matched to its command by
+	// frame_index == mtu_id in senkusha_takion_av()). Video reordering took the first
+	// answer as the start of a stream and dropped every later one as a stale index 0,
+	// so after one success the inbound search saw only timeouts and settled low.
+	takion_info.disable_video_packet_reordering = true;
 	takion_info.diagnostics_enabled = false;
 	takion_info.video_fps = 0;
 
