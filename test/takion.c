@@ -405,6 +405,48 @@ static MunitResult test_takion_window_max_receive_gap(const MunitParameter param
 	return MUNIT_OK;
 }
 
+// PLE-476: PLE-464 argued this race rather than measuring it -- take() (the stats
+// thread) reads then plain-stores 0 over window_max_receive_gap_ms with no lock, and
+// takion_note_receive() (the recv thread) does its own unlocked read-fold-store of the
+// same field, so a gap that folds in between take()'s read and its reset is clobbered.
+// Real threads would make this timing-dependent and flaky to assert on, but both sides
+// are just field operations on a struct the test already has full access to (see the
+// two tests above), so the exact interleaving the argument describes is reproducible
+// by calling them in that order on one thread -- deterministic, and it is the specific
+// claim being checked: that the race can only ever drop a sample it should have
+// reported, never corrupt the accumulator into something wrong or leak across windows.
+static MunitResult test_takion_window_max_receive_gap_reset_race(const MunitParameter params[], void *user)
+{
+	ChiakiTakion takion;
+	memset(&takion, 0, sizeof(takion));
+
+	// A receive earlier in the window already folded a 50ms gap in.
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 1000, 1050);
+	munit_assert_uint32(takion.window_max_receive_gap_ms, ==, 50);
+
+	// take() reads the value for this window's stats event...
+	uint32_t reported_this_window = takion.window_max_receive_gap_ms;
+	munit_assert_uint32(reported_this_window, ==, 50);
+
+	// ...and before it stores the reset, a packet arrives closing a much bigger gap,
+	// folding it into the pre-reset value take() already read past.
+	takion.window_max_receive_gap_ms = chiaki_takion_receive_gap_fold(
+		takion.window_max_receive_gap_ms, 1050, 5050);
+	munit_assert_uint32(takion.window_max_receive_gap_ms, ==, 4000);
+
+	// take()'s reset lands last and clobbers that fresh 4000ms value: the drop.
+	takion.window_max_receive_gap_ms = 0;
+	munit_assert_uint32(chiaki_takion_take_window_max_receive_gap_ms(&takion), ==, 0);
+
+	// Benign, not corrupting: the race only ever touches window_max_receive_gap_ms,
+	// never last_receive_ms, so a still-open outage is not lost with it -- the next
+	// receive folds against the true previous timestamp and reports the full gap.
+	munit_assert_uint32(chiaki_takion_receive_gap_fold(0, 5050, 9050), ==, 4000);
+
+	return MUNIT_OK;
+}
+
 MunitTest tests_takion[] = {
 	{
 		"/av_packet_parse",
@@ -449,6 +491,14 @@ MunitTest tests_takion[] = {
 	{
 		"/window_max_receive_gap",
 		test_takion_window_max_receive_gap,
+		NULL,
+		NULL,
+		MUNIT_TEST_OPTION_NONE,
+		NULL
+	},
+	{
+		"/window_max_receive_gap_reset_race",
+		test_takion_window_max_receive_gap_reset_race,
 		NULL,
 		NULL,
 		MUNIT_TEST_OPTION_NONE,
