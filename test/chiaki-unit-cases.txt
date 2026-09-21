@@ -45,6 +45,9 @@
 /chiaki/frame_loss/back_to_back_fec_failures_count_each_frame_once
 /chiaki/frame_loss/a_long_clean_run_does_not_age_out
 /chiaki/frame_loss/partly_lost_frame_counts_units_and_one_frame
+/chiaki/video_receiver/p_frame_while_waiting_for_idr_is_discarded_not_lost
+/chiaki/video_receiver/p_frames_not_waiting_for_idr_are_not_discarded
+/chiaki/video_receiver/idr_arrival_resumes_decode_and_is_not_counted_as_discarded
 /chiaki/fec/fec
 /chiaki/regist/aeropause_ps4_pre10
 /chiaki/regist/pin_bright_ps4_pre10

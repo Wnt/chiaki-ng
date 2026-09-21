@@ -97,6 +97,7 @@ CHIAKI_EXPORT void chiaki_video_receiver_init(ChiakiVideoReceiver *video_receive
 	video_receiver->frames_lost = 0;
 	video_receiver->frames_lost_total = 0;
 	video_receiver->frames_received_total = 0;
+	video_receiver->frames_discarded_for_idr_total = 0;
 	chiaki_frame_loss_tracker_init(&video_receiver->frame_loss_tracker);
 	memset(video_receiver->reference_frames, -1, sizeof(video_receiver->reference_frames));
 	chiaki_bitstream_init(&video_receiver->bitstream, video_receiver->log, video_receiver->session->connect_info.video_profile.codec);
@@ -144,6 +145,15 @@ CHIAKI_EXPORT uint64_t chiaki_video_receiver_get_frames_received_total(ChiakiVid
 	uint64_t total;
 	chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
 	total = video_receiver->frames_received_total;
+	chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
+	return total;
+}
+
+CHIAKI_EXPORT uint64_t chiaki_video_receiver_get_frames_discarded_for_idr_total(ChiakiVideoReceiver *video_receiver)
+{
+	uint64_t total;
+	chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
+	total = video_receiver->frames_discarded_for_idr_total;
 	chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
 	return total;
 }
@@ -337,6 +347,13 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 			else
 			{
 				CHIAKI_LOGV(video_receiver->log, "Skipping P-frame %d while waiting for IDR", (int)video_receiver->frame_index_cur);
+				// PLE-485: this frame arrived and was fully assembled -- it is not transport
+				// loss, so it must not touch frames_lost_total. Counted separately so the
+				// recovery cost of an IDR wait can be measured without blurring PLE-474's
+				// meaning of "lost".
+				chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
+				video_receiver->frames_discarded_for_idr_total++;
+				chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
 				video_receiver->frame_index_prev = video_receiver->frame_index_cur;
 				return CHIAKI_ERR_SUCCESS;
 			}

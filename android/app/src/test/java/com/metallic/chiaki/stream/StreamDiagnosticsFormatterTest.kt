@@ -44,6 +44,7 @@ class StreamDiagnosticsFormatterTest
 			presenterFramesDropped = 3,
 			missedVsyncs = 4,
 			videoFramesLost = 5,
+			videoFramesDiscardedForIdr = 11,
 			reorderQueueTimeouts = 6,
 			videoPacketJitterMicros = 2_750,
 			takionPacketsReceived = 1800,
@@ -66,7 +67,7 @@ class StreamDiagnosticsFormatterTest
 		val text = StreamDiagnosticsFormatter.format(stats, ui)
 		assertTrue(text.contains("stream 60.0 fps | decoder 59.0 fps"))
 		assertTrue(text.contains("decode 8.13 ms mean | 10.75 ms p95 | q 1"))
-		assertTrue(text.contains("drop-in 2 | late 3 | lost 5 | reorder 6"))
+		assertTrue(text.contains("drop-in 2 | late 3 | lost 5 | discarded-for-idr 11 | reorder 6"))
 		assertTrue(text.contains("network UNKNOWN (none) | 0.00/0.00 Mbps actual/target"))
 		assertTrue(text.contains("loss 0.00/0.00% measured/reported | RTT 4.25 ms startup (ambiguous 0) | jitter 2.75 ms | console-rtt 0.0 (unverified)"))
 		assertTrue(text.contains("Takion 900.0 pkt/s | loss 10.00% | feedback 120.0 pkt/s"))
