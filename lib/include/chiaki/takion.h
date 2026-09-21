@@ -247,6 +247,13 @@ typedef struct chiaki_takion_t
 	 */
 	uint32_t last_receive_ms;
 	uint32_t max_receive_gap_ms;
+	/**
+	 * PLE-464: the same maximum, but over one diagnostics window instead of the
+	 * whole session, so the quality classifier can see a gap that has already
+	 * closed. Taken and reset by the reader; see
+	 * chiaki_takion_take_window_max_receive_gap_ms().
+	 */
+	uint32_t window_max_receive_gap_ms;
 } ChiakiTakion;
 
 
@@ -258,6 +265,30 @@ CHIAKI_EXPORT uint32_t chiaki_takion_get_last_receive_ms(ChiakiTakion *takion);
 /** PLE-423: longest observed gap between two inbound datagrams, in ms. Diagnostics: it is
  * what sets CHIAKI_LINK_WATCHDOG_TIMEOUT_MS, so a rig run can report it. */
 CHIAKI_EXPORT uint32_t chiaki_takion_get_max_receive_gap_ms(ChiakiTakion *takion);
+/**
+ * PLE-464: the longest gap between two inbound datagrams since this function was last
+ * called, in ms, resetting the accumulator as it reads.
+ *
+ * The classifier's only view of a total outage. Its 1 Hz poll of
+ * chiaki_link_watchdog_silence_ms() sees only the silence still *running* at the poll
+ * instant, so an outage that starts and ends between two polls is invisible to it, and
+ * one that ends just after a poll is reported at a fraction of its width (measured:
+ * `roam-1200ms` outages read back as 264-1130 ms across ple404/ple404b). This is the
+ * gap as it actually happened.
+ *
+ * Same lockless contract as last_receive_ms above, with one extra: the reset is a
+ * plain 32-bit store from the reader thread, so a gap closing in the same instant can
+ * be dropped. That costs at most one window's reading of an outage that the next
+ * window reports anyway, and is not worth a lock per received packet.
+ */
+CHIAKI_EXPORT uint32_t chiaki_takion_take_window_max_receive_gap_ms(ChiakiTakion *takion);
+/**
+ * PLE-464: fold one inter-arrival gap into a running maximum, guarding the clock-read
+ * race the same way the watchdog does -- a gap in the top half of the 32-bit range is
+ * the two stamps read backwards, not a 25-day silence. Exported so the guard is
+ * testable on the host without a live socket.
+ */
+CHIAKI_EXPORT uint32_t chiaki_takion_receive_gap_fold(uint32_t max_gap_ms, uint32_t previous_ms, uint32_t now_ms);
 CHIAKI_EXPORT void chiaki_takion_video_packet_jitter_push(ChiakiTakionVideoPacketJitter *jitter,
 	uint64_t arrival_us, ChiakiSeqNum16 frame_index, uint32_t video_fps);
 CHIAKI_EXPORT uint64_t chiaki_takion_video_packet_jitter_get(const ChiakiTakionVideoPacketJitter *jitter);

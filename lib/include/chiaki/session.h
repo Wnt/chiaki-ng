@@ -211,6 +211,22 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t probe_rtt_samples;
 	uint64_t probe_rtt_unacked;
 	uint64_t probe_rtt_ambiguous;
+	/**
+	 * PLE-464: how long the console's socket was silent, in ms. `takion_silence_ms`
+	 * is the silence still running at this poll; `takion_max_receive_gap_ms` is the
+	 * longest gap that occurred anywhere inside this window, including one that has
+	 * already closed. The second is the one to threshold on -- see
+	 * chiaki_takion_take_window_max_receive_gap_ms().
+	 *
+	 * This exists because `takion_packets_lost` cannot see a total outage at all:
+	 * it is only ever raised by chiaki_frame_processor_report_packet_stats(), which
+	 * runs from chiaki_video_receiver_av_packet() and therefore only when a packet
+	 * arrives. Nothing arriving means nothing counted, so `received + lost` is 0 and
+	 * the loss rate reads a clean 0 % through a blackout (measured over 920 stats
+	 * lines, PLE-404).
+	 */
+	uint64_t takion_silence_ms;
+	uint64_t takion_max_receive_gap_ms;
 } ChiakiStreamStatsEvent;
 
 typedef enum {

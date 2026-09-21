@@ -460,6 +460,12 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_stream_connection_run(ChiakiStreamConnectio
 			stats_event.stream_stats.probe_rtt_samples = network_stats.probe_rtt_samples;
 			stats_event.stream_stats.probe_rtt_unacked = network_stats.probe_rtt_unacked;
 			stats_event.stream_stats.probe_rtt_ambiguous = network_stats.probe_rtt_ambiguous;
+			// PLE-464: the outage the loss counter cannot see. `link_silence_ms` is already
+			// computed above for the watchdog; the window max is taken (and reset) here so
+			// each window reports its own worst gap exactly once.
+			stats_event.stream_stats.takion_silence_ms = link_silence_ms;
+			stats_event.stream_stats.takion_max_receive_gap_ms =
+				chiaki_takion_take_window_max_receive_gap_ms(&stream_connection->takion);
 
 			diagnostics_window_start_ms = now_ms;
 			previous_stream_frames = stream_frames;

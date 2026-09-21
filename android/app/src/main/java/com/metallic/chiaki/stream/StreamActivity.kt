@@ -271,11 +271,14 @@ class StreamActivity : AppCompatActivity()
 			if(qualityLogEnabled)
 				Log.i("NetworkQuality", String.format(Locale.US,
 					"Quality badge: level %s cause %s | median rtt_ms %.2f jitter_ms %.2f loss_pct %.2f" +
-						" | tail_rate jitter %.2f loss %.2f cut %.2f",
+						" | tail_rate jitter %.2f loss %.2f cut %.2f" +
+						" | stall_ms %.0f cut %.0f poor %.0f",
 					networkQuality.level.name, networkQuality.cause.name,
 					networkQuality.fastRttMillis, networkQuality.fastJitterMillis,
 					networkQuality.fastLossPercent, networkQuality.tailJitterRate,
-					networkQuality.tailLossRate, NetworkQualityThresholds.TAIL_RATE_CUT))
+					networkQuality.tailLossRate, NetworkQualityThresholds.TAIL_RATE_CUT,
+					networkQuality.stallMillis, NetworkQualityThresholds.STALL_MS,
+					NetworkQualityThresholds.POOR_STALL_MS))
 			updateNetworkQualityChip()
 			diagnosticsOverlay?.update(stats)
 		}

@@ -56,6 +56,48 @@ internal object NetworkQualityThresholds
 	const val TAIL_JITTER_MS = 4.0
 	const val TAIL_LOSS_PERCENT = 1.0
 
+	// PLE-464: the stall arm, on an input neither of the two arms above had.
+	//
+	// Why a new input was unavoidable. `takionPacketsLost` cannot see a total outage,
+	// and not by a small margin -- structurally. It is only ever raised by
+	// `chiaki_frame_processor_report_packet_stats()` (lib/src/frameprocessor.c:199),
+	// called from exactly one site, `chiaki_video_receiver_av_packet()`
+	// (lib/src/videoreceiver.c:162), which runs *when a packet arrives*. Nothing
+	// arriving means nothing counted: received and lost are both 0, so `packetLoss`
+	// below is 0/0 and the second reads clean. (Second layer: a frame no unit of which
+	// arrived is never allocated, so its units are never even expected -- the counter
+	// means "units missing from frames that partly arrived", not "packets the network
+	// lost".) PLE-404 measured `expected_per_s == received_per_s` on all 920 stats
+	// lines of two captures, including the seconds where zero frames arrived, and the
+	// badge read GOOD for 94 % of a phase with a 3 s total blackout every 20 s.
+	//
+	// Jitter cannot be made to cover it either: the worst jitter sample in any of those
+	// ten outages was 3.12 ms against a pooled clean ceiling of 2.88 ms over 1093 clean
+	// seconds. The distributions overlap, so there is no cut. The measurement had to
+	// change, which is why this arm reads a new native field rather than a new function
+	// of the old ones (the ticket's point 4).
+	//
+	// The input: `takionMaxReceiveGapMillis`, the longest gap between two inbound
+	// datagrams inside the 1 Hz window. Silence on the socket is what an outage *is*,
+	// and PLE-423 already stamped every datagram for the link watchdog -- this reads the
+	// same stamps one window at a time instead of at a 10 s deadline.
+	//
+	// The cuts, derived the way PLE-366 and PLE-411 derive theirs -- from captured
+	// profiles, with the margin against clean stated. Worst gap per profile:
+	//   clean        19 ms  (6 phases, 772 samples: ple404, ple404b, ple423-blip, ple423-impair)
+	//   4g           29 ms
+	//   wifi-slow    31 ms
+	//   blip-200ms  199 ms  (the 200 ms delay step, read back to the millisecond)
+	//   roam-1200ms 1130 ms
+	//   roam-3000ms 2706 ms (3 samples above 567 ms in 5 outages of 5)
+	// CONSTRAINED at 500 ms sits 2.5x above the worst non-outage sample in any profile
+	// and 26x above the worst clean one; POOR at 1000 ms sits 5x above it. Nothing
+	// between 199 ms and 1071 ms was ever observed, so both cuts fall in an empty band
+	// rather than inside a distribution -- the test PLE-404's candidate jitter tier
+	// failed at -0.11 ms.
+	const val STALL_MS = 500.0
+	const val POOR_STALL_MS = 1000.0
+
 	const val WEAK_WIFI_RSSI_DBM = -67
 	const val WIFI_TARGET_HEADROOM = 2.0
 }
@@ -79,7 +121,10 @@ internal data class NetworkQualitySnapshot(
 	/** PLE-366: the worse of the two tail arms' rates, for the diagnostic log. The chip does
 	 * not show it -- it explains a verdict the medians alone cannot account for. */
 	val tailJitterRate: Double = 0.0,
-	val tailLossRate: Double = 0.0
+	val tailLossRate: Double = 0.0,
+	/** PLE-464: worst link silence in the window, ms. Diagnostic, like the tail rates --
+	 * it is what explains a verdict the medians and the tail arm cannot account for. */
+	val stallMillis: Double = 0.0
 )
 {
 	companion object
@@ -116,7 +161,9 @@ internal object NetworkQualityChipPresenter
 private data class NetworkQualitySample(
 	val rttMillis: Double,
 	val jitterMillis: Double,
-	val lossPercent: Double
+	val lossPercent: Double,
+	/** PLE-464: the longest gap with nothing inbound in this one-second window. */
+	val stallMillis: Double = 0.0
 )
 
 /** Stateful 1 Hz quality classifier. It belongs to the default-off overlay, not the stream path. */
@@ -129,7 +176,11 @@ internal class NetworkQualityClassifier
 	fun update(stats: StreamStatsEvent, link: NetworkLinkSample): NetworkQualitySnapshot
 	{
 		val packetTotal = stats.takionPacketsReceived + stats.takionPacketsLost
-		if(!stats.connectionQualityValid && packetTotal == 0L)
+		// PLE-464: a measured silence is information, so a window that has one is not
+		// "we know nothing yet". Without this the very fault this arm exists for --
+		// a window in which nothing arrived -- could be discarded before it is read.
+		val stallMeasured = max(stats.takionMaxReceiveGapMillis, stats.takionSilenceMillis) > 0L
+		if(!stats.connectionQualityValid && packetTotal == 0L && !stallMeasured)
 			return NetworkQualitySnapshot.UNKNOWN
 		// PLE-403: videoPacketJitterMicros is one unsmoothed frame sample, not an average, until
 		// the native EWMA reports filled (CHIAKI_TAKION_VIDEO_JITTER_FILL_SAMPLES). A one-off
@@ -160,7 +211,11 @@ internal class NetworkQualityClassifier
 			// attenuation was the packets per frame, which is a function of bitrate, so no
 			// rescaling could have recovered it -- the estimator had to change.
 			jitterMillis = stats.videoPacketJitterMicros / 1000.0,
-			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0)
+			lossPercent = max(packetLoss, stats.congestionMeasuredLoss * 100.0),
+			// PLE-464: the window max is the measurement; the instantaneous silence is
+			// taken alongside it only so an older native layer that reports one but not
+			// the other still says something rather than nothing.
+			stallMillis = max(stats.takionMaxReceiveGapMillis, stats.takionSilenceMillis).toDouble()
 		)
 		samples.addLast(sample)
 		while(samples.size > NetworkQualityThresholds.FAST_WINDOW_SECONDS)
@@ -169,7 +224,8 @@ internal class NetworkQualityClassifier
 		val fast = median(samples)
 		val tailJitterRate = tailRate(samples) { it.jitterMillis >= NetworkQualityThresholds.TAIL_JITTER_MS }
 		val tailLossRate = tailRate(samples) { it.lossPercent >= NetworkQualityThresholds.TAIL_LOSS_PERCENT }
-		level = nextLevel(fast, tailLevel(tailJitterRate, tailLossRate))
+		val stallMillis = samples.maxOf { it.stallMillis }
+		level = nextLevel(fast, maxOf(tailLevel(tailJitterRate, tailLossRate), stallLevel(stallMillis)))
 		return NetworkQualitySnapshot(
 			level = level,
 			cause = cause(level, stats, link, fast),
@@ -177,7 +233,8 @@ internal class NetworkQualityClassifier
 			fastJitterMillis = fast.jitterMillis,
 			fastLossPercent = fast.lossPercent,
 			tailJitterRate = tailJitterRate,
-			tailLossRate = tailLossRate
+			tailLossRate = tailLossRate,
+			stallMillis = stallMillis
 		)
 	}
 
@@ -190,6 +247,18 @@ internal class NetworkQualityClassifier
 	// The cut is one sample in five, so `rate >= cut` is a comparison of 1.0/5.0 against the
 	// literal 0.2. Those are the same double today, but the window shortens while it fills and
 	// the epsilon costs nothing, so the arm does not hinge on that staying true.
+	/** PLE-464: the stall arm. Worst silence anywhere in the window, not a rate over it --
+	 * one second with no packets at all is not an outlier to be out-voted, it is the whole
+	 * fault. Holding on the window max also means recovery needs no new code: the bad sample
+	 * keeps `candidate` above GOOD until it ages out of the 5 s window, then RECOVERY_SAMPLES
+	 * confirm, which is the same deterministic 8 s PLE-357 measured and PLE-366 relied on. */
+	private fun stallLevel(stallMillis: Double): NetworkQualityLevel = when
+	{
+		stallMillis >= NetworkQualityThresholds.POOR_STALL_MS -> NetworkQualityLevel.POOR
+		stallMillis >= NetworkQualityThresholds.STALL_MS -> NetworkQualityLevel.CONSTRAINED
+		else -> NetworkQualityLevel.GOOD
+	}
+
 	private fun tailLevel(jitterRate: Double, lossRate: Double): NetworkQualityLevel =
 		if(jitterRate >= NetworkQualityThresholds.TAIL_RATE_CUT - 1e-9 ||
 			lossRate >= NetworkQualityThresholds.TAIL_RATE_CUT - 1e-9)

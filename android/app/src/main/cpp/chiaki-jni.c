@@ -394,7 +394,8 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" audio_xruns %s%d audio_underruns %llu"
 					" | network target_bps %llu measured_bps %llu console_rtt_raw %.6f"
 					" probe_rtt_ms %llu.%03llu probe_samples %llu probe_unacked %llu probe_ambiguous %llu"
-					" server_loss %llu congestion_loss measured=%.4f reported=%.4f%s",
+					" server_loss %llu congestion_loss measured=%.4f reported=%.4f"
+					" | takion_silence_ms %llu window_max_gap_ms %llu%s",
 					(unsigned long long)interval_ms,
 					(unsigned long long)event->stream_stats.stream_frames,
 					(unsigned long long)diagnostics.output_frames,
@@ -440,7 +441,9 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)event->stream_stats.probe_rtt_ambiguous,
 					(unsigned long long)event->stream_stats.server_loss,
 					event->stream_stats.congestion_measured_loss,
-					event->stream_stats.congestion_reported_loss, performance_status);
+					event->stream_stats.congestion_reported_loss,
+					(unsigned long long)event->stream_stats.takion_silence_ms,
+					(unsigned long long)event->stream_stats.takion_max_receive_gap_ms, performance_status);
 			}
 			E->CallVoidMethod(env, session->java_session,
 					session->java_session_event_stream_stats_meth,
@@ -484,7 +487,9 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.probe_rtt_samples,
 					(jlong)event->stream_stats.probe_rtt_unacked,
 					(jlong)event->stream_stats.probe_rtt_ambiguous,
-					(jboolean)event->stream_stats.video_packet_jitter_filled);
+					(jboolean)event->stream_stats.video_packet_jitter_filled,
+					(jlong)event->stream_stats.takion_silence_ms,
+					(jlong)event->stream_stats.takion_max_receive_gap_ms);
 			break;
 		}
 		default:
@@ -752,7 +757,7 @@ static void session_create(JNIEnv *env, jobject result, jobject connect_info_obj
 	session->java_session_event_remote_data_socket_needed_meth = E->GetMethodID(env, session->java_session_class, "eventRemoteDataSocketNeeded", "()V");
 	session->java_session_event_registration_success_meth = E->GetMethodID(env, session->java_session_class, "eventRegistrationSuccess", "(L"BASE_PACKAGE"/RegistHost;)V");
 	session->java_session_event_stream_stats_meth = E->GetMethodID(env, session->java_session_class,
-			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZDJJJJZ)V");
+			"eventStreamStats", "(JJJJJJJJJJJJJJJJJJJJJJJJJJJZJJJJDDZDJJJJZJJ)V");
 	session->java_session_performance_hint_thread_started_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStarted", "(II)V");
 	session->java_session_performance_hint_report_meth = E->GetMethodID(env, session->java_session_class, "performanceHintReportActualWorkDuration", "(IJ)V");
 	session->java_session_performance_hint_thread_stopped_meth = E->GetMethodID(env, session->java_session_class, "performanceHintThreadStopped", "(I)V");
