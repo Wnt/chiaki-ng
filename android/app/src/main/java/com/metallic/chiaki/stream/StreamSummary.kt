@@ -26,6 +26,7 @@ internal class StreamSummaryAccumulator
 	private var latencyWeightedSum = 0.0
 	private var latencyDurationMillis = 0L
 	private var droppedFrames = 0L
+	private var lastVideoFramesLost = 0L
 	private var knownQualityDurationMillis = 0L
 	private var fairQualityDurationMillis = 0L
 	private var poorQualityDurationMillis = 0L
@@ -38,6 +39,7 @@ internal class StreamSummaryAccumulator
 		latencyWeightedSum = 0.0
 		latencyDurationMillis = 0L
 		droppedFrames = 0L
+		lastVideoFramesLost = 0L
 		knownQualityDurationMillis = 0L
 		fairQualityDurationMillis = 0L
 		poorQualityDurationMillis = 0L
@@ -61,9 +63,14 @@ internal class StreamSummaryAccumulator
 			latencyWeightedSum += latencyMicros / 1000.0 * interval
 			latencyDurationMillis += interval
 		}
+		// videoFramesLost is session-cumulative (chiaki_stream_stats_event_t), so only its
+		// growth since the last event is new. Since PLE-474 it jumps by a whole blackout's
+		// frames at once, and summing the running total would re-add that every second.
+		val videoFramesLostNew = (stats.videoFramesLost - lastVideoFramesLost).coerceAtLeast(0L)
+		lastVideoFramesLost = stats.videoFramesLost
 		droppedFrames += stats.decoderInputFramesDropped +
 			stats.presenterFramesDropped +
-			stats.videoFramesLost
+			videoFramesLostNew
 		when(classifier.update(stats, link).level)
 		{
 			NetworkQualityLevel.GOOD -> knownQualityDurationMillis += interval

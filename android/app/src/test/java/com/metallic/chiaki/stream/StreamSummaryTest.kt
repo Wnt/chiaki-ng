@@ -39,6 +39,22 @@ class StreamSummaryTest
 		assertEquals(StreamSummaryQuality.GOOD, result.quality)
 	}
 
+	// PLE-474: videoFramesLost is a running total; a blackout's frames count once, not
+	// once per stats event that follows it.
+	@Test fun videoFramesLostCountsOnlyItsGrowth()
+	{
+		val accumulator = StreamSummaryAccumulator()
+		accumulator.connected(1_000)
+		accumulator.add(stats(lostFrames = 0), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(lostFrames = 182), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(lostFrames = 190), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(lostFrames = 190), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(lostFrames = 190), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.ended(6_000)
+
+		assertEquals(190, accumulator.build(6_500)!!.droppedFrames)
+	}
+
 	// PLE-352: the home card's "Avg latency" is a duration-weighted mean of
 	// measuredRttMicros, computed independently of the chip/overlay's classifier -- this
 	// pins down in code what the device capture (docs/verification/PLE-352/) found by
