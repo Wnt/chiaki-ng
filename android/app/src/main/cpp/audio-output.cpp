@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <cstring>
+#include <mutex>
 
 #define BUFFER_CHUNK_SIZE 1024
 #define BUFFER_DEFAULT_CHUNKS_COUNT 32
@@ -38,7 +39,12 @@ public:
 struct AudioOutput
 {
 	ChiakiLog *log;
+	// Guards stream, channels and rate: the Oboe error thread reopens the stream
+	// (device change) while the session threads open, query and free it.
+	std::mutex stream_mutex;
 	oboe::ManagedStream stream;
+	uint32_t channels = 0;
+	uint32_t rate = 0;
 	AudioOutputCallback stream_callback;
 	AudioBuffer buf;
 	uint32_t buffer_bursts;
@@ -79,23 +85,22 @@ extern "C" void android_chiaki_audio_output_free(void *audio_output)
 	if(!audio_output)
 		return;
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
-	ao->stream = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(ao->stream_mutex);
+		ao->stream = nullptr;
+	}
 	delete ao;
 }
 
-extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t rate, void *audio_output)
+// Call with stream_mutex held and ao->stream empty.
+static void audio_output_open_stream(AudioOutput *ao)
 {
-	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
-	ao->stream = nullptr;
-	ao->buf.SetChunksCount(audio_fifo_chunks(channels, rate, ao->fifo_ms));
-	ao->underruns.store(0, std::memory_order_relaxed);
-
 	oboe::AudioStreamBuilder builder;
 	builder.setPerformanceMode(oboe::PerformanceMode::LowLatency)
 		->setSharingMode(oboe::SharingMode::Exclusive)
 		->setFormat(oboe::AudioFormat::I16)
-		->setChannelCount(channels)
-		->setSampleRate(rate)
+		->setChannelCount(ao->channels)
+		->setSampleRate(ao->rate)
 		->setCallback(&ao->stream_callback);
 
 	auto result = builder.openManagedStream(ao->stream);
@@ -132,6 +137,18 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 		CHIAKI_LOGI(ao->log, "Audio Output started Oboe stream");
 	else
 		CHIAKI_LOGE(ao->log, "Audio Output failed to start Oboe stream: %s", oboe::convertToText(result));
+}
+
+extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t rate, void *audio_output)
+{
+	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
+	std::lock_guard<std::mutex> lock(ao->stream_mutex);
+	ao->stream = nullptr;
+	ao->buf.SetChunksCount(audio_fifo_chunks(channels, rate, ao->fifo_ms));
+	ao->underruns.store(0, std::memory_order_relaxed);
+	ao->channels = channels;
+	ao->rate = rate;
+	audio_output_open_stream(ao);
 }
 
 extern "C" void android_chiaki_audio_output_frame(int16_t *buf, size_t samples_count, void *audio_output)
@@ -178,6 +195,7 @@ extern "C" void android_chiaki_audio_output_get_diagnostics(void *audio_output,
 		return;
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
 	diagnostics->underruns = ao->underruns.load(std::memory_order_relaxed);
+	std::lock_guard<std::mutex> lock(ao->stream_mutex);
 	if(!ao->stream)
 		return;
 
@@ -203,4 +221,25 @@ void AudioOutputCallback::onErrorBeforeClose(oboe::AudioStream *stream, oboe::Re
 void AudioOutputCallback::onErrorAfterClose(oboe::AudioStream *stream, oboe::Result error)
 {
 	CHIAKI_LOGE(audio_output->log, "Oboe reported error after close: %s", oboe::convertToText(error));
+	if(error != oboe::Result::ErrorDisconnected)
+		return;
+
+	// The output device changed under the stream (headphones, HDMI/DeX display, Bluetooth).
+	// AAudio never moves a stream to the new device by itself, so open a fresh one on
+	// whatever the default route is now; without this the session stays silent.
+	AudioOutput *ao = audio_output;
+	std::lock_guard<std::mutex> lock(ao->stream_mutex);
+	if(ao->stream.get() != stream)
+		return; // already replaced or being torn down
+
+	ao->stream = nullptr;
+
+	// The closed stream's callback was the only consumer, so this thread may drain what piled
+	// up while no device was attached. Otherwise the new stream would start behind a full
+	// FIFO and carry that delay for the rest of the session.
+	uint8_t stale[BUFFER_CHUNK_SIZE];
+	while(ao->buf.Pop(stale, sizeof(stale)) == sizeof(stale));
+
+	CHIAKI_LOGI(ao->log, "Audio Output reopening Oboe stream after device disconnect");
+	audio_output_open_stream(ao);
 }
