@@ -277,7 +277,7 @@ typedef enum {
 // and rtt_us_measured below are already the final measured-or-fallback values.
 typedef struct chiaki_connected_event_t
 {
-	bool relay; // session->holepunch_session || session->remote_connection: PSN data plane, not the LAN. Must not fire in this fork; see REMOTE_DATA_SOCKET_NEEDED.
+	bool relay; // session->holepunch_session || session->remote_connection: PSN data plane, not the LAN. Fires for the Android fork's opt-in "PSN Remote Play" feature (Preferences.psnRemotePlayEnabled, default false) when the console isn't reachable on the LAN -- confirmed 2026-09-21 by an S25-over-VPN capture reaching PsnRemote "stage Streaming". Default (LAN) streaming must never take this path; see PLE-500 and AGENTS.md.
 	char peer_host[256]; // address actually dialled; empty for the native-holepunch relay path, which has no single peer address to show
 	uint16_t peer_port;
 	uint32_t mtu_in;

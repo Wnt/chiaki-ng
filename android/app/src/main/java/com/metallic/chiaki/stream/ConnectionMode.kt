@@ -7,7 +7,10 @@ import com.metallic.chiaki.lib.ConnectedEvent
 /**
  * Direct: the console's LAN address, no tunnel.
  * Vpn: a private address reached through a tunnel the user chose.
- * Relay: the PSN data plane -- should never happen in this fork (see REMOTE_DATA_SOCKET_NEEDED).
+ * Relay: the PSN data plane. Fires when the opt-in "PSN Remote Play" feature
+ *   (Preferences.psnRemotePlayEnabled, default false) streams to a console
+ *   that is not reachable on the LAN -- confirmed 2026-09-21 by an S25-over-VPN
+ *   capture (PLE-500). Should never happen for a LAN-reachable console.
  * Unknown: no [ConnectedEvent] has arrived yet; must not be presented as any of the above.
  */
 enum class ConnectionMode
