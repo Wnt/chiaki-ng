@@ -38,7 +38,7 @@ internal object StreamDiagnosticsFormatter
 	{
 		val interval = stats?.intervalMillis ?: 1000L
 		val received = stats?.takionPacketsReceived ?: 0L
-		val lost = stats?.takionPacketsLost ?: 0L
+		val lost = stats?.takionPartialFrameUnitsMissing ?: 0L
 		val packetTotal = received + lost
 		val lossPercent = if(packetTotal > 0) lost * 100.0 / packetTotal else 0.0
 		val flags = ui.flags.ifEmpty { listOf("none") }.joinToString(" ")

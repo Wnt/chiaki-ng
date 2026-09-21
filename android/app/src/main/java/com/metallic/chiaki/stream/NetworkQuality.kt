@@ -58,7 +58,7 @@ internal object NetworkQualityThresholds
 
 	// PLE-464: the stall arm, on an input neither of the two arms above had.
 	//
-	// Why a new input was unavoidable. `takionPacketsLost` cannot see a total outage,
+	// Why a new input was unavoidable. `takionPartialFrameUnitsMissing` cannot see a total outage,
 	// and not by a small margin -- structurally. It is only ever raised by
 	// `chiaki_frame_processor_report_packet_stats()` (lib/src/frameprocessor.c:199),
 	// called from exactly one site, `chiaki_video_receiver_av_packet()`
@@ -175,7 +175,7 @@ internal class NetworkQualityClassifier
 
 	fun update(stats: StreamStatsEvent, link: NetworkLinkSample): NetworkQualitySnapshot
 	{
-		val packetTotal = stats.takionPacketsReceived + stats.takionPacketsLost
+		val packetTotal = stats.takionPacketsReceived + stats.takionPartialFrameUnitsMissing
 		// PLE-464: a measured silence is information, so a window that has one is not
 		// "we know nothing yet". Without this the very fault this arm exists for --
 		// a window in which nothing arrived -- could be discarded before it is read.
@@ -196,7 +196,7 @@ internal class NetworkQualityClassifier
 			return NetworkQualitySnapshot.UNKNOWN
 
 		val packetLoss = if(packetTotal > 0L)
-			stats.takionPacketsLost * 100.0 / packetTotal else 0.0
+			stats.takionPartialFrameUnitsMissing * 100.0 / packetTotal else 0.0
 		val sample = NetworkQualitySample(
 			// PLE-343: only round trips we measured ourselves. The console's rtt field is a
 			// sawtooth -- it resets to ~200 and ramps down to ~0 at about 27 units/s, over and
