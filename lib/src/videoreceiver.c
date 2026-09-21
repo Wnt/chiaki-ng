@@ -34,6 +34,51 @@ static bool have_ref_frame(ChiakiVideoReceiver *video_receiver, int32_t frame)
 	return false;
 }
 
+CHIAKI_EXPORT void chiaki_frame_loss_tracker_init(ChiakiFrameLossTracker *tracker)
+{
+	tracker->last_arrived = -1;
+	tracker->counted_through = -1;
+}
+
+static uint32_t frame_loss_tracker_count(ChiakiFrameLossTracker *tracker, ChiakiSeqNum16 first, ChiakiSeqNum16 last)
+{
+	if(!chiaki_seq_num_16_gt(first, (ChiakiSeqNum16)tracker->counted_through))
+		first = (ChiakiSeqNum16)(tracker->counted_through + 1);
+	if(chiaki_seq_num_16_gt(first, last))
+		return 0;
+	tracker->counted_through = last;
+	return (uint32_t)(ChiakiSeqNum16)(last - first) + 1;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_frame_loss_tracker_frame_arrived(ChiakiFrameLossTracker *tracker, ChiakiSeqNum16 frame_index)
+{
+	if(tracker->last_arrived < 0)
+	{
+		tracker->last_arrived = frame_index;
+		tracker->counted_through = (ChiakiSeqNum16)(frame_index - 1);
+		return 0;
+	}
+	if(!chiaki_seq_num_16_gt(frame_index, (ChiakiSeqNum16)tracker->last_arrived))
+		return 0;
+	uint32_t missing = 0;
+	if(frame_index != (ChiakiSeqNum16)(tracker->last_arrived + 1))
+		missing = frame_loss_tracker_count(tracker, (ChiakiSeqNum16)(tracker->last_arrived + 1), (ChiakiSeqNum16)(frame_index - 1));
+	tracker->last_arrived = frame_index;
+	// The frame before this one has been flushed by now, so everything older is
+	// settled. Keeping counted_through this close also keeps it inside the 16-bit
+	// comparison window however long the stream runs without a loss.
+	if(chiaki_seq_num_16_gt((ChiakiSeqNum16)(frame_index - 1), (ChiakiSeqNum16)tracker->counted_through))
+		tracker->counted_through = (ChiakiSeqNum16)(frame_index - 1);
+	return missing;
+}
+
+CHIAKI_EXPORT uint32_t chiaki_frame_loss_tracker_frames_failed(ChiakiFrameLossTracker *tracker, ChiakiSeqNum16 first, ChiakiSeqNum16 last)
+{
+	if(tracker->last_arrived < 0)
+		return 0;
+	return frame_loss_tracker_count(tracker, first, last);
+}
+
 CHIAKI_EXPORT void chiaki_video_receiver_init(ChiakiVideoReceiver *video_receiver, struct chiaki_session_t *session, ChiakiPacketStats *packet_stats)
 {
 	video_receiver->session = session;
@@ -52,6 +97,7 @@ CHIAKI_EXPORT void chiaki_video_receiver_init(ChiakiVideoReceiver *video_receive
 	video_receiver->frames_lost = 0;
 	video_receiver->frames_lost_total = 0;
 	video_receiver->frames_received_total = 0;
+	chiaki_frame_loss_tracker_init(&video_receiver->frame_loss_tracker);
 	memset(video_receiver->reference_frames, -1, sizeof(video_receiver->reference_frames));
 	chiaki_bitstream_init(&video_receiver->bitstream, video_receiver->log, video_receiver->session->connect_info.video_profile.codec);
 	chiaki_mutex_init(&video_receiver->waiting_for_idr_mutex, false);
@@ -179,6 +225,16 @@ CHIAKI_EXPORT void chiaki_video_receiver_av_packet(ChiakiVideoReceiver *video_re
 				CHIAKI_LOGW(video_receiver->log, "Error sending corrupt frame.");
 		}
 
+		// PLE-474: frames skipped over here delivered no unit at all, so the frame
+		// processor never saw them and nothing else will count them.
+		uint32_t frames_missing = chiaki_frame_loss_tracker_frame_arrived(&video_receiver->frame_loss_tracker, frame_index);
+		if(frames_missing)
+		{
+			chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
+			video_receiver->frames_lost_total += (int32_t)frames_missing;
+			chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
+		}
+
 		video_receiver->frame_index_cur = frame_index;
 		err = chiaki_frame_processor_alloc_frame(&video_receiver->frame_processor, packet);
 		if(err != CHIAKI_ERR_SUCCESS)
@@ -250,9 +306,13 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 				chiaki_session_send_event(video_receiver->session, &event);
 			}
 		int32_t lost = video_receiver->frame_index_cur - next_frame_expected + 1;
+		// The span starts at the last complete frame, so back-to-back failures overlap
+		// it; the total takes each frame once.
+		uint32_t lost_new = chiaki_frame_loss_tracker_frames_failed(&video_receiver->frame_loss_tracker,
+				next_frame_expected, (ChiakiSeqNum16)video_receiver->frame_index_cur);
 		chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
 		video_receiver->frames_lost += lost;
-		video_receiver->frames_lost_total += lost;
+		video_receiver->frames_lost_total += (int32_t)lost_new;
 		chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
 		video_receiver->frame_index_prev = video_receiver->frame_index_cur;
 	}
@@ -303,9 +363,11 @@ static ChiakiErrorCode chiaki_video_receiver_flush_frame(ChiakiVideoReceiver *vi
 				if(!recovered)
 				{
 					succ = false;
+					uint32_t lost_new = chiaki_frame_loss_tracker_frames_failed(&video_receiver->frame_loss_tracker,
+							(ChiakiSeqNum16)video_receiver->frame_index_cur, (ChiakiSeqNum16)video_receiver->frame_index_cur);
 					chiaki_mutex_lock(&video_receiver->frames_lost_mutex);
 					video_receiver->frames_lost++;
-					video_receiver->frames_lost_total++;
+					video_receiver->frames_lost_total += (int32_t)lost_new;
 					chiaki_mutex_unlock(&video_receiver->frames_lost_mutex);
 					CHIAKI_LOGW(video_receiver->log, "Missing reference frame %d for decoding frame %d", (int)ref_frame_index, (int)video_receiver->frame_index_cur);
 				}

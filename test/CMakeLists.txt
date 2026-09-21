@@ -15,6 +15,7 @@ set(CHIAKI_UNIT_SOURCES
 				gkcrypt.c
 				takion.c
 				linkwatchdog.c
+				frameloss.c
 				seqnum.c
 				keystate.c
 				reorderqueue.c

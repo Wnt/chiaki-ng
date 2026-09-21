@@ -185,6 +185,13 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t interval_ms;
 	uint64_t rtt_us; // senkusha's startup ping average; 0 when senkusha failed
 	uint64_t stream_frames;
+	/**
+	 * Session-cumulative (not per window, unlike its neighbours): video frames that never
+	 * became decodable -- FEC failed, reference missing, or (PLE-474) no unit of the
+	 * frame arrived at all. Each frame index counts once. A frame that never arrived is
+	 * only known once a later frame does, so a blackout lands here when the stream
+	 * resumes, not while it lasts.
+	 */
 	uint64_t video_frames_lost;
 	uint64_t video_reorder_timeouts;
 	uint64_t video_packet_jitter_us; // PLE-356: frame-boundary delay variation; drives the badge

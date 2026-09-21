@@ -11,6 +11,7 @@ extern MunitTest tests_rpcrypt[];
 extern MunitTest tests_gkcrypt[];
 extern MunitTest tests_takion[];
 extern MunitTest tests_link_watchdog[];
+extern MunitTest tests_frame_loss[];
 extern MunitTest tests_fec[];
 extern MunitTest tests_regist[];
 #ifndef CHIAKI_LIB_ENABLE_MBEDTLS
@@ -77,6 +78,13 @@ static MunitSuite suites[] = {
 	{
 		"/link_watchdog",
 		tests_link_watchdog,
+		NULL,
+		1,
+		MUNIT_SUITE_OPTION_NONE
+	},
+	{
+		"/frame_loss",
+		tests_frame_loss,
 		NULL,
 		1,
 		MUNIT_SUITE_OPTION_NONE
