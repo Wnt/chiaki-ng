@@ -1107,7 +1107,8 @@ static ChiakiErrorCode takion_send_feedback_packet(ChiakiTakion *takion, uint8_t
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto beach;
 
-	chiaki_takion_send_raw(takion, buf, buf_size);
+	// PLE-502: the sender needs to hear CHIAKI_ERR_DISCONNECTED once the socket is gone.
+	err = chiaki_takion_send_raw(takion, buf, buf_size);
 
 beach:
 	chiaki_mutex_unlock(&takion->gkcrypt_local_mutex);
@@ -1162,7 +1163,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_mic_packet(ChiakiTakion *takion
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto beach;
 
-	chiaki_takion_send_raw(takion, buf, buf_size);
+	err = chiaki_takion_send_raw(takion, buf, buf_size);
 beach:
 	chiaki_mutex_unlock(&takion->gkcrypt_local_mutex);
 	return err;
