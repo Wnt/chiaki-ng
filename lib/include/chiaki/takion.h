@@ -222,6 +222,20 @@ typedef struct chiaki_takion_t
 
 	ChiakiTakionCallback cb;
 	void *cb_user;
+	/**
+	 * PLE-502: when close_socket is set the takion thread owns sock and closes it as
+	 * soon as its receive loop ends, but the congestion, feedback and mic senders and
+	 * Senkusha's raw probes keep calling chiaki_takion_send_raw() from their own threads
+	 * until close. Every send() therefore happens under sock_state_mutex with sock_open
+	 * true, and the takion thread clears the flag and closes the socket under the same
+	 * mutex, so a close can never land between a sender reading sock and sending on it
+	 * (the fd could be reused by then). Senders after that get CHIAKI_ERR_DISCONNECTED.
+	 * A caller-owned socket (close_socket false) outlives the takion and stays open.
+	 * The mutex is a leaf: nothing else is locked while it is held. It lives from
+	 * connect to close.
+	 */
+	ChiakiMutex sock_state_mutex;
+	bool sock_open;
 	chiaki_socket_t sock;
 	ChiakiThread thread;
 	ChiakiStopPipe stop_pipe;

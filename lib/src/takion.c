@@ -342,6 +342,10 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	ret = chiaki_mutex_init(&takion->send_buffer_state_mutex, false);
 	if(ret != CHIAKI_ERR_SUCCESS)
 		goto error_seq_num_local_mutex;
+	takion->sock_open = false;
+	ret = chiaki_mutex_init(&takion->sock_state_mutex, false);
+	if(ret != CHIAKI_ERR_SUCCESS)
+		goto error_send_buffer_state_mutex;
 	takion->tag_remote = 0;
 
 	takion->enable_crypt = info->enable_crypt;
@@ -359,7 +363,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 	if(err != CHIAKI_ERR_SUCCESS)
 	{
 		CHIAKI_LOGE(takion->log, "Takion failed to create stop pipe");
-		goto error_send_buffer_state_mutex;
+		goto error_sock_state_mutex;
 	}
 
 	if(sock)
@@ -557,6 +561,8 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_connect(ChiakiTakion *takion, Chiaki
 		}
 	}
 
+	// No other thread can see the takion yet, so this needs no lock.
+	takion->sock_open = true;
 	err = chiaki_thread_create(&takion->thread, takion_thread_func, takion);
 
 	chiaki_thread_set_name(&takion->thread, "Chiaki Takion");
@@ -571,6 +577,8 @@ error_sock:
 	}
 error_pipe:
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
+error_sock_state_mutex:
+	chiaki_mutex_fini(&takion->sock_state_mutex);
 error_send_buffer_state_mutex:
 	chiaki_mutex_fini(&takion->send_buffer_state_mutex);
 error_seq_num_local_mutex:
@@ -588,6 +596,7 @@ CHIAKI_EXPORT void chiaki_takion_close(ChiakiTakion *takion)
 	chiaki_stop_pipe_stop(&takion->stop_pipe);
 	chiaki_thread_join(&takion->thread, NULL);
 	chiaki_stop_pipe_fini(&takion->stop_pipe);
+	chiaki_mutex_fini(&takion->sock_state_mutex);
 	chiaki_mutex_fini(&takion->send_buffer_state_mutex);
 	chiaki_mutex_fini(&takion->seq_num_local_mutex);
 	if(takion->diagnostics_enabled)
@@ -777,23 +786,44 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_crypt_advance_key_pos(ChiakiTakion *
 	return CHIAKI_ERR_SUCCESS;
 }
 
+/**
+ * Every send on takion->sock goes through here.
+ *
+ * PLE-502: the send happens under sock_state_mutex, so the takion thread cannot close
+ * a takion-owned socket (and let its fd number be reused) between this reading sock
+ * and sending on it. Once it has closed it (sock_open is false) the send is refused
+ * with CHIAKI_ERR_DISCONNECTED.
+ */
 CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_raw(ChiakiTakion *takion, const uint8_t *buf, size_t buf_size)
 {
+	ChiakiErrorCode err = chiaki_mutex_lock(&takion->sock_state_mutex);
+	if(err != CHIAKI_ERR_SUCCESS)
+		return err;
+	if(!takion->sock_open)
+	{
+		chiaki_mutex_unlock(&takion->sock_state_mutex);
+		return CHIAKI_ERR_DISCONNECTED;
+	}
 	int r = send(takion->sock, buf, buf_size, 0);
+	// PLE-490: Senkusha must tell "this size does not fit" from "the peer is gone";
+	// read the error before unlocking or logging can clobber it.
+#ifdef _WIN32
+	int errsv = r < 0 ? WSAGetLastError() : 0;
+#else
+	int errsv = r < 0 ? errno : 0;
+#endif
+	chiaki_mutex_unlock(&takion->sock_state_mutex);
 	if(r < 0)
 	{
-		// PLE-490: Senkusha must tell "this size does not fit" from "the peer is gone";
-		// read the error before logging can clobber it.
 #ifdef _WIN32
-		int errsv = WSAGetLastError();
 		bool too_big = errsv == WSAEMSGSIZE;
 		bool refused = errsv == WSAECONNREFUSED || errsv == WSAECONNRESET;
+		CHIAKI_LOGE(takion->log, "Takion failed to send raw: %d", errsv);
 #else
-		int errsv = errno;
 		bool too_big = errsv == EMSGSIZE;
 		bool refused = errsv == ECONNREFUSED;
+		CHIAKI_LOGE(takion->log, "Takion failed to send raw: %s", strerror(errsv));
 #endif
-		CHIAKI_LOGE(takion->log, "Takion failed to send raw: " CHIAKI_SOCKET_ERROR_FMT, CHIAKI_SOCKET_ERROR_VALUE);
 		if(too_big)
 			return CHIAKI_ERR_OVERFLOW;
 		if(refused)
@@ -1077,7 +1107,8 @@ static ChiakiErrorCode takion_send_feedback_packet(ChiakiTakion *takion, uint8_t
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto beach;
 
-	chiaki_takion_send_raw(takion, buf, buf_size);
+	// PLE-502: the sender needs to hear CHIAKI_ERR_DISCONNECTED once the socket is gone.
+	err = chiaki_takion_send_raw(takion, buf, buf_size);
 
 beach:
 	chiaki_mutex_unlock(&takion->gkcrypt_local_mutex);
@@ -1132,7 +1163,7 @@ CHIAKI_EXPORT ChiakiErrorCode chiaki_takion_send_mic_packet(ChiakiTakion *takion
 	if(err != CHIAKI_ERR_SUCCESS)
 		goto beach;
 
-	chiaki_takion_send_raw(takion, buf, buf_size);
+	err = chiaki_takion_send_raw(takion, buf, buf_size);
 beach:
 	chiaki_mutex_unlock(&takion->gkcrypt_local_mutex);
 	return err;
@@ -1610,19 +1641,25 @@ error_reoder_queue:
 #endif
 
 beach:
-	if(takion->cb)
-	{
-		ChiakiTakionEvent event = { 0 };
-		event.type = CHIAKI_TAKION_EVENT_TYPE_DISCONNECT;
-		takion->cb(&event, takion->cb_user);
-	}
+	// PLE-502: under sock_state_mutex, so a sender that is mid-send finishes on this
+	// socket first and none can send on the fd number after it is released. Closed
+	// before DISCONNECT is emitted, so whoever sees DISCONNECT sees a closed socket.
 	if(takion->close_socket)
 	{
+		chiaki_mutex_lock(&takion->sock_state_mutex);
+		takion->sock_open = false;
 		if(!CHIAKI_SOCKET_IS_INVALID(takion->sock))
 		{
 			CHIAKI_SOCKET_CLOSE(takion->sock);
 			takion->sock = CHIAKI_INVALID_SOCKET;
 		}
+		chiaki_mutex_unlock(&takion->sock_state_mutex);
+	}
+	if(takion->cb)
+	{
+		ChiakiTakionEvent event = { 0 };
+		event.type = CHIAKI_TAKION_EVENT_TYPE_DISCONNECT;
+		takion->cb(&event, takion->cb_user);
 	}
 	return NULL;
 }
