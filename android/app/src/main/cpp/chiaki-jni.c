@@ -378,7 +378,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 				uint64_t feedback_per_s_milli = interval_ms
 					? event->stream_stats.feedback_packets * 1000000ULL / interval_ms : 0;
 				uint64_t takion_expected_per_s_milli = interval_ms
-					? (event->stream_stats.takion_packets_received + event->stream_stats.takion_packets_lost) * 1000000ULL / interval_ms : 0;
+					? (event->stream_stats.takion_packets_received + event->stream_stats.takion_partial_frame_units_missing) * 1000000ULL / interval_ms : 0;
 				uint64_t feedback_gap_mean_milli = event->stream_stats.feedback_gap_count
 					? event->stream_stats.feedback_gap_sum_ms * 1000ULL / event->stream_stats.feedback_gap_count : 0;
 				CHIAKI_LOGI(session->log,
@@ -460,7 +460,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(jlong)event->stream_stats.video_reorder_timeouts,
 					(jlong)event->stream_stats.video_packet_jitter_us,
 					(jlong)event->stream_stats.takion_packets_received,
-					(jlong)event->stream_stats.takion_packets_lost,
+					(jlong)event->stream_stats.takion_partial_frame_units_missing,
 					(jlong)event->stream_stats.feedback_packets,
 					(jlong)diagnostics.dejitter_buffer_ns,
 					(jlong)diagnostics.cadence_depth_ns,

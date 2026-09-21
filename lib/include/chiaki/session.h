@@ -191,7 +191,14 @@ typedef struct chiaki_stream_stats_event_t
 	uint64_t video_packet_jitter_raw_us; // superseded per-packet EWMA, logged for comparison only
 	bool video_packet_jitter_filled; // PLE-403: false while video_packet_jitter_us is one unsmoothed sample
 	uint64_t takion_packets_received;
-	uint64_t takion_packets_lost;
+	/**
+	 * PLE-475: units missing from frames that partly arrived, not "packets lost" on the
+	 * wire. `chiaki_frame_processor_alloc_frame()` only runs once a frame's first unit
+	 * arrives, so a frame with zero units received is never instantiated and never
+	 * contributes to either side of this count -- a total outage adds nothing here at
+	 * all (see `takion_silence_ms` below, which is what can see one).
+	 */
+	uint64_t takion_partial_frame_units_missing;
 	uint64_t feedback_packets;
 	uint64_t fec_recovered_packets;
 	uint64_t unrecoverable_packets;
@@ -218,7 +225,7 @@ typedef struct chiaki_stream_stats_event_t
 	 * already closed. The second is the one to threshold on -- see
 	 * chiaki_takion_take_window_max_receive_gap_ms().
 	 *
-	 * This exists because `takion_packets_lost` cannot see a total outage at all:
+	 * This exists because `takion_partial_frame_units_missing` cannot see a total outage at all:
 	 * it is only ever raised by chiaki_frame_processor_report_packet_stats(), which
 	 * runs from chiaki_video_receiver_av_packet() and therefore only when a packet
 	 * arrives. Nothing arriving means nothing counted, so `received + lost` is 0 and

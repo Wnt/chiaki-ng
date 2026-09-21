@@ -411,7 +411,7 @@ data class StreamStatsEvent(
 	val reorderQueueTimeouts: Long,
 	val videoPacketJitterMicros: Long,
 	val takionPacketsReceived: Long,
-	val takionPacketsLost: Long,
+	val takionPartialFrameUnitsMissing: Long,
 	val feedbackPackets: Long,
 	val dejitterBufferNanos: Long,
 	val cadenceDepthNanos: Long,
@@ -451,7 +451,7 @@ data class StreamStatsEvent(
 	/** PLE-464: the longest gap between two inbound datagrams anywhere inside this window,
 	 * in ms -- including one that opened and closed between two polls, which
 	 * [takionSilenceMillis] cannot see. This is the classifier's only view of a total
-	 * outage: [takionPacketsLost] counts units missing from frames that partly arrived, so
+	 * outage: [takionPartialFrameUnitsMissing] counts units missing from frames that partly arrived, so
 	 * a second in which *nothing* arrived registers as 0 received and 0 lost, i.e. clean. */
 	val takionMaxReceiveGapMillis: Long = 0
 ): Event()
@@ -593,7 +593,7 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 		reorderQueueTimeouts: Long,
 		videoPacketJitterMicros: Long,
 		takionPacketsReceived: Long,
-		takionPacketsLost: Long,
+		takionPartialFrameUnitsMissing: Long,
 		feedbackPackets: Long,
 		dejitterBufferNanos: Long,
 		cadenceDepthNanos: Long,
@@ -639,7 +639,7 @@ class Session(connectInfo: ConnectInfo, logFile: String?, logVerbose: Boolean, r
 			reorderQueueTimeouts = reorderQueueTimeouts,
 			videoPacketJitterMicros = videoPacketJitterMicros,
 			takionPacketsReceived = takionPacketsReceived,
-			takionPacketsLost = takionPacketsLost,
+			takionPartialFrameUnitsMissing = takionPartialFrameUnitsMissing,
 			feedbackPackets = feedbackPackets,
 			dejitterBufferNanos = dejitterBufferNanos,
 			cadenceDepthNanos = cadenceDepthNanos,

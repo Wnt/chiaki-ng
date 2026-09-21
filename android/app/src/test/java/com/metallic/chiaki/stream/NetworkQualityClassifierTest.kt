@@ -13,7 +13,7 @@ class NetworkQualityClassifierTest
 		decodeMeanMicros = 0, decodeP95Micros = 0, decoderInputFramesDropped = 0,
 		presenterFramesDropped = 0, missedVsyncs = 0, videoFramesLost = 0,
 		reorderQueueTimeouts = 0, videoPacketJitterMicros = 0, takionPacketsReceived = 1000,
-		takionPacketsLost = 0, feedbackPackets = 0, dejitterBufferNanos = 0,
+		takionPartialFrameUnitsMissing = 0, feedbackPackets = 0, dejitterBufferNanos = 0,
 		cadenceDepthNanos = 0, cadenceTargetNanos = 0, cadenceErrP50Nanos = 0,
 		cadenceErrP99Nanos = 0, decodeEwmaNanos = 0, cadenceWindowDrops = 0,
 		vsyncPeriodNanos = 0, presenterQueueDepth = 0, audioLatencyMicros = 0,
@@ -30,7 +30,7 @@ class NetworkQualityClassifierTest
 		val lost = Math.round(10_000 * lossPercent / 100.0)
 		return base.copy(
 			videoPacketJitterMicros = Math.round(jitterMillis * 1000),
-			takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost)
+			takionPacketsReceived = 10_000 - lost, takionPartialFrameUnitsMissing = lost)
 	}
 
 	// PLE-352: the chip reads this same classifier's fastRttMillis (StreamActivity feeds
@@ -89,7 +89,7 @@ class NetworkQualityClassifierTest
 		assertEquals(NetworkQualityLevel.CONSTRAINED, NetworkQualityClassifier().update(
 			base.copy(videoPacketJitterMicros = 4_000), ethernet).level)
 		assertEquals(NetworkQualityLevel.POOR, NetworkQualityClassifier().update(
-			base.copy(takionPacketsReceived = 970, takionPacketsLost = 30), ethernet).level)
+			base.copy(takionPacketsReceived = 970, takionPartialFrameUnitsMissing = 30), ethernet).level)
 	}
 
 	@Test
@@ -146,7 +146,7 @@ class NetworkQualityClassifierTest
 			{
 				level = classifier.update(base.copy(
 					probeRttMicros = (rttMillis * 1000).toLong(),
-					takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost), ethernet).level
+					takionPacketsReceived = 10_000 - lost, takionPartialFrameUnitsMissing = lost), ethernet).level
 			}
 			return level
 		}
@@ -159,7 +159,7 @@ class NetworkQualityClassifierTest
 	@Test
 	fun causePrefersWeakWifiThenLanForClientTransportLoss()
 	{
-		val lossy = base.copy(takionPacketsReceived = 950, takionPacketsLost = 50,
+		val lossy = base.copy(takionPacketsReceived = 950, takionPartialFrameUnitsMissing = 50,
 			congestionMeasuredLoss = 0.05)
 		val weakWifi = NetworkLinkSample(NetworkLinkType.WIFI, rssiDbm = -72, linkSpeedMbps = 100)
 		assertEquals(NetworkQualityCause.WIFI_LINK,
@@ -358,7 +358,7 @@ class NetworkQualityClassifierTest
 				result = classifier.update(base.copy(
 					probeRttMicros = (rttMillis * 1000).toLong(),
 					videoPacketJitterMicros = (jitterMillis * 1000).toLong(),
-					takionPacketsReceived = 10_000 - lost, takionPacketsLost = lost,
+					takionPacketsReceived = 10_000 - lost, takionPartialFrameUnitsMissing = lost,
 					targetBitrateBps = targetBps, measuredThroughputBps = measuredBps), ethernet)
 			}
 			return result.cause
@@ -411,7 +411,7 @@ class NetworkQualityClassifierTest
 
 	// ---- PLE-464: the stall arm -------------------------------------------------------
 	//
-	// `takionPacketsLost` cannot see a total outage (it is only raised when a packet
+	// `takionPartialFrameUnitsMissing` cannot see a total outage (it is only raised when a packet
 	// arrives), so these feed the gap field the native layer now reports and assert that a
 	// blackout is no longer GOOD while the profiles that are merely slow still are. The
 	// numbers are the worst per-profile gaps measured in build/captures/ple404,
@@ -440,7 +440,7 @@ class NetworkQualityClassifierTest
 		// console's quality payload did not arrive either. Before PLE-464 this returned
 		// UNKNOWN and the one sample that carries the fault was discarded.
 		val blackout = base.copy(connectionQualityValid = false, takionPacketsReceived = 0,
-			takionPacketsLost = 0, takionMaxReceiveGapMillis = 1200)
+			takionPartialFrameUnitsMissing = 0, takionMaxReceiveGapMillis = 1200)
 		assertEquals(NetworkQualityLevel.POOR,
 			NetworkQualityClassifier().update(blackout, ethernet).level)
 	}
