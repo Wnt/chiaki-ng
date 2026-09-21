@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 private sealed class DialogContents
@@ -139,6 +140,7 @@ class StreamActivity : AppCompatActivity()
 	private var networkQuality = NetworkQualitySnapshot.UNKNOWN
 	private var networkQualityDetailsExpanded = false
 	private var connectionMode = ConnectionModeSnapshot.UNKNOWN
+	private val stallTracker = StallTracker()
 	private var streamTransformMode = TransformMode.FIT
 	private var touchControlsFragment: TouchControlsFragment? = null
 	private var lastWindowInsets: WindowInsetsCompat? = null
@@ -268,6 +270,15 @@ class StreamActivity : AppCompatActivity()
 			val link = diagnosticsNetworkLink()
 			summaryAccumulator.add(stats, link)
 			networkQuality = networkQualityClassifier.update(stats, link)
+			// PLE-473: the classifier's own stallMillis is a window max, so it stays elevated for
+			// up to FAST_WINDOW_SECONDS after the event -- fine for the badge, but it would make
+			// "N s ago" drift forward every tick the event is still in-window. Reading the raw
+			// per-second gap here instead (same fields PLE-464 plumbed, same computation as
+			// NetworkQuality.kt's per-sample stallMillis) timestamps the actual event once.
+			stallTracker.update(
+				max(stats.takionMaxReceiveGapMillis, stats.takionSilenceMillis).toDouble(),
+				SystemClock.elapsedRealtime()
+			)
 			if(qualityLogEnabled)
 				Log.i("NetworkQuality", String.format(Locale.US,
 					"Quality badge: level %s cause %s | median rtt_ms %.2f jitter_ms %.2f loss_pct %.2f" +
@@ -976,7 +987,8 @@ class StreamActivity : AppCompatActivity()
 	{
 		val readOnlyLabelColor = MaterialColors.getColor(this, com.google.android.material.R.attr.colorOnSurface, Color.WHITE)
 		val snapshot = connectionMode
-		for(line in connectionInfoLines(snapshot))
+		val lines = connectionInfoLines(snapshot) + listOfNotNull(stallInfoLine())
+		for(line in lines)
 		{
 			val title = SpannableString(line)
 			title.setSpan(ForegroundColorSpan(readOnlyLabelColor), 0, title.length, 0)
@@ -1011,6 +1023,16 @@ class StreamActivity : AppCompatActivity()
 		)
 		return lines
 	}
+
+	// PLE-473: absent (null) on a clean session -- a permanent "0 ms" row would be noise, and
+	// the operator's rule is that no feature needs an instruction to be discoverable, so an
+	// always-present row reading zero would just be a question mark for a reader who never saw
+	// a stall. Present only once a stall has actually happened, and it names how bad and how
+	// recent -- see StallInfo.kt for why those two numbers rather than a live or session-worst one.
+	private fun stallInfoLine(): String? =
+		StallInfoPresenter.display(stallTracker.snapshot(), SystemClock.elapsedRealtime())?.let {
+			getString(R.string.stream_connection_stall, it.stallSeconds, StreamSummaryFormatter.duration(it.agoMillis))
+		}
 
 	private fun updateNetworkQualityChip()
 	{
