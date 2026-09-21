@@ -68,9 +68,15 @@ error_packets:
 
 CHIAKI_EXPORT void chiaki_takion_send_buffer_fini(ChiakiTakionSendBuffer *send_buffer)
 {
-	send_buffer->should_stop = true;
-	ChiakiErrorCode err = chiaki_cond_signal(&send_buffer->cond);
+	// PLE-490: under the mutex, or the flag races the thread's predicate and the
+	// signal can land between its check and its wait -- with no packets queued that
+	// wait has no timeout, and the join below never returns.
+	ChiakiErrorCode err = chiaki_mutex_lock(&send_buffer->mutex);
 	assert(err == CHIAKI_ERR_SUCCESS);
+	send_buffer->should_stop = true;
+	err = chiaki_cond_signal(&send_buffer->cond);
+	assert(err == CHIAKI_ERR_SUCCESS);
+	chiaki_mutex_unlock(&send_buffer->mutex);
 	err = chiaki_thread_join(&send_buffer->thread, NULL);
 	assert(err == CHIAKI_ERR_SUCCESS);
 
