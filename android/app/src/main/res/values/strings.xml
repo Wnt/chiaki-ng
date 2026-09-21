@@ -274,6 +274,7 @@
     <string name="stream_connection_mtu_fallback">MTU %1$d (fallback — may fragment)</string>
     <string name="stream_connection_rtt_measured">RTT %1$d ms (measured)</string>
     <string name="stream_connection_rtt_fallback">RTT %1$d ms (fallback)</string>
+    <string name="stream_connection_stall">Last stall: %1$.1f s, %2$s ago</string>
 
     <!-- Don't localize these -->
     <string name="preferences_discovery_enabled_key">discovery_enabled</string>
