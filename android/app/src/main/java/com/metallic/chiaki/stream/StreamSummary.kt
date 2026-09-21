@@ -27,6 +27,8 @@ internal class StreamSummaryAccumulator
 	private var latencyDurationMillis = 0L
 	private var droppedFrames = 0L
 	private var lastVideoFramesLost = 0L
+	private var lastDecoderInputFramesDropped = 0L
+	private var lastPresenterFramesDropped = 0L
 	private var knownQualityDurationMillis = 0L
 	private var fairQualityDurationMillis = 0L
 	private var poorQualityDurationMillis = 0L
@@ -40,6 +42,8 @@ internal class StreamSummaryAccumulator
 		latencyDurationMillis = 0L
 		droppedFrames = 0L
 		lastVideoFramesLost = 0L
+		lastDecoderInputFramesDropped = 0L
+		lastPresenterFramesDropped = 0L
 		knownQualityDurationMillis = 0L
 		fairQualityDurationMillis = 0L
 		poorQualityDurationMillis = 0L
@@ -63,13 +67,21 @@ internal class StreamSummaryAccumulator
 			latencyWeightedSum += latencyMicros / 1000.0 * interval
 			latencyDurationMillis += interval
 		}
-		// videoFramesLost is session-cumulative (chiaki_stream_stats_event_t), so only its
-		// growth since the last event is new. Since PLE-474 it jumps by a whole blackout's
-		// frames at once, and summing the running total would re-add that every second.
+		// videoFramesLost, decoderInputFramesDropped and presenterFramesDropped are all
+		// session-cumulative (decoder->input_frames_dropped in video-decoder.c and
+		// presenter->dropped_frames in video-presenter.c are only reset on decoder/presenter
+		// init, never per-interval; PLE-484), so only each one's growth since the last event
+		// is new. Summing the running totals would re-add the whole history every event.
 		val videoFramesLostNew = (stats.videoFramesLost - lastVideoFramesLost).coerceAtLeast(0L)
 		lastVideoFramesLost = stats.videoFramesLost
-		droppedFrames += stats.decoderInputFramesDropped +
-			stats.presenterFramesDropped +
+		val decoderInputFramesDroppedNew =
+			(stats.decoderInputFramesDropped - lastDecoderInputFramesDropped).coerceAtLeast(0L)
+		lastDecoderInputFramesDropped = stats.decoderInputFramesDropped
+		val presenterFramesDroppedNew =
+			(stats.presenterFramesDropped - lastPresenterFramesDropped).coerceAtLeast(0L)
+		lastPresenterFramesDropped = stats.presenterFramesDropped
+		droppedFrames += decoderInputFramesDroppedNew +
+			presenterFramesDroppedNew +
 			videoFramesLostNew
 		when(classifier.update(stats, link).level)
 		{

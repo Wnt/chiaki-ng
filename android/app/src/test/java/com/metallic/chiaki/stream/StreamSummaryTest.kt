@@ -55,6 +55,46 @@ class StreamSummaryTest
 		assertEquals(190, accumulator.build(6_500)!!.droppedFrames)
 	}
 
+	// PLE-484: decoderInputFramesDropped and presenterFramesDropped are session-cumulative
+	// totals from the native decoder/presenter, not per-interval counts. Re-adding the raw
+	// value every stats event would make droppedFrames quadratic in session length instead
+	// of the real frame count.
+	@Test fun decoderAndPresenterDropsCountOnlyTheirGrowth()
+	{
+		val accumulator = StreamSummaryAccumulator()
+		accumulator.connected(1_000)
+		accumulator.add(stats(inputDrops = 1, presenterDrops = 0), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(inputDrops = 1, presenterDrops = 2), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(inputDrops = 3, presenterDrops = 2), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(inputDrops = 3, presenterDrops = 2), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.ended(5_000)
+
+		// real totals: inputDrops grew 0 -> 1 -> 1 -> 3 -> 3 = 3; presenterDrops grew
+		// 0 -> 0 -> 2 -> 2 -> 2 = 2. Total = 5, not the running-sum re-add of 1+3+3+2+2+2=13.
+		assertEquals(5, accumulator.build(5_500)!!.droppedFrames)
+	}
+
+	// PLE-484: a reconnect can restart the native counters at 0 without an intervening
+	// connected() call (the stats stream and the connection callback are not ordered against
+	// each other); the backwards jump must contribute 0 growth, not a negative.
+	@Test fun decoderAndPresenterDropsRestartMidSessionContributeZero()
+	{
+		val accumulator = StreamSummaryAccumulator()
+		accumulator.connected(1_000)
+		accumulator.add(stats(inputDrops = 10, presenterDrops = 5), NetworkLinkSample(NetworkLinkType.OTHER))
+		// counters restart at 0 (e.g. decoder/presenter re-init on reconnect) without a
+		// fresh connected(): the raw values go backwards.
+		accumulator.add(stats(inputDrops = 0, presenterDrops = 0), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.add(stats(inputDrops = 2, presenterDrops = 1), NetworkLinkSample(NetworkLinkType.OTHER))
+		accumulator.ended(4_000)
+
+		// real total: 10+5 from the first event, 0 from the backwards jump, 2+1 from the
+		// growth after restart = 18. The naive running sum would be 10+5+0+0+2+1 = 18 too,
+		// but a naive *difference* without coerceAtLeast(0L) would go negative on the jump
+		// (0-10=-10, 0-5=-5) and undercount to -2.
+		assertEquals(18, accumulator.build(4_500)!!.droppedFrames)
+	}
+
 	// PLE-352: the home card's "Avg latency" is a duration-weighted mean of
 	// measuredRttMicros, computed independently of the chip/overlay's classifier -- this
 	// pins down in code what the device capture (docs/verification/PLE-352/) found by
