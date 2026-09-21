@@ -16,6 +16,7 @@ extern MunitTest tests_frame_loss[];
 extern MunitTest tests_video_receiver[];
 extern MunitTest tests_fec[];
 extern MunitTest tests_regist[];
+extern MunitTest tests_session_mtu_fallback[];
 #ifndef CHIAKI_LIB_ENABLE_MBEDTLS
 extern MunitTest tests_aia[];
 #endif
@@ -115,6 +116,13 @@ static MunitSuite suites[] = {
 	{
 		"/regist",
 		tests_regist,
+		NULL,
+		1,
+		MUNIT_SUITE_OPTION_NONE
+	},
+	{
+		"/session_mtu_fallback",
+		tests_session_mtu_fallback,
 		NULL,
 		1,
 		MUNIT_SUITE_OPTION_NONE

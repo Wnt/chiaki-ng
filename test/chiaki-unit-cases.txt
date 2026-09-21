@@ -58,6 +58,9 @@
 /chiaki/regist/local_addr_usable
 /chiaki/regist/local_addr_for_peer_rejects_bad_args
 /chiaki/regist/local_addr_for_peer_loopback
+/chiaki/session_mtu_fallback/lan_interface_mtu_reproduces_1454
+/chiaki/session_mtu_fallback/tunnelled_interface_mtu_yields_smaller_value
+/chiaki/session_mtu_fallback/undeterminable_interface_mtu_falls_through_to_default
 /chiaki/aia/pem_roundtrip
 /chiaki/aia/network_policy
 /chiaki/aia/exports_verified_chain

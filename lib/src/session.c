@@ -21,6 +21,9 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <ifaddrs.h>
 #endif
 
 #include "utils.h"
@@ -496,6 +499,113 @@ static bool session_check_state_pred_remote_data(void *user)
 	return session->should_stop || !CHIAKI_SOCKET_IS_INVALID(session->remote_connection_info.data_sock);
 }
 
+// Bytes of IP/UDP + Takion AV-packet header overhead Senkusha's own MTU search
+// (576-1454, senkusha.c) already carves out of a raw interface MTU. Matches
+// senkusha.c's MTU_UDP_PACKET_ADD (0x1c) + MTU_AV_PACKET_ADD (0x12), so that a
+// standard 1500-byte LAN interface reproduces the pre-PLE-499 constant exactly.
+#define SESSION_MTU_FALLBACK_OVERHEAD 46
+#define SESSION_MTU_FALLBACK_DEFAULT 1454
+
+/**
+ * PLE-499: picks the MTU Senkusha's failure path falls back to. Public and pure
+ * (no socket access) so it can be exercised with synthetic interface MTUs in a
+ * host test without depending on the test machine's real network interfaces.
+ */
+CHIAKI_EXPORT uint32_t chiaki_session_mtu_fallback(ChiakiLog *log, int interface_mtu)
+{
+	if(interface_mtu <= 0)
+	{
+		CHIAKI_LOGI(log, "Senkusha failed, could not determine local interface MTU, using default fallback MTU %u (source: default)",
+			(unsigned int)SESSION_MTU_FALLBACK_DEFAULT);
+		return SESSION_MTU_FALLBACK_DEFAULT;
+	}
+
+	uint32_t mtu = (uint32_t)interface_mtu > SESSION_MTU_FALLBACK_OVERHEAD
+		? (uint32_t)interface_mtu - SESSION_MTU_FALLBACK_OVERHEAD
+		: 0;
+	if(mtu == 0 || mtu > SESSION_MTU_FALLBACK_DEFAULT)
+		mtu = SESSION_MTU_FALLBACK_DEFAULT;
+
+	CHIAKI_LOGI(log, "Senkusha failed, using fallback MTU %u derived from local interface MTU %d (source: interface mtu)",
+		(unsigned int)mtu, interface_mtu);
+	return mtu;
+}
+
+#if !defined(_WIN32)
+/**
+ * Interface MTU of whichever local interface owns the given connected socket's
+ * address, or -1 if it cannot be determined. Not itself unit tested: it depends
+ * on real OS interfaces, unlike chiaki_session_mtu_fallback() above.
+ */
+static int session_socket_interface_mtu(chiaki_socket_t sock)
+{
+	struct sockaddr_storage local_addr;
+	socklen_t local_addr_len = sizeof(local_addr);
+	if(getsockname(sock, (struct sockaddr *)&local_addr, &local_addr_len) < 0)
+		return -1;
+
+	struct ifaddrs *ifap = NULL;
+	if(getifaddrs(&ifap) < 0)
+		return -1;
+
+	int mtu = -1;
+	for(struct ifaddrs *a = ifap; a; a = a->ifa_next)
+	{
+		if(!a->ifa_addr || a->ifa_addr->sa_family != local_addr.ss_family)
+			continue;
+
+		bool match = false;
+		if(local_addr.ss_family == AF_INET)
+		{
+			match = ((struct sockaddr_in *)a->ifa_addr)->sin_addr.s_addr
+				== ((struct sockaddr_in *)&local_addr)->sin_addr.s_addr;
+		}
+		else if(local_addr.ss_family == AF_INET6)
+		{
+			match = memcmp(&((struct sockaddr_in6 *)a->ifa_addr)->sin6_addr,
+				&((struct sockaddr_in6 *)&local_addr)->sin6_addr, sizeof(struct in6_addr)) == 0;
+		}
+		if(!match)
+			continue;
+
+		chiaki_socket_t ioctl_sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if(!CHIAKI_SOCKET_IS_INVALID(ioctl_sock))
+		{
+			struct ifreq ifr;
+			memset(&ifr, 0, sizeof(ifr));
+			strncpy(ifr.ifr_name, a->ifa_name, IFNAMSIZ - 1);
+			if(ioctl(ioctl_sock, SIOCGIFMTU, &ifr) == 0)
+				mtu = ifr.ifr_mtu;
+			CHIAKI_SOCKET_CLOSE(ioctl_sock);
+		}
+		break;
+	}
+	freeifaddrs(ifap);
+	return mtu;
+}
+#endif
+
+/**
+ * Local interface MTU of the path to the console: the data socket if Senkusha
+ * was given one (remote/holepunch connections), else the still-open ctrl
+ * socket (direct LAN connections, where data_sock is NULL until Senkusha
+ * hands mtu_in/mtu_out to the stream connection). -1 if undeterminable.
+ */
+static int session_query_local_mtu(ChiakiSession *session, chiaki_socket_t *data_sock)
+{
+#if defined(_WIN32)
+	(void)session;
+	(void)data_sock;
+	return -1;
+#else
+	if(data_sock && !CHIAKI_SOCKET_IS_INVALID(*data_sock))
+		return session_socket_interface_mtu(*data_sock);
+	if(!CHIAKI_SOCKET_IS_INVALID(session->ctrl.sock))
+		return session_socket_interface_mtu(session->ctrl.sock);
+	return -1;
+#endif
+}
+
 #define ENABLE_SENKUSHA
 
 static void *session_thread_func(void *arg)
@@ -754,8 +864,10 @@ ctrl_failed:
 	else
 	{
 		CHIAKI_LOGE(session->log, "Senkusha failed, but we still try to connect with fallback values");
-		session->mtu_in = 1454;
-		session->mtu_out = 1454;
+		int interface_mtu = session_query_local_mtu(session, data_sock);
+		uint32_t fallback_mtu = chiaki_session_mtu_fallback(session->log, interface_mtu);
+		session->mtu_in = fallback_mtu;
+		session->mtu_out = fallback_mtu;
 		session->rtt_us = 1000;
 		session->rtt_us_measured = false;
 		session->dontfrag = false;
