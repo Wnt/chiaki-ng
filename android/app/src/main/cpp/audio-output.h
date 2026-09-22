@@ -18,6 +18,11 @@ typedef struct android_chiaki_audio_diagnostics_t
 	int32_t xruns;
 	bool latency_valid;
 	bool xruns_valid;
+	// Standing fill of the app-side FIFO ahead of the Oboe stream: what android_chiaki_audio_output_frame()
+	// has pushed and onAudioReady() has not yet popped. Distinct from fifo_capacity_us (audioFifoMs, the
+	// configured ceiling) and from latency_us (Oboe's own internal buffering past the callback).
+	uint64_t fifo_fill_us;
+	uint64_t fifo_capacity_us;
 } AndroidChiakiAudioDiagnostics;
 
 void *android_chiaki_audio_output_new(ChiakiLog *log, uint32_t buffer_bursts, uint32_t fifo_ms,

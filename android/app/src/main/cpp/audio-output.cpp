@@ -196,6 +196,15 @@ extern "C" void android_chiaki_audio_output_get_diagnostics(void *audio_output,
 	auto ao = reinterpret_cast<AudioOutput *>(audio_output);
 	diagnostics->underruns = ao->underruns.load(std::memory_order_relaxed);
 	std::lock_guard<std::mutex> lock(ao->stream_mutex);
+	if(ao->rate > 0 && ao->channels > 0)
+	{
+		uint64_t bytes_per_ms = (uint64_t)ao->rate * ao->channels * sizeof(int16_t) / 1000;
+		if(bytes_per_ms > 0)
+		{
+			diagnostics->fifo_fill_us = ao->buf.FillBytes() * 1000 / bytes_per_ms;
+			diagnostics->fifo_capacity_us = ao->buf.CapacityBytes() * 1000 / bytes_per_ms;
+		}
+	}
 	if(!ao->stream)
 		return;
 

@@ -77,6 +77,20 @@ class CircularBuffer
 		}
 
 		/**
+		 * Snapshot of currently buffered bytes (standing fill), not atomic with Push/Pop.
+		 * Diagnostics only.
+		 */
+		size_t FillBytes() const
+		{
+			return full_queue.wasSize() * ChunkSize + push_chunk_size;
+		}
+
+		size_t CapacityBytes() const
+		{
+			return chunks_count * ChunkSize;
+		}
+
+		/**
 		 * @return bytes that were pushed
 		 */
 		size_t Push(uint8_t *buf, size_t buf_size)

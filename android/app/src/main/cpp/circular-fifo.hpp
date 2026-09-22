@@ -34,6 +34,7 @@ public:
 
   bool wasEmpty() const;
   bool wasFull() const;
+  size_t wasSize() const;
   bool isLockFree() const;
   void reset();
 
@@ -92,6 +93,15 @@ bool CircularFifo<Element, Size>::wasFull() const
   return (next_tail == _head.load());
 }
 
+
+// snapshot with acceptance that this comparison is not atomic; used for diagnostics only
+template<typename Element, size_t Size>
+size_t CircularFifo<Element, Size>::wasSize() const
+{
+  const auto tail = _tail.load(std::memory_order_relaxed);
+  const auto head = _head.load(std::memory_order_relaxed);
+  return (tail + Capacity - head) % Capacity;
+}
 
 template<typename Element, size_t Size>
 bool CircularFifo<Element, Size>::isLockFree() const

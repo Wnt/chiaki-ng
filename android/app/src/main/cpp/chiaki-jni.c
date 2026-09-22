@@ -392,6 +392,7 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					" | feedback_gap max_ms %llu mean_ms %llu.%03llu over_50_ms %llu"
 					" | rtt_ms %llu.%03llu audio_latency_ms %s%llu.%03llu"
 					" audio_xruns %s%d audio_underruns %llu"
+					" audio_fifo_fill_ms %llu.%03llu audio_fifo_capacity_ms %llu.%03llu"
 					" | network target_bps %llu measured_bps %llu console_rtt_raw %.6f"
 					" probe_rtt_ms %llu.%03llu probe_samples %llu probe_unacked %llu probe_ambiguous %llu"
 					" server_loss %llu congestion_loss measured=%.4f reported=%.4f"
@@ -432,6 +433,10 @@ static void android_chiaki_event_cb(ChiakiEvent *event, void *user)
 					(unsigned long long)(audio.latency_us % 1000),
 					audio.xruns_valid ? "" : "unavailable/", audio.xruns,
 					(unsigned long long)audio.underruns,
+					(unsigned long long)(audio.fifo_fill_us / 1000),
+					(unsigned long long)(audio.fifo_fill_us % 1000),
+					(unsigned long long)(audio.fifo_capacity_us / 1000),
+					(unsigned long long)(audio.fifo_capacity_us % 1000),
 					(unsigned long long)event->stream_stats.target_bitrate_bps,
 					(unsigned long long)event->stream_stats.measured_throughput_bps,
 					event->stream_stats.console_rtt_raw,
