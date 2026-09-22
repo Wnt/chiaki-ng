@@ -35,11 +35,13 @@ class HomeActionLayoutTest
 		)
 	}
 
-	// PLE-522: PLE-241 gave consoleListContainer a guaranteed larger minimum height share in
-	// landscape (layout_weight 2 of 3, versus a squeezable top section). The landscape `end`
-	// inset only depends on contentRight/actionLeft/clearance, so a taller or shorter container
-	// must not change it: contentBottom (and therefore the container's height share) never
-	// enters the landscape formula.
+	// PLE-522: PLE-241's LinearLayout weight split (2 of 3) was meant to give consoleListContainer
+	// a guaranteed larger minimum height share in landscape versus a squeezable top section, but
+	// PLE-549 found the weight split itself did not hold under real content overflow and replaced
+	// it with a ConstraintLayout Guideline + explicit minimum height. Either way, the landscape
+	// `end` inset only depends on contentRight/actionLeft/clearance, so a taller or shorter
+	// container must not change it: contentBottom (and therefore the container's height share)
+	// never enters the landscape formula.
 	@Test
 	fun landscapeEndInsetIsIndependentOfContainerHeight()
 	{

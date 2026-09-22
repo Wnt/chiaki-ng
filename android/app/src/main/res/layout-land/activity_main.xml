@@ -8,24 +8,38 @@
     android:layout_height="match_parent"
     android:background="?attr/colorSurface">
 
-    <!-- PLE-241: landscape-only. The quality preset card plus a visible "Last session"
-         summary can exceed the short landscape height and used to squeeze consoleListContainer
-         (and its Play buttons) off screen. Capping the top section to a weighted share and
-         letting it scroll internally guarantees consoleListContainer, whose measured bounds
-         updateConsoleActionInsets() (MainActivity.kt) relies on for FAB clearance, always
-         keeps the larger, deterministic share of the remaining height. -->
-    <LinearLayout
+    <!-- PLE-241 tried to cap the top section with a plain LinearLayout weight split (1:2), on
+         the theory that a NestedScrollView with layout_height=0dp+layout_weight always gets an
+         exact share of the parent regardless of its content. PLE-549 found that assumption false
+         on both the real S22 Ultra and the emulator: LinearLayout's two-pass weighted measurement
+         can let the NestedScrollView's wrap_content child inflate totalLength in the first pass
+         (observed via uiautomator/logcat as consoleListContainer's children being handed inverted
+         top>bottom bounds and dropped as "invisible"), so the "weight 2" side can be squeezed to a
+         few dozen px instead of ~67%. A ConstraintLayout Guideline sizes both sides as a fixed
+         fraction of the parent's own height, independent of either child's content, so the split
+         cannot invert; consoleListContainer also gets an explicit minimum height as a second,
+         content-independent floor. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/mainContentLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
+        <androidx.constraintlayout.widget.Guideline
+            android:id="@+id/mainContentSplitGuideline"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            app:layout_constraintGuide_percent="0.33" />
+
         <androidx.core.widget.NestedScrollView
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:fillViewport="false">
+            android:fillViewport="false"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toTopOf="@id/mainContentSplitGuideline"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -262,9 +276,14 @@
 
         <FrameLayout
             android:id="@+id/consoleListContainer"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_weight="2">
+            android:minHeight="@dimen/console_list_land_min_height"
+            app:layout_constraintTop_toBottomOf="@id/mainContentSplitGuideline"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintHeight_min="@dimen/console_list_land_min_height">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/hostsRecyclerView"
@@ -301,7 +320,7 @@
                     android:textColor="?attr/colorOnSurfaceVariant" />
             </LinearLayout>
         </FrameLayout>
-    </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <LinearLayout
         android:id="@+id/onboardingLayout"
