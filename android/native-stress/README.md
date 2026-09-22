@@ -107,13 +107,23 @@ shows `LD_PRELOAD=…libclang_rt.asan…` for ASan.
 
 ## Limits found so far
 
-- **TSan does not run on API 36**: not on the x86_64 emulator, not on the
-  S22 Ultra (Android 16). Every TSan binary from NDK r28 (clang 19) dies in
-  `ThreadSanitizer: CHECK failed: tsan_rtl.cpp:1036
-  "((thr->ignore_reads_and_writes)) > ((0))"` as soon as a second thread
-  starts, even a two-thread `x++` program. `run.sh` reports that as exit 2.
-  Use ASan (emulator) or HWASan (phone). TSan could only ever run in an
+- **TSan does not run on this NDK, on any API level we can test.** Every TSan
+  binary from NDK r28 (clang 19) dies in `ThreadSanitizer: CHECK failed:
+  tsan_rtl.cpp:1036 "((thr->ignore_reads_and_writes)) > ((0))"` as soon as a
+  second thread starts, even a two-thread `x++` program. `run.sh` reports that
+  as exit 2. Confirmed on the x86_64 emulator on both API 36 (Android 16) and
+  API 35 (Android 15, `EMU_AVD=pleikkari-api35`), and on the S22 Ultra
+  (Android 16) — so this is not an API-36 quirk, it's NDK r28 (PLE-544). Use
+  ASan (emulator) or HWASan (phone). TSan could only ever run in an
   `adb shell` binary anyway, never inside the app process (no `wrap.sh` path).
+  This is a known, still-open NDK limitation, not something specific to this
+  project: [android/ndk#1041](https://github.com/android/ndk/issues/1041)
+  tracks TSan-on-Android support since 2022, and as of the NDK team's most
+  recent comments there (2025-10-13) it remains unfinished and low priority
+  ("relatively low priority because pretty much everyone actually wants this
+  for their apps... rather than for their stand-alone unit test binaries").
+  No new upstream issue filed — #1041 already covers this exact failure mode
+  for `adb shell` binaries, filing a duplicate would add nothing.
 - **HWASan binaries use the system runtime.** On Android 14+ `run.sh` sets
   `LD_HWASAN=1`, as the NDK's `wrap.sh/hwasan.sh` does, and pushes no runtime.
   The NDK's own `libclang_rt.hwasan-aarch64-android.so` pushed next to the
