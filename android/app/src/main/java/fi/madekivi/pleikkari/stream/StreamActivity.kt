@@ -841,7 +841,12 @@ class StreamActivity : AppCompatActivity()
 			return
 		params.topMargin = topMargin
 		params.marginEnd = marginEnd
-		binding.streamControlDock.layoutParams = params
+		// This runs from the root's layout-change listener, i.e. inside a layout pass. A
+		// requestLayout() made there is deferred, and dropped outright for a view under a GONE
+		// parent - which the dock is whenever the overlay is hidden. The dock then kept a stale
+		// 0x0 measure, so the overlay opened with nothing in it and the stream menu (and with it
+		// the on-screen controls toggle) could not be reached. Apply the change after the pass.
+		binding.streamControlDock.post { binding.streamControlDock.layoutParams = params }
 	}
 
 	private fun prepareWindowTouchLayout()
