@@ -41,7 +41,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.core.view.updateLayoutParams
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.*
 import com.google.android.material.color.MaterialColors
@@ -821,10 +820,17 @@ class StreamActivity : AppCompatActivity()
 		val gestures = insets.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures())
 		val baseMargin = (12 * resources.displayMetrics.density).toInt()
 		val controlsTop = portraitControlsTop()
-		binding.streamControlDock.updateLayoutParams<ViewGroup.MarginLayoutParams> {
-			topMargin = baseMargin + if(controlsTop > 0) controlsTop else maxOf(safe.top, gestures.top)
-			marginEnd = baseMargin + maxOf(safe.right, gestures.right)
-		}
+		val topMargin = baseMargin + if(controlsTop > 0) controlsTop else maxOf(safe.top, gestures.top)
+		val marginEnd = baseMargin + maxOf(safe.right, gestures.right)
+		val params = binding.streamControlDock.layoutParams as ViewGroup.MarginLayoutParams
+		// PLE-513: updateLayoutParams() always calls requestLayout(), even with unchanged values.
+		// applyOverlayInsets() is reached from a root layout-change listener, so an unconditional
+		// requestLayout() here re-triggers that listener every frame.
+		if(params.topMargin == topMargin && params.marginEnd == marginEnd)
+			return
+		params.topMargin = topMargin
+		params.marginEnd = marginEnd
+		binding.streamControlDock.layoutParams = params
 	}
 
 	private fun prepareWindowTouchLayout()
