@@ -115,6 +115,13 @@ android {
         buildConfig true
     }
 
+    // PLE-523: Robolectric view tests (HomeScreenBoundsTest) inflate the real layouts and
+    // resource qualifiers (layout-land, window size) inside testDebugUnitTest, so the gate
+    // runs them without the shared emulator.
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -221,4 +228,5 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation libs.mockwebserver
     testImplementation libs.coroutines.test
+    testImplementation libs.robolectric
 }

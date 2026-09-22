@@ -14,7 +14,6 @@ import android.widget.PopupMenu
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.IntentCompat
-import androidx.core.view.updatePadding
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -140,9 +139,7 @@ class MainActivity : AppCompatActivity()
 		setupQualityPresetChooser()
 
 		binding.addConsoleButton.setOnClickListener { showAddConsoleMenu() }
-		binding.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-			updateConsoleActionInsets()
-		}
+		HomeActionLayout.install(binding)
 		binding.onboardingSignInButton.setOnClickListener { startPsnSignIn() }
 		binding.onboardingAddAddressButton.setOnClickListener {
 			addManualConsole(binding.onboardingAddAddressButton)
@@ -210,31 +207,6 @@ class MainActivity : AppCompatActivity()
 				connectPsnConsole(request.console, justLinked = request.justLinked)
 		}
 		updateHomeState()
-	}
-
-	private fun updateConsoleActionInsets()
-	{
-		val container = binding.consoleListContainer
-		val action = binding.addConsoleButton
-		if(container.width == 0 || container.height == 0 || action.width == 0 || action.height == 0)
-			return
-		val location = IntArray(2)
-		val actionLocation = IntArray(2)
-		container.getLocationInWindow(location)
-		action.getLocationInWindow(actionLocation)
-		val insets = HomeActionLayout.contentInsets(
-			contentRight = location[0] + container.width,
-			contentBottom = location[1] + container.height,
-			actionLeft = actionLocation[0],
-			actionTop = actionLocation[1],
-			clearance = resources.getDimensionPixelSize(R.dimen.home_action_clearance),
-			landscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-		)
-		if(container.paddingRight != insets.end || container.paddingBottom != insets.bottom)
-			container.updatePadding(right = insets.end, bottom = insets.bottom)
-		val summaryEnd = maxOf(resources.getDimensionPixelSize(R.dimen.home_summary_end_padding), insets.end)
-		if(binding.streamSummaryContent.paddingRight != summaryEnd)
-			binding.streamSummaryContent.updatePadding(right = summaryEnd)
 	}
 
 	private fun currentHomeState(): OnboardingHomeState = when(previewState)
