@@ -195,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fault", choices=FAULTS, help="make the mock build reintroduce this defect; the run must then FAIL")
     parser.add_argument("--exit", choices=EXITS, help="leave the tab on the redirect page this way instead of pressing Finish")
     parser.add_argument("--idle", type=float, default=60, help="seconds --exit idle leaves the redirect page alone")
+    parser.add_argument("--no-emulator-reservation", action="store_true",
+                         help="skip holding the emulator reservation when --serial targets a non-emulator "
+                              "device, so a phone-only run doesn't contend with unrelated emulator work; "
+                              "ignored (the reservation is still held) if --serial starts with emulator-")
     args = parser.parse_args(argv)
 
     host = HOSTS[args.link]
@@ -221,8 +225,10 @@ def main(argv: list[str] | None = None) -> int:
         print(result)
         return 0 if result == "PASS" else 1
 
-    # The emulator is shared: hold its reservation (emu.sh keeps it until released).
-    subprocess.run([str(WORKSPACE / "scripts/dev/emu.sh"), "shell", "true"], check=True, capture_output=True)
+    # The emulator is shared: hold its reservation (emu.sh keeps it until released). Skipped only when
+    # asked to and --serial is not the emulator, so a phone-only run doesn't contend with unrelated work.
+    if not (args.no_emulator_reservation and not args.serial.startswith("emulator-")):
+        subprocess.run([str(WORKSPACE / "scripts/dev/emu.sh"), "shell", "true"], check=True, capture_output=True)
     try:
         if http_json(f"https://{host}/__mock/events?since=999999999", timeout=10) is None:
             raise RuntimeError
