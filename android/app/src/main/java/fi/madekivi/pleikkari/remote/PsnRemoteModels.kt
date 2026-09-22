@@ -92,6 +92,12 @@ sealed interface PsnRemoteState
 }
 
 class PsnRemoteProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/**
+ * A PSN step ran past its time limit. withTimeout's own exception is a CancellationException, and
+ * letting it escape as one made the caller treat a console that never answered as a user cancel:
+ * the connect ended silently, leaving the stream screen black with no error or Retry.
+ */
+class PsnRemoteTimeoutException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
 class PsnRemoteAuthenticationException(
 	message: String,
 	val httpCode: Int? = null,

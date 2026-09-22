@@ -7,6 +7,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -135,6 +137,26 @@ class PsnRemoteControllerTest
 		assertTrue(controller.state.value is PsnRemoteState.Failed)
 	}
 
+	/** A step's withTimeout expiring is a reported failure, not a silent cancel that leaves a black screen. */
+	@Test fun aStepTimeoutFailsWithTheStageInsteadOfCancelling() = runBlocking {
+		val controller = PsnRemoteController(
+			fixtureApi(),
+			OkHttpPsnPushTransport(OkHttpClient(), json),
+			object : PsnHolePuncher {
+				override suspend fun prepare(peer: PsnConnectionRequest, accountId: String): PsnPunchPreparation =
+					withTimeout(10) { awaitCancellation() }
+			},
+			RecordingNativeBridge(),
+			randomBytes = PsnRandomBytes { size -> ByteArray(size) { (it + 1).toByte() } },
+			uuid = { "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+			json = json
+		)
+		val error = runCatching { controller.connect(PsnDevice(duid, "Fixture PS5")) }.exceptionOrNull()
+		assertTrue("$error", error is PsnRemoteTimeoutException)
+		assertTrue("${error!!.message}", error.message!!.startsWith("The console did not answer in time (timed out during "))
+		assertTrue("${controller.state.value}", controller.state.value is PsnRemoteState.Failed)
+	}
+
 	/** PLE-327: every form the account id takes in a signaling envelope or payload is blanked. */
 	@Test fun redactBlanksEveryAccountIdForm()
 	{
@@ -150,16 +172,18 @@ class PsnRemoteControllerTest
 		assertEquals("""{"accountId": "<redacted>"}""", PsnRemoteController.redact("""{"accountId": "me"}"""))
 	}
 
+	private fun fixtureApi() = PsnRemoteApi(
+		OkHttpClient(),
+		PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
+		object : PsnRefreshTokenStore {
+			override fun read() = "refresh-token-placeholder"
+			override fun write(value: String) = Unit
+		},
+		json
+	)
+
 	private fun fixtureController(native: PsnRemoteNativeBridge) = PsnRemoteController(
-		PsnRemoteApi(
-			OkHttpClient(),
-			PsnRemoteEndpoints(server.url("/token").toString(), server.url("/api/").toString(), server.url("/push-address").toString()),
-			object : PsnRefreshTokenStore {
-				override fun read() = "refresh-token-placeholder"
-				override fun write(value: String) = Unit
-			},
-			json
-		),
+		fixtureApi(),
 		OkHttpPsnPushTransport(OkHttpClient(), json),
 		FixtureHolePuncher(),
 		native,

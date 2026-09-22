@@ -7,6 +7,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -123,6 +124,14 @@ class PsnRemoteController(
 				}
 			}
 		}
+		catch(timeout: TimeoutCancellationException)
+		{
+			val error = timedOut(timeout)
+			val failed = PsnRemoteState.Failed(error.message!!, error)
+			current = failed
+			cleanup(failed)
+			throw error
+		}
 		catch(cancelled: CancellationException)
 		{
 			current = PsnRemoteState.Cancelling
@@ -138,6 +147,10 @@ class PsnRemoteController(
 		}
 	}
 
+	/** A step's withTimeout expired: a failure to report, never a cancel (see [PsnRemoteTimeoutException]). */
+	private fun timedOut(timeout: TimeoutCancellationException) =
+		PsnRemoteTimeoutException("The console did not answer in time (timed out during ${current::class.simpleName})", timeout)
+
 	/** Sends the PSN remote-play command, which wakes the console, then closes the temporary session. */
 	suspend fun wake(device: PsnDevice): Unit = withContext(ioDispatcher) {
 		check(session == null) { "A PSN remote session is already active" }
@@ -145,6 +158,12 @@ class PsnRemoteController(
 		{
 			prepareConsole(device)
 			cleanup(PsnRemoteState.Woken)
+		}
+		catch(timeout: TimeoutCancellationException)
+		{
+			val error = timedOut(timeout)
+			cleanup(PsnRemoteState.Failed(error.message!!, error))
+			throw error
 		}
 		catch(cancelled: CancellationException)
 		{
