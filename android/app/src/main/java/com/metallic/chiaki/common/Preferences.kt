@@ -207,6 +207,13 @@ class Preferences(context: Context)
 	/** Window of the general per-stream stats line in the session log; 0 when the setting is off. */
 	val feedbackStatsLogIntervalMs get() = if(feedbackStatsLogEnabled) 1000 else 0
 
+	val senkushaFallbackNoticeEnabledKey get() = resources.getString(R.string.preferences_senkusha_fallback_notice_enabled_key)
+	/** PLE-509: A/B switch for a one-shot toast telling the user Senkusha failed and a
+	 * fallback MTU/RTT is in use. Off by default so today's silence stays the baseline. */
+	var senkushaFallbackNoticeEnabled
+		get() = sharedPreferences.getBoolean(senkushaFallbackNoticeEnabledKey, false)
+		set(value) { sharedPreferences.edit().putBoolean(senkushaFallbackNoticeEnabledKey, value).apply() }
+
 	val streamEndCauseProbeEnabledKey get() = resources.getString(R.string.preferences_stream_end_cause_probe_enabled_key)
 	/** PLE-262: probe the console after it ends a stream, to name a takeover on the TV. Runs only after the stream ended. */
 	var streamEndCauseProbeEnabled

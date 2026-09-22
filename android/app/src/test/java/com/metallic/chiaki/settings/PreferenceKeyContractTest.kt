@@ -67,6 +67,7 @@ class PreferenceKeyContractTest
 			"@string/preferences_real_video_timestamps_key",
 			"@string/preferences_resolution_key",
 			"@string/preferences_rumble_enabled_key",
+			"@string/preferences_senkusha_fallback_notice_enabled_key",
 			"@string/preferences_stream_diagnostics_overlay_enabled_key",
 			"@string/preferences_stream_end_cause_probe_enabled_key",
 			"@string/preferences_swap_cross_moon_key",

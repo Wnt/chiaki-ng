@@ -10,3 +10,5 @@ debug-guard | source set: android/app/src/debug/java/com/metallic/chiaki/regist/
 # unused, it costs one extra Log.w-free field and one skipped `if`. See docs/devtools-quit-injection.md.
 debug-guard | com/metallic/chiaki/stream/StreamActivity.kt: if(BuildConfig.DEBUG) | debug-harness | PLE-422: gates registration of the adb-only QuitEvent injection receiver; a release build never registers it, so the broadcast action has no listener
 adb-only-extra | EXTRA_QUIT_REASON | debug-harness | PLE-422: int extra on the devtools-only INJECT_QUIT_REASON broadcast; set only by `adb shell am broadcast`, read only by the BuildConfig.DEBUG-gated receiver above
+
+default-off-pref | stream_senkusha_fallback_notice | measurement | PLE-509: one-shot toast when Senkusha fails and a fallback MTU/RTT is used; off so today's silence (PLE-490's flagged gap) stays the A/B baseline until the notice is measured worth keeping

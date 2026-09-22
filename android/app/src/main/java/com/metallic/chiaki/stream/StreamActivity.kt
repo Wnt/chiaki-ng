@@ -28,6 +28,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -294,6 +295,10 @@ class StreamActivity : AppCompatActivity()
 			diagnosticsOverlay?.update(stats)
 		}
 		viewModel.session.connectionMode.observe(this) { mode ->
+			// PLE-509: ConnectedEvent (and so this observer) fires once per session, so no extra
+			// per-session guard is needed against repeating the toast.
+			if(!mode.measured && mode.mode != ConnectionMode.UNKNOWN && preferences.senkushaFallbackNoticeEnabled)
+				Toast.makeText(this, R.string.stream_senkusha_fallback_notice, Toast.LENGTH_LONG).show()
 			connectionMode = mode
 		}
 		updateNetworkQualityChip()
