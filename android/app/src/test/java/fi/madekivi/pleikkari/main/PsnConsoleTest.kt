@@ -7,7 +7,9 @@ import fi.madekivi.pleikkari.common.RegisteredHost
 import fi.madekivi.pleikkari.lib.Target
 import fi.madekivi.pleikkari.remote.PsnDevice
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PsnConsoleTest
@@ -73,5 +75,16 @@ class PsnConsoleTest
 		assertEquals(PsnFailureStep.RETRY, psnFailureStep(PsnErrorRecovery.RETRY, consoleOnLan = false))
 		assertEquals(PsnFailureStep.SIGN_IN, psnFailureStep(PsnErrorRecovery.SIGN_IN, consoleOnLan = true))
 		assertEquals(PsnFailureStep.SIGN_IN, psnFailureStep(PsnErrorRecovery.SIGN_IN, consoleOnLan = false))
+	}
+
+	/** A sign-in after a failed list reloads it instead of leaving the stale "Sign in to PSN" error up. */
+	@Test fun enablingPsnReloadsAHiddenOrFailedListOnly()
+	{
+		assertTrue(shouldReloadPsnConsoleList(PsnConsoleListState.Hidden))
+		assertTrue(shouldReloadPsnConsoleList(PsnConsoleListState.Error("Sign in to PSN", PsnErrorRecovery.SIGN_IN)))
+		assertTrue(shouldReloadPsnConsoleList(PsnConsoleListState.Error("offline", PsnErrorRecovery.RETRY)))
+		assertFalse(shouldReloadPsnConsoleList(PsnConsoleListState.Loading))
+		assertFalse(shouldReloadPsnConsoleList(PsnConsoleListState.Ready))
+		assertFalse(shouldReloadPsnConsoleList(null))
 	}
 }

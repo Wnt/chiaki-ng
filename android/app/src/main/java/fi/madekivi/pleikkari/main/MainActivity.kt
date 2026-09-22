@@ -506,8 +506,6 @@ class MainActivity : AppCompatActivity()
 						preferences.psnRemotePlayEnabled = true
 					}
 					viewModel.setPsnEnabled(true, psnListAllowed)
-					if(viewModel.psnListState.value is PsnConsoleListState.Error)
-						viewModel.loadPsnConsoles()
 					linkPendingHost()
 				}
 			}

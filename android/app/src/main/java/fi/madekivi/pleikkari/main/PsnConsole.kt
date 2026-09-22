@@ -90,6 +90,13 @@ internal fun shouldLoadPsnConsoleList(
 	psnAccountId: String?
 ): Boolean = psnRemotePlayEnabled && psnSignInEnabled && !psnAccountId.isNullOrBlank()
 
+/**
+ * Whether enabling the PSN list should (re)load it. A failed list is retried too: after a
+ * sign-in that fixed a SIGN_IN error, the list must not keep showing that error until restart.
+ */
+internal fun shouldReloadPsnConsoleList(state: PsnConsoleListState?): Boolean =
+	state == PsnConsoleListState.Hidden || state is PsnConsoleListState.Error
+
 sealed interface PsnConsoleListState
 {
 	data object Hidden : PsnConsoleListState

@@ -107,7 +107,7 @@ class MainViewModel(
 			_psnListState.value = PsnConsoleListState.Hidden
 			return
 		}
-		if(_psnListState.value == PsnConsoleListState.Hidden)
+		if(shouldReloadPsnConsoleList(_psnListState.value))
 			loadPsnConsoles()
 	}
 
