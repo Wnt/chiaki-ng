@@ -32,7 +32,7 @@ class StreamQualityPresetTest
 		)
 		assertPreset(
 			Preferences.StreamQualityPreset.LOW_LATENCY,
-			Preferences.Resolution.RES_720P,
+			Preferences.Resolution.RES_1080P,
 			Preferences.FPS.FPS_60,
 			Preferences.Codec.CODEC_H265
 		)
@@ -45,10 +45,16 @@ class StreamQualityPresetTest
 	}
 
 	@Test
+	fun lowLatencyPinsAnExplicitBitrateSoItStaysDistinctFromBalancedAt1080p()
+	{
+		assertEquals(10000, Preferences.StreamQualityPreset.LOW_LATENCY.bitrate)
+		assertNull(Preferences.StreamQualityPreset.BALANCED.bitrate)
+	}
+
+	@Test
 	fun everyPresetUsesTheProvenDecoderDefaults()
 	{
 		Preferences.StreamQualityPreset.values().forEach { preset ->
-			assertNull(preset.bitrate)
 			assertTrue(preset.decoderOperatingRateDefault)
 			assertTrue(preset.decoderOperatingRateAuto)
 			assertEquals(0, preset.decoderOperatingRate)

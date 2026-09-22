@@ -81,13 +81,13 @@ class Preferences(context: Context)
 	)
 	{
 		BALANCED("balanced", R.string.stream_quality_preset_balanced, Resolution.RES_1080P, FPS.FPS_60, Codec.CODEC_H265),
-		LOW_LATENCY("low_latency", R.string.stream_quality_preset_low_latency, Resolution.RES_720P, FPS.FPS_60, Codec.CODEC_H265),
+		LOW_LATENCY("low_latency", R.string.stream_quality_preset_low_latency, Resolution.RES_1080P, FPS.FPS_60, Codec.CODEC_H265, bitrate = 10000),
 		DATA_SAVER("data_saver", R.string.stream_quality_preset_data_saver, Resolution.RES_540P, FPS.FPS_30, Codec.CODEC_H264)
 	}
 
 	companion object
 	{
-		val resolutionDefault = Resolution.RES_720P
+		val resolutionDefault = Resolution.RES_1080P
 		val resolutionAll = Resolution.values()
 		val fpsDefault = FPS.FPS_60
 		val fpsAll = FPS.values()
