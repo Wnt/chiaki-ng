@@ -5,6 +5,7 @@ package com.metallic.chiaki.main
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
@@ -338,6 +339,14 @@ class MainActivity : AppCompatActivity()
 		})
 		binding.summaryEndCause.visibility = View.GONE
 		binding.streamSummaryCard.visibility = View.VISIBLE
+		// PLE-555: layout-land's mainContentLayout scrolls its top section within a fixed-height
+		// Guideline split (PLE-549), so a newly-shown card can land below the visible viewport.
+		// requestRectangleOnScreen bubbles up to whichever ancestor can scroll (a no-op if none can).
+		binding.streamSummaryCard.post {
+			binding.streamSummaryCard.requestRectangleOnScreen(
+				Rect(0, 0, binding.streamSummaryCard.width, binding.streamSummaryCard.height), true
+			)
+		}
 		summary.endReason?.let { explainStreamEnd(it) }
 	}
 
