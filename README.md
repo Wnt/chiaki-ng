@@ -1,3 +1,5 @@
+> **Pleikkari** is an Android PS5 Remote Play client, forked from [chiaki-ng](https://github.com/streetpea/chiaki-ng) by Street Pea, itself a fork of [Chiaki](https://github.com/thestr4ng3r/chiaki) by Florian Märkl.
+> Licensed under AGPL-3.0. Not affiliated with, or endorsed by, Sony Interactive Entertainment.
 
 ![chiaki-ng logo](gui/res/chiaking-logo.svg)
 
