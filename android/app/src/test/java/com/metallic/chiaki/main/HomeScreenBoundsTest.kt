@@ -29,6 +29,21 @@ import org.robolectric.annotation.Config
  * Window sizes are the test phones' default display sizes in dp. The S22 Ultra's default
  * resolution is 1080x2316 at 450 dpi (384x824 dp); the S25 Ultra's is 1440x3120 at 3.5x
  * (411x891 dp). The density bucket does not change the layout in dp.
+ *
+ * PLE-550: this test cannot catch the PLE-549 class of regression, where
+ * `layout-land/activity_main.xml`'s `mainContentLayout` weight split (`NestedScrollView`
+ * weight 1 / `consoleListContainer` weight 2) held in Robolectric but collapsed to a ~91%/9%
+ * split on a real S22 Ultra, clipping `playButton` off-screen (PLE-521). Reproducing the real
+ * production sequence in Robolectric -- inflate with the summary card GONE, settle a first
+ * layout pass, then flip it to VISIBLE the way `MainActivity.showStreamSummary()` does after an
+ * `ActivityResult` -- still measures the intended, exact 1:2 split (verified 320px/640px of a
+ * 960px `mainContentLayout` for S22 Ultra landscape, summary shown, 3 consoles). Robolectric's
+ * `CoordinatorLayout`/`AppBarLayout`/weighted-`LinearLayout` measure pass does not reproduce
+ * whatever real-device condition (most likely real `WindowInsetsCompat` delivery timing, which
+ * Robolectric does not simulate) makes the weight system fall back to measuring both weighted
+ * children at their wrap_content size instead. No parameter combination this test can add closes
+ * that gap -- it is a Robolectric measure-pass fidelity limit, not a scenario-coverage gap -- so
+ * catching this class of regression needs an instrumented or on-device check instead.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @Config(sdk = [35])
