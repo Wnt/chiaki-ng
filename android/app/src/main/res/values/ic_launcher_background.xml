@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#CFFF0D</color>
+    <!-- Matches @color/primary; keeps the launcher icon consistent with the
+         in-app theme (see values/colors.xml). -->
+    <color name="ic_launcher_background">#162d50</color>
 </resources>
