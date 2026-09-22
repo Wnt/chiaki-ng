@@ -11,7 +11,7 @@ WebAuthn gets a genuine secure origin:
 
 | Host | `/.well-known/assetlinks.json` | Stands for |
 |---|---|---|
-| `pleikkari-psn.lab.madekivi.fi` | served (`com.metallic.chiaki.psnmock`, debug key `52:71:7A…A0:1C`) | a **verified** app link |
+| `pleikkari-psn.lab.madekivi.fi` | served (`fi.madekivi.pleikkari.psnmock`, and the pre-PLE-568 `com.metallic.chiaki.psnmock`, debug key `52:71:7A…A0:1C`) | a **verified** app link |
 | `pleikkari-psn-nolink.lab.madekivi.fi` | 404 | an **unverifiable** link: what `remoteplay.dl.playstation.net` is in production |
 
 ## Run it
@@ -87,7 +87,7 @@ scenario. Attestation statements are accepted without checking.
 cd android && ./gradlew -PchiakiPsnMock=verified assembleDebug   # or =nolink
 ```
 
-- The build is a **separate app**, `com.metallic.chiaki.psnmock`, labelled *PSN MOCK Chiaki*, with a red *PSN MOCK · host* strip over the status bar of every activity. It can never overwrite a real install's PSN credentials or PS5 registration.
+- The build is a **separate app**, `fi.madekivi.pleikkari.psnmock` (`com.metallic.chiaki.psnmock` before PLE-568), labelled *PSN MOCK Chiaki*, with a red *PSN MOCK · host* strip over the status bar of every activity. It can never overwrite a real install's PSN credentials or PS5 registration.
 - Both mock hosts are declared as links. The verified host is `autoVerify`; the nolink host is declared without it, exactly like Sony's redirect host in `src/main`.
 - **It cannot ship.** The mock host comes from `BuildConfig.PSN_MOCK_HOST`, which only the debug build type defines. The release source set's `psnMockHost()` returns `null` and has no mock code at all. A release task with `-PchiakiPsnMock` fails the build.
 - The asset link names the debug key in `~/.android/debug.keystore`. A build signed with another key (`chiakiKeystore` in `local.properties`) cannot verify.

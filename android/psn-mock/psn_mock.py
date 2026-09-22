@@ -45,7 +45,9 @@ CLIENT_ID = "ba495a24-818c-472b-b12d-ff231c1b5745"
 REDIRECT_PATH = "/remoteplay/redirect"
 SESSION_COOKIE = "mock_session"
 DEBUG_CERT_SHA256 = "52717a10c7dd74c22c7d1ce10fd0254da2f65a23621bb82aa72157b1c533a01c"
-DEFAULT_PACKAGES = ("com.metallic.chiaki.psnmock",)
+# PLE-568: the app became fi.madekivi.pleikkari; the old id stays listed so a build from a branch
+# that predates the rename still gets a verified app link.
+DEFAULT_PACKAGES = ("fi.madekivi.pleikkari.psnmock", "com.metallic.chiaki.psnmock")
 
 SCENARIOS = {
     "ok": "Signs in and lists one PS5",

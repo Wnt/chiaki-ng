@@ -133,7 +133,7 @@ class MockServerTest(unittest.TestCase):
         statement = json.loads(data)[0]
         self.assertEqual(statement["relation"], ["delegate_permission/common.handle_all_urls"])
         target = statement["target"]
-        self.assertEqual(target["package_name"], "com.metallic.chiaki.psnmock")
+        self.assertEqual(target["package_name"], "fi.madekivi.pleikkari.psnmock")
         self.assertEqual(target["sha256_cert_fingerprints"][0].replace(":", "").lower(), psn_mock.DEBUG_CERT_SHA256)
         response, _ = self.request("GET", "/.well-known/assetlinks.json", NOLINK)
         self.assertEqual(response.status, 404)

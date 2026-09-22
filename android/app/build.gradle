@@ -49,7 +49,7 @@ def androidEglRenderer = (project.findProperty("chiakiAndroidEglRenderer") ?: "f
 // PLE-10: off by default; -PchiakiTakionSocketTuning=true builds the A/B "on" APK.
 def takionSocketTuning = (project.findProperty("chiakiTakionSocketTuning") ?: "false").toBoolean()
 // PLE-284: -PchiakiPsnMock=verified|nolink builds a debug APK that signs in against the PSN mock
-// (android/psn-mock) instead of Sony. It is a separate app (com.metallic.chiaki.psnmock), so it can
+// (android/psn-mock) instead of Sony. It is a separate app (fi.madekivi.pleikkari.psnmock), so it can
 // never overwrite a real install's PSN credentials, and a release build refuses the property.
 def psnMockHosts = [verified: "pleikkari-psn.lab.madekivi.fi", nolink: "pleikkari-psn-nolink.lab.madekivi.fi"]
 def psnMockArg = (project.findProperty("chiakiPsnMock") ?: "").toString().trim()
@@ -113,12 +113,17 @@ if(debugOnlyProperties) {
 }
 
 android {
+    // PLE-568: the Kotlin package, R and BuildConfig stay in com.metallic.chiaki; only the
+    // installed package name changed. Moving namespace would move R/BuildConfig/databinding and
+    // re-resolve every relative class name in the manifests, which is the source move's job.
     namespace "com.metallic.chiaki"
     compileSdk 35
     ndkVersion "28.2.13676358"
 
     defaultConfig {
-        applicationId "com.metallic.chiaki"
+        // PLE-568: a new package, not a rename. The com.metallic.chiaki install keeps its data
+        // (and the PS5 registration); `scripts/dev/app-state.sh migrate` copies it across.
+        applicationId "fi.madekivi.pleikkari"
         minSdk 24
         targetSdk 35
         versionCode 12
@@ -202,8 +207,9 @@ android {
                 applicationIdSuffix ".psnmock"
                 versionNameSuffix "-psnmock"
             }
-            // Same applicationId, so it installs over (and streams with) the registered app;
-            // the suffix is what tells a sanitized install apart in `dumpsys package`.
+            // Same applicationId (fi.madekivi.pleikkari, since PLE-568), so it installs over (and
+            // streams with) the registered app; the suffix is what tells a sanitized install apart
+            // in `dumpsys package`.
             if(sanitizerArg)
                 versionNameSuffix = (versionNameSuffix ?: "") + "-$sanitizerArg"
         }
