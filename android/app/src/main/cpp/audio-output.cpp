@@ -98,6 +98,7 @@ extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log, uint32_t buffer
 // Call with stream_mutex held. Dropping the last shared_ptr does not close the stream: neither
 // ~AudioStreamAAudio nor ~AudioStream calls close() (Oboe 1.10.0), so AAudio would keep calling
 // into the destroyed object from its callback thread. ManagedStream's deleter used to do this.
+// Without it every real stream end died with SIGTRAP in callOnAudioReady on AAudio_1 (PLE-541).
 static void audio_output_release_stream(AudioOutput *ao)
 {
 	if(ao->stream)
