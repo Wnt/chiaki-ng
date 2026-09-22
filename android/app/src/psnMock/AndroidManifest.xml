@@ -16,13 +16,13 @@
         tools:replace="android:label">
 
         <provider
-            android:name="com.metallic.chiaki.remote.PsnMockBanner"
+            android:name="fi.madekivi.pleikkari.remote.PsnMockBanner"
             android:authorities="${applicationId}.psnmockbanner"
             android:exported="false" />
 
         <!-- PLE-324: WebAuthn in the app's own WebView; exported so adb can start it. -->
         <activity
-            android:name="com.metallic.chiaki.regist.PsnMockWebAuthnProbe"
+            android:name="fi.madekivi.pleikkari.regist.PsnMockWebAuthnProbe"
             android:exported="true" />
 
         <activity android:name=".regist.PsnRedirectActivity">

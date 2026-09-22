@@ -519,7 +519,7 @@ void destroy_renderer(EglRenderer *renderer)
 } // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_metallic_chiaki_stream_EglRenderer_nativeCreate(
+Java_fi_madekivi_pleikkari_stream_EglRenderer_nativeCreate(
 		JNIEnv *env, jobject, jobject output_surface, jint width, jint height, jfloat sharpness)
 {
 	if(!output_surface || width <= 0 || height <= 0 ||
@@ -583,7 +583,7 @@ Java_com_metallic_chiaki_stream_EglRenderer_nativeCreate(
 }
 
 extern "C" JNIEXPORT jobject JNICALL
-Java_com_metallic_chiaki_stream_EglRenderer_nativeGetDecoderSurface(
+Java_fi_madekivi_pleikkari_stream_EglRenderer_nativeGetDecoderSurface(
 		JNIEnv *env, jobject, jlong handle)
 {
 	auto *renderer = reinterpret_cast<EglRenderer *>(handle);
@@ -593,7 +593,7 @@ Java_com_metallic_chiaki_stream_EglRenderer_nativeGetDecoderSurface(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_metallic_chiaki_stream_EglRenderer_nativeDestroy(JNIEnv *, jobject, jlong handle)
+Java_fi_madekivi_pleikkari_stream_EglRenderer_nativeDestroy(JNIEnv *, jobject, jlong handle)
 {
 	destroy_renderer(reinterpret_cast<EglRenderer *>(handle));
 }

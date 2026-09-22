@@ -162,8 +162,8 @@ android/psn-mock/release_check.py --build --control build/psn-mock/psnmock-verif
 
 It checks that Gradle refuses `-PchiakiPsnMock` for a release task, then builds `assembleRelease`
 and scans every entry of the release APK (dex, manifest, resources, native libraries), as UTF-8 and
-UTF-16LE, for the mock's markers (`madekivi`, `pleikkari-psn`, `psnmock`, `PSN MOCK`, `__mock`).
-It also requires the package to be `com.metallic.chiaki`, and requires Sony's production sign-in host
+UTF-16LE, for the mock's markers (`lab.madekivi.fi`, `pleikkari-psn`, `psnmock`, `PSN MOCK`, `__mock`).
+It also requires the package to be `fi.madekivi.pleikkari`, and requires Sony's production sign-in host
 to be found, so an empty scan cannot pass. `--control` scans a mock debug APK and requires the markers
 to be found there, which shows the scan would catch a mock build.
 
@@ -190,7 +190,7 @@ The feature needs WebView M124 or later (Chromium 916b2555, 2024-03-07), found w
 A `-PchiakiPsnMock` build has the probe activity, so this can be re-checked when a provider or WebView changes:
 
 ```bash
-adb shell am start -n com.metallic.chiaki.psnmock/com.metallic.chiaki.regist.PsnMockWebAuthnProbe \
+adb shell am start -n fi.madekivi.pleikkari.psnmock/fi.madekivi.pleikkari.regist.PsnMockWebAuthnProbe \
     --es mode browser --es target mock      # mode: browser|app|none; target: mock|sony
 adb logcat -s PsnWebAuthnProbe CredentialManager
 ```

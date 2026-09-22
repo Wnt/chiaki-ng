@@ -9,7 +9,7 @@
     android:keepScreenOn="true"
     tools:context=".stream.StreamActivity">
 
-    <com.metallic.chiaki.stream.AspectRatioFrameLayout
+    <fi.madekivi.pleikkari.stream.AspectRatioFrameLayout
         android:id="@+id/aspectRatioLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -26,14 +26,14 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
-        <com.metallic.chiaki.touchcontrols.TouchpadView
+        <fi.madekivi.pleikkari.touchcontrols.TouchpadView
             android:id="@+id/streamTouchpadView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:visibility="gone"
             app:drawableIdle="@android:color/transparent"
             app:drawablePressed="@android:color/transparent" />
-    </com.metallic.chiaki.stream.AspectRatioFrameLayout>
+    </fi.madekivi.pleikkari.stream.AspectRatioFrameLayout>
 
     <ProgressBar
         android:id="@+id/progressBar"
@@ -92,7 +92,7 @@
 
     <fragment
         android:id="@+id/controlsFragment"
-        android:name="com.metallic.chiaki.touchcontrols.DefaultTouchControlsFragment"
+        android:name="fi.madekivi.pleikkari.touchcontrols.DefaultTouchControlsFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 

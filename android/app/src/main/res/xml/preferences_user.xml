@@ -8,7 +8,7 @@
 
         <Preference
             app:key="registered_hosts"
-            app:fragment="com.metallic.chiaki.settings.SettingsRegisteredHostsFragment"
+            app:fragment="fi.madekivi.pleikkari.settings.SettingsRegisteredHostsFragment"
             app:icon="@drawable/ic_console_simple"
             app:summary=" "
             app:title="@string/preferences_registered_hosts_title"
@@ -28,7 +28,7 @@
 
         <Preference
             app:key="controller_touch"
-            app:fragment="com.metallic.chiaki.settings.ControllerSettingsFragment"
+            app:fragment="fi.madekivi.pleikkari.settings.ControllerSettingsFragment"
             app:icon="@drawable/ic_gamepad"
             app:summary="@string/preferences_controller_touch_summary"
             app:title="@string/preferences_category_title_controller_touch" />

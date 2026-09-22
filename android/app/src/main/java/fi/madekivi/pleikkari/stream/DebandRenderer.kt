@@ -1,0 +1,507 @@
+// SPDX-License-Identifier: LicenseRef-AGPL-3.0-only-OpenSSL
+
+package fi.madekivi.pleikkari.stream
+
+import android.graphics.SurfaceTexture
+import android.opengl.GLES11Ext
+import android.opengl.GLES30
+import android.opengl.GLSurfaceView
+import android.os.Handler
+import android.os.Looper
+import android.os.Trace
+import android.util.Log
+import android.view.Surface
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
+import kotlin.random.Random
+
+/**
+ * GLSurfaceView.Renderer that applies debanding shader to video frames.
+ * Uses SurfaceTexture to receive frames from MediaCodec and renders them
+ * with a GLSL debanding effect.
+ */
+class DebandRenderer(
+    private val onSurfaceReady: (Surface) -> Unit,
+    private val onRequestRender: () -> Unit = {},
+    private val renderWhenDirty: Boolean = false
+) : GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
+
+    companion object {
+        private const val TAG = "DebandRenderer"
+        private const val FRAME_LOG_INTERVAL = 120L
+
+        // 1. Copy pass (OES -> FBO)
+        private val COPY_VERTEX_SHADER = """
+            #version 300 es
+            in vec4 a_Position;
+            in vec2 a_TexCoord;
+            out highp vec2 v_TexCoord;
+            uniform mat4 u_STMatrix;
+            void main() {
+                gl_Position = a_Position;
+                v_TexCoord = (u_STMatrix * vec4(a_TexCoord, 0.0, 1.0)).xy;
+            }
+        """.trimIndent()
+
+        private val COPY_FRAGMENT_SHADER = """
+            #version 300 es
+            #extension GL_OES_EGL_image_external_essl3 : require
+            precision highp float;
+            in highp vec2 v_TexCoord;
+            out vec4 outColor;
+            uniform samplerExternalOES u_Texture;
+            void main() {
+                outColor = texture(u_Texture, v_TexCoord);
+            }
+        """.trimIndent()
+
+        // 2. Effects pass (FBO -> Screen)
+        private val EFFECT_VERTEX_SHADER = """
+            #version 300 es
+            in vec4 a_Position;
+            in vec2 a_TexCoord;
+            out highp vec2 v_TexCoord;
+            void main() {
+                gl_Position = a_Position;
+                // FBO texture is usually upside down relative to OES coordinates
+                v_TexCoord = a_TexCoord;
+            }
+        """.trimIndent()
+
+        private val EFFECT_FRAGMENT_SHADER = """
+            #version 300 es
+            precision highp float;
+
+            in highp vec2 v_TexCoord;
+            out vec4 outColor;
+
+            uniform sampler2D u_Texture;
+            uniform highp float u_Time;
+            uniform highp vec2 u_ScreenSize;
+            uniform highp float u_Sharpness;
+
+            // Stochastic Debanding v2 Parameters
+            const float DEBAND_THRESHOLD = 0.02;   // Sensitivity to banding steps (lower = safer for textures)
+            const int NUM_SAMPLES = 24;            // More samples = smoother gradients
+            const float MAX_RADIUS = 24.0;         // Effective sampling radius
+            const float GRAIN_STRENGTH = 0.003;    // Slightly reduced grain
+
+            // Interleaved Gradient Noise
+            highp float ign(vec2 v) {
+                v = floor(v * u_ScreenSize);
+                return fract(52.9829189 * fract(dot(v, vec2(0.06711056, 0.00583715))));
+            }
+
+            // High quality fast PRNG
+            highp float rand(vec2 co, float seed) {
+                return fract(sin(dot(co + seed, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+
+            void main() {
+                highp vec2 texelSize = 1.0 / u_ScreenSize;
+                vec3 original = texture(u_Texture, v_TexCoord).rgb;
+                
+                // ═══════════════════════════════════════════════════════════════
+                // STOCHASTIC DEBANDING (libplacebo-inspired)
+                // ═══════════════════════════════════════════════════════════════
+                
+                vec3 sum = original;
+                float totalW = 1.0;
+                
+                // Use IGN + Time for jittered sampling
+                float noise = ign(v_TexCoord);
+                float timeSeed = fract(u_Time * 0.1);
+                
+                for (int i = 0; i < NUM_SAMPLES; i++) {
+                    // Generate pseudo-random angle and radius
+                    float fi = float(i);
+                    float angle = (fi + noise) * 2.3999632; // Golden angle for distribution
+                    float r = sqrt((fi + 0.5) / float(NUM_SAMPLES)) * MAX_RADIUS;
+                    
+                    vec2 offset = vec2(cos(angle), sin(angle)) * r * texelSize;
+                    vec3 s = texture(u_Texture, clamp(v_TexCoord + offset, 0.0, 1.0)).rgb;
+                    
+                    // Difference check: only average pixels that could be part of the same gradient
+                    float diff = max(max(abs(original.r - s.r), abs(original.g - s.g)), abs(original.b - s.b));
+                    
+                    // Soft threshold: skip edges, keep gradients. 
+                    // Lower threshold means we only blend very similar colors.
+                    float w = 1.0 - smoothstep(0.0, DEBAND_THRESHOLD, diff);
+                    sum += s * w;
+                    totalW += w;
+                }
+                
+                vec3 debanded = sum / totalW;
+                vec3 color = debanded;
+
+                // ═══════════════════════════════════════════════════════════════
+                // RCAS (Robust Contrast Adaptive Sharpening)
+                // ═══════════════════════════════════════════════════════════════
+                
+                // Sample neighbors from the original texture for better edge detection
+                vec3 b = texture(u_Texture, v_TexCoord + vec2(0.0, -texelSize.y)).rgb;
+                vec3 d = texture(u_Texture, v_TexCoord + vec2(-texelSize.x, 0.0)).rgb;
+                vec3 f = texture(u_Texture, v_TexCoord + vec2(texelSize.x, 0.0)).rgb;
+                vec3 h = texture(u_Texture, v_TexCoord + vec2(0.0, texelSize.y)).rgb;
+                
+                if (u_Sharpness > 0.0) {
+                    // Increased peak for more "bite"
+                    float peak = -1.0 / mix(8.0, 4.0, u_Sharpness);
+                    vec3 e = color;
+                    
+                    vec3 minRGB = min(min(min(min(b, d), f), h), e);
+                    vec3 maxRGB = max(max(max(max(b, d), f), h), e);
+                    
+                    // Reduced contrast protection (0.01 instead of 0.03) to sharpen darker details better
+                    vec3 amp = clamp((min(minRGB, 1.0 - maxRGB) - 0.01) / max(maxRGB, 0.01), 0.0, 1.0);
+                    amp = sqrt(amp);
+                    float w = peak * amp.r; 
+                    
+                    color = clamp(((b + d + f + h) * w + e) / (4.0 * w + 1.0), 0.0, 1.0);
+                }
+
+                // ═══════════════════════════════════════════════════════════════
+                // FINAL DITHER
+                // ═══════════════════════════════════════════════════════════════
+                float dither = (ign(v_TexCoord + timeSeed) - 0.5) * 0.005;
+                color += vec3(dither + GRAIN_STRENGTH * (rand(v_TexCoord, timeSeed) - 0.5));
+
+                outColor = vec4(color, 1.0);
+            }
+        """.trimIndent()
+
+        // Fullscreen quad vertices (position + texcoord)
+        private val QUAD_VERTICES = floatArrayOf(
+            // X,    Y,    U,    V
+            -1.0f, -1.0f, 0.0f, 0.0f,
+             1.0f, -1.0f, 1.0f, 0.0f,
+            -1.0f,  1.0f, 0.0f, 1.0f,
+             1.0f,  1.0f, 1.0f, 1.0f
+        )
+        private const val COORDS_PER_VERTEX = 4
+        private const val VERTEX_STRIDE = COORDS_PER_VERTEX * 4 // 4 bytes per float
+    }
+
+    // OpenGL programs
+    private var copyProgram = 0
+    private var effectProgram = 0
+    
+    // Textures and FBO
+    private var oesTextureId = 0
+    private var fboTextureId = 0
+    private var fboId = 0
+    
+    private var vertexBuffer: FloatBuffer? = null
+
+    // Pass 1 (Copy) locations
+    private var uCopySTMatrixLoc = 0
+    private var uCopyTextureLoc = 0
+    private var aCopyPosLoc = 0
+    private var aCopyTexLoc = 0
+    
+    // Pass 2 (Effect) locations
+    private var uEffTextureLoc = 0
+    private var uEffTimeLoc = 0
+    private var uEffScreenSizeLoc = 0
+    private var uEffSharpnessLoc = 0
+    private var aEffPosLoc = 0
+    private var aEffTexLoc = 0
+
+    // SurfaceTexture and Surface for MediaCodec output
+    private var surfaceTexture: SurfaceTexture? = null
+    private var surface: Surface? = null
+
+    // Texture transform matrix
+    private val stMatrix = FloatArray(16)
+
+    var sharpness = 0f
+
+    // Screen dimensions
+    private var screenWidth = 1
+    private var screenHeight = 1
+
+    @Volatile
+    private var frameAvailable = false
+    private val dirtyFrameAvailable = AtomicBoolean(false)
+    private var frameCount = 0f
+    private val firstFrameCallbackLogged = AtomicBoolean(false)
+    private val firstFrameDrawLogged = AtomicBoolean(false)
+    private val frameCallbackCount = AtomicLong(0)
+    private var drawCount = 0L
+    private var textureUpdateCount = 0L
+
+    init {
+        android.opengl.Matrix.setIdentityM(stMatrix, 0)
+    }
+
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        // 1. Create copy program
+        copyProgram = createProgram(COPY_VERTEX_SHADER, COPY_FRAGMENT_SHADER)
+        aCopyPosLoc = GLES30.glGetAttribLocation(copyProgram, "a_Position")
+        aCopyTexLoc = GLES30.glGetAttribLocation(copyProgram, "a_TexCoord")
+        uCopySTMatrixLoc = GLES30.glGetUniformLocation(copyProgram, "u_STMatrix")
+        uCopyTextureLoc = GLES30.glGetUniformLocation(copyProgram, "u_Texture")
+
+        // 2. Create effect program
+        effectProgram = createProgram(EFFECT_VERTEX_SHADER, EFFECT_FRAGMENT_SHADER)
+        aEffPosLoc = GLES30.glGetAttribLocation(effectProgram, "a_Position")
+        aEffTexLoc = GLES30.glGetAttribLocation(effectProgram, "a_TexCoord")
+        uEffTextureLoc = GLES30.glGetUniformLocation(effectProgram, "u_Texture")
+        uEffTimeLoc = GLES30.glGetUniformLocation(effectProgram, "u_Time")
+        uEffScreenSizeLoc = GLES30.glGetUniformLocation(effectProgram, "u_ScreenSize")
+        uEffSharpnessLoc = GLES30.glGetUniformLocation(effectProgram, "u_Sharpness")
+
+        // 3. Create OES texture
+        val textures = IntArray(2)
+        GLES30.glGenTextures(2, textures, 0)
+        oesTextureId = textures[0]
+        fboTextureId = textures[1]
+
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        
+        // 4. Create FBO
+        val fbos = IntArray(1)
+        GLES30.glGenFramebuffers(1, fbos, 0)
+        fboId = fbos[0]
+
+        // 5. Create SurfaceTexture
+        surfaceTexture = SurfaceTexture(oesTextureId).also {
+            if (renderWhenDirty) {
+                // SurfaceTexture's single-argument overload may dispatch on an arbitrary thread.
+                // Use a known Looper for the callback that wakes GLSurfaceView's GLThread.
+                it.setOnFrameAvailableListener(this, Handler(Looper.getMainLooper()))
+            } else {
+                it.setOnFrameAvailableListener(this)
+            }
+            surface = Surface(it)
+            onSurfaceReady(surface!!)
+        }
+
+        // Create vertex buffer
+        vertexBuffer = ByteBuffer.allocateDirect(QUAD_VERTICES.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .put(QUAD_VERTICES)
+            .also { it.position(0) }
+
+        GLES30.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+    }
+
+    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        GLES30.glViewport(0, 0, width, height)
+        screenWidth = width
+        screenHeight = height
+        surfaceTexture?.setDefaultBufferSize(width, height)
+        
+        // Resize FBO texture
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTextureId)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
+        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, fboTextureId, 0)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        // Claim the pending notification before updateTexImage(). A new callback can arrive
+        // while updateTexImage() is running; clearing the flag afterwards would erase that
+        // notification and leave its buffer queued forever in render-when-dirty mode.
+        val updateTexture = if (renderWhenDirty) {
+            dirtyFrameAvailable.getAndSet(false)
+        } else {
+            frameAvailable
+        }
+        if (renderWhenDirty) {
+            drawCount++
+            if (shouldLogFrameEvent(drawCount)) {
+                Log.i(TAG, "Dirty draw #$drawCount started on ${Thread.currentThread().name}; updateTexture=$updateTexture")
+            }
+        }
+        if (updateTexture) {
+            if (renderWhenDirty) {
+                Trace.beginSection("DebandRenderer.updateTexImage")
+                try {
+                    surfaceTexture?.updateTexImage()
+                } finally {
+                    Trace.endSection()
+                }
+            } else {
+                surfaceTexture?.updateTexImage()
+            }
+            surfaceTexture?.getTransformMatrix(stMatrix)
+            if (!renderWhenDirty)
+                frameAvailable = false
+            if (renderWhenDirty) {
+                textureUpdateCount++
+                if (shouldLogFrameEvent(textureUpdateCount)) {
+                    Log.i(TAG, "Dirty updateTexImage #$textureUpdateCount completed on ${Thread.currentThread().name}")
+                }
+            }
+            if (renderWhenDirty && firstFrameDrawLogged.compareAndSet(false, true)) {
+                Log.i(TAG, "First decoder frame drawn on ${Thread.currentThread().name}")
+            }
+        }
+
+        // --- PASS 1: OES to FBO ---
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
+        GLES30.glViewport(0, 0, screenWidth, screenHeight)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        GLES30.glUseProgram(copyProgram)
+
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
+        GLES30.glUniform1i(uCopyTextureLoc, 0)
+        GLES30.glUniformMatrix4fv(uCopySTMatrixLoc, 1, false, stMatrix, 0)
+
+        vertexBuffer?.position(0)
+        GLES30.glVertexAttribPointer(aCopyPosLoc, 2, GLES30.GL_FLOAT, false, VERTEX_STRIDE, vertexBuffer)
+        GLES30.glEnableVertexAttribArray(aCopyPosLoc)
+        vertexBuffer?.position(2)
+        GLES30.glVertexAttribPointer(aCopyTexLoc, 2, GLES30.GL_FLOAT, false, VERTEX_STRIDE, vertexBuffer)
+        GLES30.glEnableVertexAttribArray(aCopyTexLoc)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+
+        // --- PASS 2: FBO to Screen (Effects) ---
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        GLES30.glViewport(0, 0, screenWidth, screenHeight)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        GLES30.glUseProgram(effectProgram)
+
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTextureId)
+        GLES30.glUniform1i(uEffTextureLoc, 0)
+        GLES30.glUniform1f(uEffTimeLoc, frameCount)
+        GLES30.glUniform2f(uEffScreenSizeLoc, screenWidth.toFloat(), screenHeight.toFloat())
+        GLES30.glUniform1f(uEffSharpnessLoc, sharpness)
+
+        vertexBuffer?.position(0)
+        GLES30.glVertexAttribPointer(aEffPosLoc, 2, GLES30.GL_FLOAT, false, VERTEX_STRIDE, vertexBuffer)
+        GLES30.glEnableVertexAttribArray(aEffPosLoc)
+        vertexBuffer?.position(2)
+        GLES30.glVertexAttribPointer(aEffTexLoc, 2, GLES30.GL_FLOAT, false, VERTEX_STRIDE, vertexBuffer)
+        GLES30.glEnableVertexAttribArray(aEffTexLoc)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+
+        frameCount += 1.0f
+        if (frameCount > 1000000f) frameCount = 0f
+
+        GLES30.glDisableVertexAttribArray(aEffPosLoc)
+        GLES30.glDisableVertexAttribArray(aEffTexLoc)
+    }
+
+    override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
+        val callbackCount = if (renderWhenDirty) frameCallbackCount.incrementAndGet() else 0L
+        if (renderWhenDirty)
+            dirtyFrameAvailable.set(true)
+        else
+            frameAvailable = true
+        if (renderWhenDirty && firstFrameCallbackLogged.compareAndSet(false, true)) {
+            Log.i(TAG, "First decoder frame available on ${Thread.currentThread().name}; requesting render")
+        }
+        if (renderWhenDirty && shouldLogFrameEvent(callbackCount)) {
+            Log.i(TAG, "Dirty frame callback #$callbackCount on ${Thread.currentThread().name}; requesting render")
+        }
+        if (renderWhenDirty) {
+            Trace.beginSection("DebandRenderer.onFrameAvailable")
+            try {
+                Trace.beginSection("DebandRenderer.requestRender")
+                try {
+                    onRequestRender()
+                } finally {
+                    Trace.endSection()
+                }
+            } finally {
+                Trace.endSection()
+            }
+        } else {
+            onRequestRender()
+        }
+    }
+
+    private fun shouldLogFrameEvent(count: Long) = count <= 5 || count % FRAME_LOG_INTERVAL == 0L
+
+    /**
+     * Releases the SurfaceTexture and its Surface. Safe to call from any thread.
+     */
+    fun release() {
+        surface?.release()
+        surface = null
+        surfaceTexture?.release()
+        surfaceTexture = null
+    }
+
+    /**
+     * Deletes the GL objects. MUST run on the GLSurfaceView's GL thread with a
+     * current EGL context -- call it via GLSurfaceView.queueEvent, never directly
+     * from the main thread, where these calls have no current context and fail.
+     */
+    fun releaseGl() {
+        if (copyProgram != 0) {
+            GLES30.glDeleteProgram(copyProgram)
+            copyProgram = 0
+        }
+        if (effectProgram != 0) {
+            GLES30.glDeleteProgram(effectProgram)
+            effectProgram = 0
+        }
+        GLES30.glDeleteTextures(2, intArrayOf(oesTextureId, fboTextureId), 0)
+        GLES30.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
+        oesTextureId = 0
+        fboTextureId = 0
+        fboId = 0
+    }
+
+    private fun createProgram(vertexSource: String, fragmentSource: String): Int {
+        val vertexShader = loadShader(GLES30.GL_VERTEX_SHADER, vertexSource)
+        if (vertexShader == 0) return 0
+
+        val fragmentShader = loadShader(GLES30.GL_FRAGMENT_SHADER, fragmentSource)
+        if (fragmentShader == 0) return 0
+
+        val program = GLES30.glCreateProgram()
+        if (program == 0) return 0
+
+        GLES30.glAttachShader(program, vertexShader)
+        GLES30.glAttachShader(program, fragmentShader)
+        GLES30.glLinkProgram(program)
+
+        val linkStatus = IntArray(1)
+        GLES30.glGetProgramiv(program, GLES30.GL_LINK_STATUS, linkStatus, 0)
+        if (linkStatus[0] != GLES30.GL_TRUE) {
+            val log = GLES30.glGetProgramInfoLog(program)
+            GLES30.glDeleteProgram(program)
+            throw RuntimeException("Program link failed: $log")
+        }
+
+        return program
+    }
+
+    private fun loadShader(type: Int, source: String): Int {
+        val shader = GLES30.glCreateShader(type)
+        if (shader == 0) return 0
+
+        GLES30.glShaderSource(shader, source)
+        GLES30.glCompileShader(shader)
+
+        val compileStatus = IntArray(1)
+        GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, compileStatus, 0)
+        if (compileStatus[0] != GLES30.GL_TRUE) {
+            val log = GLES30.glGetShaderInfoLog(shader)
+            GLES30.glDeleteShader(shader)
+            throw RuntimeException("Shader compile failed: $log")
+        }
+
+        return shader
+    }
+}

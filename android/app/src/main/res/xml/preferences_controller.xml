@@ -33,7 +33,7 @@
 
     <Preference
         app:key="controller_mapping"
-        app:fragment="com.metallic.chiaki.settings.ControllerMappingSettingsFragment"
+        app:fragment="fi.madekivi.pleikkari.settings.ControllerMappingSettingsFragment"
         app:icon="@drawable/ic_gamepad"
         app:title="@string/preferences_controller_mapping_title" />
 </PreferenceScreen>

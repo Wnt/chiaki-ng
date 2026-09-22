@@ -113,10 +113,9 @@ if(debugOnlyProperties) {
 }
 
 android {
-    // PLE-568: the Kotlin package, R and BuildConfig stay in com.metallic.chiaki; only the
-    // installed package name changed. Moving namespace would move R/BuildConfig/databinding and
-    // re-resolve every relative class name in the manifests, which is the source move's job.
-    namespace "com.metallic.chiaki"
+    // PLE-573: the Kotlin package, R, BuildConfig and databinding moved from com.metallic.chiaki
+    // with the sources; the JNI symbol names in src/main/cpp follow this package.
+    namespace "fi.madekivi.pleikkari"
     compileSdk 35
     ndkVersion "28.2.13676358"
 

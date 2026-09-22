@@ -73,7 +73,7 @@ LOGCAT_PID=$!
 PING_PID=$!
 
 log "launch"
-"$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
+"$ADB" shell am start -n "$PKG/fi.madekivi.pleikkari.main.MainActivity" >/dev/null
 sleep 3
 PLEIKKARI_ALLOW_DANGEROUS=1 "$ADB" shell wm user-rotation lock 1
 sleep 3

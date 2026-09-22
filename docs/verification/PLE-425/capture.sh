@@ -47,7 +47,7 @@ start_stream(){
   "$ADB" shell input keyevent 224 >/dev/null 2>&1
   sleep 1
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
+  "$ADB" shell am start -n "$PKG/fi.madekivi.pleikkari.main.MainActivity" >/dev/null
   sleep 3
   "$ADB" exec-out screencap -p > "$OUT/${tag}_00_main.png"
   ui_tap_resource_id "$PKG:id/playButton" "$OUT/${tag}_00_main_ui.xml" "$PS5_NAME" || return 3
