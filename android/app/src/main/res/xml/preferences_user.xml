@@ -41,5 +41,10 @@
         <Preference
             app:key="about_version"
             app:title="@string/preferences_version_title" />
+
+        <Preference
+            app:key="about_attribution"
+            app:selectable="false"
+            app:summary="@string/preferences_about_attribution" />
     </PreferenceCategory>
 </PreferenceScreen>
