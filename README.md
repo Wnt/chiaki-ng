@@ -28,7 +28,7 @@ These two images are from a real Remote Play session between the Galaxy S22 Ultr
 
 ## Download
 
-Download the latest `android-port` APK from the stable [pleikkari-android-debug.apk](https://github.com/Wnt/chiaki-ng/releases/download/android-latest/pleikkari-android-debug.apk) link. Each workflow run also keeps a `pleikkari-android-debug` artifact for 30 days under the repository's [Actions](https://github.com/Wnt/chiaki-ng/actions/workflows/build-android.yml) page.
+Download the latest `android-port` APK from the stable [pleikkari-android-debug.apk](https://github.com/Wnt/pleikkari/releases/download/android-latest/pleikkari-android-debug.apk) link. Each workflow run also keeps a `pleikkari-android-debug` artifact for 30 days under the repository's [Actions](https://github.com/Wnt/pleikkari/actions/workflows/build-android.yml) page.
 
 This is a debug build signed with the project debug key. Android may ask you to allow installs from your browser or file manager. Existing development installs can be updated with `adb install -r pleikkari-android-debug.apk` without removing registration data; do not uninstall first if you want to retain registered consoles.
 
