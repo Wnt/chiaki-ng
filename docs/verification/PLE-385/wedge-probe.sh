@@ -41,7 +41,7 @@ set -uo pipefail
 REPO=/home/wnt/gta6
 HERE=$REPO/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 PS5_NAME=${PS5_NAME:-PS5-466}
 STREAM_SECS=${STREAM_SECS:-25}
 CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-70}
@@ -96,7 +96,7 @@ connect(){
   local LOG=$1 tag=$2 i n
   "$ADB" shell input keyevent 224 >/dev/null 2>&1   # WAKEUP
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null 2>&1
+  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null 2>&1
   sleep 3
   # After a kill -9 the app can take a few seconds to repopulate the console
   # list, so the tile is not necessarily there on the first dump.
@@ -146,7 +146,7 @@ if [ "$EXIT_MODE" = blackout-handshake ]; then
   log "trial $LABEL: connect, then blackout the console link mid-handshake"
   "$ADB" shell input keyevent 224 >/dev/null 2>&1
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null 2>&1
+  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null 2>&1
   sleep 3
   if ! ui_tap_resource_id "$PKG:id/playButton" "$OUT/${LABEL}_c1_main.xml" "$PS5_NAME"; then
     log "no tile"; exit 13
@@ -171,7 +171,7 @@ elif [ "$EXIT_MODE" = earlystop ]; then
   log "trial $LABEL: tapping connect, force-stopping ${EARLY_SECS}s later (mid-handshake)"
   "$ADB" shell input keyevent 224 >/dev/null 2>&1
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null 2>&1
+  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null 2>&1
   sleep 3
   if ! ui_tap_resource_id "$PKG:id/playButton" "$OUT/${LABEL}_c1_main.xml" "$PS5_NAME"; then
     log "no tile"; exit 13

@@ -11,7 +11,7 @@ REPO=/home/wnt/gta6
 WS=${WS:-/home/wnt/gta6}
 HERE=$WS/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 OUT=${OUT_DIR:-}
 FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
@@ -47,7 +47,7 @@ start_stream(){
   "$ADB" shell input keyevent 224 >/dev/null 2>&1
   sleep 1
   "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-  "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
+  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
   sleep 3
   "$ADB" exec-out screencap -p > "$OUT/${tag}_00_main.png"
   ui_tap_resource_id "$PKG:id/playButton" "$OUT/${tag}_00_main_ui.xml" "$PS5_NAME" || return 3

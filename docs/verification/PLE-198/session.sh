@@ -15,7 +15,7 @@ name=$1; prefs=$2
 : "${CAP:?}" "${ANDROID_SERIAL:?}"
 HARNESS=${HARNESS:-$CAP/harness/scripts/dev/ab}
 ADB=/home/wnt/gta6/scripts/dev/device-bin/adb
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 CHUNKS=${CHUNKS:-9}
 CHUNK_S=${CHUNK_S:-50}
 export AB_CAPTURES=$CAP AB_ADB=$ADB AB_NET_PROFILE=clean

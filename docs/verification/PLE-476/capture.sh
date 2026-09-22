@@ -21,7 +21,7 @@ WS=${WS:-/home/wnt/gta6}
 HERE=$WS/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
 IMPAIR=$WS/scripts/net/impairctl.py
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 OUT=${OUT_DIR:-}
 FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
@@ -74,7 +74,7 @@ LOGCAT_PID=$!
 PING_PID=$!
 
 log "launch"
-"$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
+"$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
 sleep 3
 PLEIKKARI_ALLOW_DANGEROUS=1 "$ADB" shell wm user-rotation lock 1
 sleep 3

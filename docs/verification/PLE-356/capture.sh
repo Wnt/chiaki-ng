@@ -21,7 +21,7 @@ ADB=$REPO/scripts/dev/device-bin/adb
 # resolve the workspace's live 327-line one, never fall back into the fork.
 IMPAIR=${IMPAIR:-$REPO/scripts/net/impairctl.py}
 [ -x "$IMPAIR" ] || { echo "capture.sh: impairctl.py not found or not executable at $IMPAIR (set IMPAIR= to override)" >&2; exit 1; }
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 OUT=${OUT_DIR:-}
 FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
@@ -114,7 +114,7 @@ connect_attempt(){
   "$ADB" logcat -v time > "$out" 2>/dev/null &
   LOGCAT_PID=$!
   log "launch (attempt $n)"
-  "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
+  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
   sleep 3
   PLEIKKARI_ALLOW_DANGEROUS=1 "$ADB" shell wm user-rotation lock 1
   sleep 3
@@ -160,7 +160,7 @@ for attempt in 1 2; do
     log "connect attempt $((attempt-1)) failed ($class); waiting 60s before retry (PLE-357 evidence: a bare retry ~60s later cleared the same wedge)"
     sleep 60
     exit_stream_gracefully || true
-    "$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null 2>&1 || true
+    "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null 2>&1 || true
     sleep 2
   fi
   attempt_log="$OUT/session_logcat_attempt${attempt}.txt"

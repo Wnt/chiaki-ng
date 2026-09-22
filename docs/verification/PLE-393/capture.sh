@@ -47,7 +47,7 @@ set -uo pipefail
 REPO=/home/wnt/gta6
 HERE=$REPO/scripts/dev/ab
 ADB=$REPO/scripts/dev/device-bin/adb
-PKG=com.metallic.chiaki
+PKG=fi.madekivi.pleikkari
 OUT=${OUT_DIR:-}
 FORCE=${FORCE:-0}
 for arg in "$@"; do [ "$arg" = --force ] && FORCE=1; done
@@ -76,7 +76,7 @@ log "wake, dismiss keyguard, launch"
 "$ADB" shell input keyevent 224 >/dev/null 2>&1   # WAKEUP
 sleep 1
 "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-"$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
+"$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
 sleep 3
 "$ADB" exec-out screencap -p > "$OUT/00_main.png"
 
@@ -216,7 +216,7 @@ for _ in $(seq 1 15); do sleep 1; streaming || { ok=1; break; }; done
 tail -n +$((B_QUIT_LINE+1)) "$LOG" | grep -m1 "Session quit:" > "$OUT/B_quit_reason.txt" || true
 
 log "scenario B control: fresh connect from the console list"
-"$ADB" shell am start -n "$PKG/.main.MainActivity" >/dev/null
+"$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
 sleep 2
 BEFORE_B=$(stats_count "$LOG")
 ui_tap_resource_id "$PKG:id/playButton" "$OUT/B_02_main_ui.xml" "$PS5_NAME" || { log "could not find $PS5_NAME tile for control connect"; exit 3; }
