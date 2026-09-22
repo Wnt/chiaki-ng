@@ -53,3 +53,91 @@ target_link_libraries(chiaki-jni "${ANDROID_LIB_LOG}" "${ANDROID_LIB_MEDIANDK}" 
 
 find_package (oboe REQUIRED CONFIG)
 target_link_libraries(chiaki-jni oboe::oboe)
+
+# PLE-524: adb-shell sanitizer stress tests (android/native-stress/README.md). Built only when
+# -PchiakiNativeStress=thread|address|hwaddress sets CHIAKI_ANDROID_NATIVE_STRESS; never packaged
+# into the APK, and chiaki-jni itself is left uninstrumented (use -PchiakiSanitizer for that).
+set(CHIAKI_ANDROID_NATIVE_STRESS "" CACHE STRING "Sanitizer for the native stress tests: thread, address or hwaddress (empty: not built)")
+set(CHIAKI_ANDROID_NATIVE_STRESS_OUTPUT_DIR "${CMAKE_BINARY_DIR}/native-stress" CACHE PATH "Where the stress tests and their runtime libraries are collected, per ABI")
+set(CHIAKI_ANDROID_NATIVE_STRESS_AUDIO_OUTPUT_SOURCE "" CACHE FILEPATH "audio-output.cpp to stress instead of the tree's own (the harness self-test)")
+if(CHIAKI_ANDROID_NATIVE_STRESS)
+    set(stress_sanitizer "${CHIAKI_ANDROID_NATIVE_STRESS}")
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+        set(stress_arch aarch64)
+        set(stress_triple aarch64-linux-android)
+    elseif(ANDROID_ABI STREQUAL "x86_64")
+        set(stress_arch x86_64)
+        set(stress_triple x86_64-linux-android)
+    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+        set(stress_arch arm)
+        set(stress_triple arm-linux-androideabi)
+    elseif(ANDROID_ABI STREQUAL "x86")
+        set(stress_arch i686)
+        set(stress_triple i686-linux-android)
+    else()
+        message(FATAL_ERROR "native stress: unknown ABI ${ANDROID_ABI}")
+    endif()
+    if(stress_sanitizer STREQUAL "thread")
+        set(stress_runtime tsan)
+        set(stress_supported aarch64 x86_64)
+    elseif(stress_sanitizer STREQUAL "address")
+        set(stress_runtime asan)
+        set(stress_supported aarch64 x86_64 arm i686)
+    elseif(stress_sanitizer STREQUAL "hwaddress")
+        set(stress_runtime hwasan)
+        set(stress_supported aarch64)
+    else()
+        message(FATAL_ERROR "CHIAKI_ANDROID_NATIVE_STRESS must be thread, address or hwaddress, not '${stress_sanitizer}'")
+    endif()
+    list(FIND stress_supported "${stress_arch}" stress_arch_index) # IN_LIST needs policy CMP0057
+    if(stress_arch_index EQUAL -1)
+        message(FATAL_ERROR "native stress: the NDK has no ${stress_sanitizer} runtime for ${ANDROID_ABI}; build with -PchiakiAbiFilters=<one of ${stress_supported}>")
+    endif()
+
+    execute_process(COMMAND "${CMAKE_CXX_COMPILER}" -print-resource-dir
+            OUTPUT_VARIABLE stress_clang_resource_dir OUTPUT_STRIP_TRAILING_WHITESPACE)
+    set(stress_runtime_lib "${stress_clang_resource_dir}/lib/linux/libclang_rt.${stress_runtime}-${stress_arch}-android.so")
+    set(stress_cxx_shared "${CMAKE_SYSROOT}/usr/lib/${stress_triple}/libc++_shared.so")
+    set(stress_push_libs "${stress_runtime_lib}" "${stress_cxx_shared}")
+    if(stress_sanitizer STREQUAL "hwaddress")
+        # Android 14+ ships the HWASan runtime; run.sh sets LD_HWASAN=1 so the linker uses it
+        # (and the system's HWASan libraries). The NDK copy crashes in its pre-init constructor there.
+        set(stress_push_libs "${stress_cxx_shared}")
+    endif()
+    foreach(stress_file "${stress_runtime_lib}" "${stress_cxx_shared}")
+        if(NOT EXISTS "${stress_file}")
+            message(FATAL_ERROR "native stress: ${stress_file} not found")
+        endif()
+    endforeach()
+
+    # Built into this configuration's own binary dir, then collected into the shared output dir
+    # on every build, so that dir always holds what the last build configured, never a binary
+    # another -PchiakiNativeStress* combination left behind.
+    set(stress_stage "${CMAKE_CURRENT_BINARY_DIR}/native-stress")
+    set(stress_out "${CHIAKI_ANDROID_NATIVE_STRESS_OUTPUT_DIR}/${ANDROID_ABI}")
+    add_executable(chiaki-audio-output-stress ../native-stress/audio-output-stress.cpp)
+    set_target_properties(chiaki-audio-output-stress PROPERTIES
+            CXX_STANDARD 17
+            RUNTIME_OUTPUT_DIRECTORY "${stress_stage}")
+    # The harness #includes audio-output.cpp, so its directory is on the include path either way.
+    target_include_directories(chiaki-audio-output-stress PRIVATE src/main/cpp)
+    if(CHIAKI_ANDROID_NATIVE_STRESS_AUDIO_OUTPUT_SOURCE)
+        target_compile_definitions(chiaki-audio-output-stress PRIVATE
+                "CHIAKI_STRESS_AUDIO_OUTPUT_SOURCE=\"${CHIAKI_ANDROID_NATIVE_STRESS_AUDIO_OUTPUT_SOURCE}\"")
+    endif()
+    target_compile_options(chiaki-audio-output-stress PRIVATE
+            -fsanitize=${stress_sanitizer} -fno-omit-frame-pointer -g)
+    target_link_options(chiaki-audio-output-stress PRIVATE -fsanitize=${stress_sanitizer})
+    target_link_libraries(chiaki-audio-output-stress chiaki-lib oboe::oboe "${ANDROID_LIB_LOG}")
+    # run.sh reads these back, so it never runs a build under the wrong name.
+    file(WRITE "${stress_stage}/SANITIZER" "${stress_sanitizer}\n")
+    file(WRITE "${stress_stage}/SOURCE" "${CHIAKI_ANDROID_NATIVE_STRESS_AUDIO_OUTPUT_SOURCE}\n")
+    add_custom_target(chiaki-native-stress-collect ALL
+            COMMAND "${CMAKE_COMMAND}" -E rm -rf "${stress_out}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${stress_out}"
+            COMMAND "${CMAKE_COMMAND}" -E copy
+                    "$<TARGET_FILE:chiaki-audio-output-stress>" "${stress_stage}/SANITIZER" "${stress_stage}/SOURCE"
+                    ${stress_push_libs} "$<TARGET_FILE:oboe::oboe>" "${stress_out}/"
+            DEPENDS chiaki-audio-output-stress
+            VERBATIM)
+endif()

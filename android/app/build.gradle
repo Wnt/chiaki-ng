@@ -56,17 +56,61 @@ def psnMockArg = (project.findProperty("chiakiPsnMock") ?: "").toString().trim()
 if(psnMockArg && !psnMockHosts.containsKey(psnMockArg))
     throw new GradleException("chiakiPsnMock must be one of ${psnMockHosts.keySet()}, not '$psnMockArg'")
 def psnMockHost = psnMockArg ? psnMockHosts[psnMockArg] : ""
-if(psnMockHost) {
-    gradle.taskGraph.whenReady { graph ->
-        if(graph.allTasks.any { it.name.toLowerCase().contains("release") })
-            throw new GradleException("chiakiPsnMock is debug-only; refusing to build a release variant with it")
-    }
-}
 def chiakiAbiFilters = (project.findProperty("chiakiAbiFilters") ?: "")
         .toString()
         .split(',')
         .collect { it.trim() }
         .findAll { it }
+
+// PLE-524: sanitizer builds, debug-only and off by default (android/native-stress/README.md).
+// -PchiakiSanitizer=address|hwaddress instruments the APK's whole native build (chiaki-lib and
+// chiaki-jni) and packages the NDK wrap.sh that loads the runtime at app start.
+// -PchiakiNativeStress=thread|address|hwaddress builds the adb-shell stress tests next to an
+// otherwise unchanged APK; TSan only works there, never inside an app process.
+def sanitizerArg = (project.findProperty("chiakiSanitizer") ?: "").toString().trim()
+if(sanitizerArg && !(sanitizerArg in ["address", "hwaddress"]))
+    throw new GradleException("chiakiSanitizer must be address or hwaddress, not '$sanitizerArg'")
+def nativeStressArg = (project.findProperty("chiakiNativeStress") ?: "").toString().trim()
+if(nativeStressArg && !(nativeStressArg in ["thread", "address", "hwaddress"]))
+    throw new GradleException("chiakiNativeStress must be thread, address or hwaddress, not '$nativeStressArg'")
+if(sanitizerArg && nativeStressArg && sanitizerArg != nativeStressArg)
+    throw new GradleException("chiakiSanitizer=$sanitizerArg and chiakiNativeStress=$nativeStressArg cannot share one native build")
+def nativeStressAudioOutputSource = (project.findProperty("chiakiNativeStressAudioOutputSource") ?: "").toString().trim()
+if(sanitizerArg == "hwaddress" || nativeStressArg == "hwaddress") {
+    // The NDK has no HWASan runtime for any other Android ABI.
+    if(!chiakiAbiFilters)
+        chiakiAbiFilters = ["arm64-v8a"]
+    else if(chiakiAbiFilters != ["arm64-v8a"])
+        throw new GradleException("hwaddress needs -PchiakiAbiFilters=arm64-v8a, not $chiakiAbiFilters")
+}
+def sanitizerCmakeArgs = []
+def sanitizerLinkerFlags = ""
+if(sanitizerArg == "address") {
+    def flags = "-fsanitize=address -fno-omit-frame-pointer"
+    sanitizerCmakeArgs += ["-DCMAKE_C_FLAGS=$flags", "-DCMAKE_CXX_FLAGS=$flags", "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address"]
+    sanitizerLinkerFlags = " -fsanitize=address"
+} else if(sanitizerArg == "hwaddress") {
+    sanitizerCmakeArgs += ["-DANDROID_SANITIZE=hwaddress"]
+}
+if(nativeStressArg) {
+    sanitizerCmakeArgs += ["-DCHIAKI_ANDROID_NATIVE_STRESS=$nativeStressArg",
+                           "-DCHIAKI_ANDROID_NATIVE_STRESS_OUTPUT_DIR=${layout.buildDirectory.dir("native-stress").get().asFile}"]
+    if(nativeStressAudioOutputSource)
+        sanitizerCmakeArgs += ["-DCHIAKI_ANDROID_NATIVE_STRESS_AUDIO_OUTPUT_SOURCE=${file(nativeStressAudioOutputSource)}"]
+}
+def debugOnlyProperties = []
+if(psnMockHost)
+    debugOnlyProperties += "chiakiPsnMock"
+if(sanitizerArg)
+    debugOnlyProperties += "chiakiSanitizer"
+if(nativeStressArg)
+    debugOnlyProperties += "chiakiNativeStress"
+if(debugOnlyProperties) {
+    gradle.taskGraph.whenReady { graph ->
+        if(graph.allTasks.any { it.name.toLowerCase().contains("release") })
+            throw new GradleException("${debugOnlyProperties.join(", ")} is debug-only; refusing to build a release variant with it")
+    }
+}
 
 android {
     namespace "com.metallic.chiaki"
@@ -104,7 +148,11 @@ android {
                         "-DCHIAKI_LIB_ENABLE_TAKION_SOCKET_TUNING=${takionSocketTuning ? 'ON' : 'OFF'}",
                         "-DANDROID_STL=c++_shared",
                         "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
-                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384"
+                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384$sanitizerLinkerFlags"
+                arguments.addAll(sanitizerCmakeArgs)
+                // AGP only builds targets with an artifact; the collect step has none.
+                if(nativeStressArg)
+                    targets "chiaki-jni", "chiaki-audio-output-stress", "chiaki-native-stress-collect"
             }
         }
     }
@@ -147,6 +195,10 @@ android {
                 applicationIdSuffix ".psnmock"
                 versionNameSuffix "-psnmock"
             }
+            // Same applicationId, so it installs over (and streams with) the registered app;
+            // the suffix is what tells a sanitized install apart in `dumpsys package`.
+            if(sanitizerArg)
+                versionNameSuffix = (versionNameSuffix ?: "") + "-$sanitizerArg"
         }
         release {
             minifyEnabled true
@@ -183,6 +235,36 @@ android {
         signingConfigs.debug.keyAlias = "androiddebugkey"
         signingConfigs.debug.keyPassword = "android"
     }
+}
+
+// PLE-524: the NDK's wrap.sh (and, for ASan, its runtime library) per packaged ABI. wrap.sh
+// only runs for a debuggable app whose native libraries are extracted on install.
+if(sanitizerArg) {
+    def ndkDir = android.ndkDirectory
+    def wrapSh = new File(ndkDir, "wrap.sh/${sanitizerArg == "address" ? "asan" : "hwasan"}.sh")
+    def prebuilt = new File(ndkDir, "toolchains/llvm/prebuilt").listFiles().find { it.isDirectory() }
+    def clangDir = new File(prebuilt, "lib/clang").listFiles().find { it.isDirectory() }
+    def runtimeArch = ["arm64-v8a": "aarch64", "armeabi-v7a": "arm", "x86": "i686", "x86_64": "x86_64"]
+    def abis = chiakiAbiFilters ?: runtimeArch.keySet().toList()
+    def generated = layout.buildDirectory.dir("generated/chiakiSanitizer").get().asFile
+    def sanitizerRuntime = tasks.register("chiakiSanitizerRuntime", Sync) {
+        into generated
+        abis.each { abi ->
+            from(wrapSh) {
+                into "resources/lib/$abi"
+                rename { "wrap.sh" }
+            }
+            if(sanitizerArg == "address") {
+                from(new File(clangDir, "lib/linux/libclang_rt.asan-${runtimeArch[abi]}-android.so")) {
+                    into "jniLibs/$abi"
+                }
+            }
+        }
+    }
+    android.sourceSets.debug.resources.srcDir(new File(generated, "resources"))
+    android.sourceSets.debug.jniLibs.srcDir(new File(generated, "jniLibs"))
+    android.packaging.jniLibs.useLegacyPackaging = true
+    tasks.named("preBuild") { dependsOn sanitizerRuntime }
 }
 
 ksp {
