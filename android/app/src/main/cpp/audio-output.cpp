@@ -95,18 +95,14 @@ extern "C" void *android_chiaki_audio_output_new(ChiakiLog *log, uint32_t buffer
 	return new std::shared_ptr<AudioOutput>(std::move(ao));
 }
 
-// Call with stream_mutex held. Every place that drops ao->stream must come through here.
-// openStream(std::shared_ptr&) hands back a pointer whose deleter only deletes: unlike the
-// ManagedStream it replaced (PLE-514), releasing it does not close the AAudio stream. The
-// AAudio data-callback thread then keeps calling into the deleted oboe::AudioStream (PLE-541:
-// SIGTRAP in callOnAudioReady on every stream end). close() stops the stream and joins that
-// thread, so after it returns no onAudioReady is running or can start. Closing a stream that
-// Oboe's error thread already closed is a no-op.
-static void audio_output_close_stream(AudioOutput *ao)
+// Call with stream_mutex held. Dropping the last shared_ptr does not close the stream: neither
+// ~AudioStreamAAudio nor ~AudioStream calls close() (Oboe 1.10.0), so AAudio would keep calling
+// into the destroyed object from its callback thread. ManagedStream's deleter used to do this.
+// Without it every real stream end died with SIGTRAP in callOnAudioReady on AAudio_1 (PLE-541).
+static void audio_output_release_stream(AudioOutput *ao)
 {
-	if(!ao->stream)
-		return;
-	ao->stream->close();
+	if(ao->stream)
+		ao->stream->close();
 	ao->stream = nullptr;
 }
 
@@ -118,7 +114,7 @@ extern "C" void android_chiaki_audio_output_free(void *audio_output)
 	{
 		std::lock_guard<std::mutex> lock((*handle)->stream_mutex);
 		(*handle)->closing = true;
-		audio_output_close_stream(handle->get());
+		audio_output_release_stream(handle->get());
 	}
 	delete handle;
 }
@@ -175,7 +171,7 @@ extern "C" void android_chiaki_audio_output_settings(uint32_t channels, uint32_t
 {
 	auto ao = reinterpret_cast<std::shared_ptr<AudioOutput> *>(audio_output)->get();
 	std::lock_guard<std::mutex> lock(ao->stream_mutex);
-	audio_output_close_stream(ao);
+	audio_output_release_stream(ao);
 	ao->buf.SetChunksCount(audio_fifo_chunks(channels, rate, ao->fifo_ms));
 	ao->underruns.store(0, std::memory_order_relaxed);
 	ao->channels = channels;
@@ -282,7 +278,7 @@ void AudioOutputCallback::onErrorAfterClose(oboe::AudioStream *stream, oboe::Res
 	if(ao->closing || ao->stream.get() != stream)
 		return; // being torn down, or already replaced
 
-	audio_output_close_stream(ao.get());
+	ao->stream = nullptr; // Oboe closed it before calling us
 
 	// The closed stream's callback was the only consumer, so this thread may drain what piled
 	// up while no device was attached. Otherwise the new stream would start behind a full
