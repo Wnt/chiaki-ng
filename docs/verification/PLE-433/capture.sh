@@ -75,7 +75,7 @@ LOG="$OUT/session_logcat.txt"
 LOGCAT_PID=$!
 
 log "launch, tap $PS5_NAME to connect"
-"$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
+"$ADB" shell am start -n "$PKG/fi.madekivi.pleikkari.main.MainActivity" >/dev/null
 sleep 3
 "$ADB" exec-out screencap -p > "$OUT/00_main.png"
 ui_tap_resource_id "$PKG:id/playButton" "$OUT/00_main_ui.xml" "$PS5_NAME" || { log "could not find $PS5_NAME tile"; exit 3; }

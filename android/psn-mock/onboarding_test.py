@@ -283,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     device.shell(f"setprop {FAULT_PROPERTY} {args.fault or 'none'}")
     device.shell("logcat -b all -c", check=False)
     # As the launcher does, so a later tap on the icon brings this task back instead of stacking a new screen.
-    device.shell(f"am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n {PKG}/com.metallic.chiaki.main.MainActivity")
+    device.shell(f"am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n {PKG}/fi.madekivi.pleikkari.main.MainActivity")
     started = last_change = time.monotonic()
     last_signature = ""
     signed_in_tapped = submitted = False

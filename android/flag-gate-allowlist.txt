@@ -1,6 +1,6 @@
 # Fork-side entries for scripts/dev/flag-gate.py (format: see scripts/dev/flag-gate-allowlist.txt).
-debug-guard | source set: android/app/src/debug/java/com/metallic/chiaki/remote/PsnMockFault.kt | debug-harness | PLE-302: reintroduces a known onboarding defect in a -PchiakiPsnMock build only, when a debug.* device property asks, so the onboarding driver can prove it catches it
-debug-guard | source set: android/app/src/debug/java/com/metallic/chiaki/regist/PsnMockWebAuthnProbe.kt | debug-harness | PLE-324: WebAuthn probe activity declared only by the -PchiakiPsnMock manifest; measures whether a browser-mode WebView can do passkeys, changes no user path
+debug-guard | source set: android/app/src/debug/java/fi/madekivi/pleikkari/remote/PsnMockFault.kt | debug-harness | PLE-302: reintroduces a known onboarding defect in a -PchiakiPsnMock build only, when a debug.* device property asks, so the onboarding driver can prove it catches it
+debug-guard | source set: android/app/src/debug/java/fi/madekivi/pleikkari/regist/PsnMockWebAuthnProbe.kt | debug-harness | PLE-324: WebAuthn probe activity declared only by the -PchiakiPsnMock manifest; measures whether a browser-mode WebView can do passkeys, changes no user path
 
 # --- PLE-422: devtools error-quit injection, so the error dialog and Reconnect (StreamActivity's
 # real state machine, not a shortcut) can be exercised on demand instead of waiting on a real
@@ -8,7 +8,14 @@ debug-guard | source set: android/app/src/debug/java/com/metallic/chiaki/regist/
 # BuildConfig.DEBUG is true (checked at StreamActivity.onCreate before any receiver exists), so a
 # release build never registers the BroadcastReceiver and the action has no listener to reach;
 # unused, it costs one extra Log.w-free field and one skipped `if`. See docs/devtools-quit-injection.md.
-debug-guard | com/metallic/chiaki/stream/StreamActivity.kt: if(BuildConfig.DEBUG) | debug-harness | PLE-422: gates registration of the adb-only QuitEvent injection receiver; a release build never registers it, so the broadcast action has no listener
+debug-guard | fi/madekivi/pleikkari/stream/StreamActivity.kt: if(BuildConfig.DEBUG) | debug-harness | PLE-422: gates registration of the adb-only QuitEvent injection receiver; a release build never registers it, so the broadcast action has no listener
 adb-only-extra | EXTRA_QUIT_REASON | debug-harness | PLE-422: int extra on the devtools-only INJECT_QUIT_REASON broadcast; set only by `adb shell am broadcast`, read only by the BuildConfig.DEBUG-gated receiver above
 
 default-off-pref | stream_senkusha_fallback_notice | measurement | PLE-509: one-shot toast when Senkusha fails and a fallback MTU/RTT is used; off so today's silence (PLE-490's flagged gap) stays the A/B baseline until the notice is measured worth keeping
+# PLE-573: these six moved here from scripts/dev/flag-gate-allowlist.txt with the source tree (com/metallic/chiaki -> fi/madekivi/pleikkari), so the rename and its allowlist land together.
+debug-guard | fi/madekivi/pleikkari/main/MainActivity.kt: if(BuildConfig.DEBUG && intent.getBooleanExtra(StreamActivity.EXTRA_DIAGNOSTICS_PREVIEW, false)) | debug-harness | PLE-89: opens StreamActivity on a canned diagnostics overlay with no console, for screenshots; the real overlay is the stream_diagnostics_overlay setting
+debug-guard | fi/madekivi/pleikkari/stream/StreamActivity.kt: val diagnosticsPreview = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_DIAGNOSTICS_PREVIEW, false) | debug-harness | PLE-89: substitutes a fake ConnectInfo so the diagnostics overlay renders without a PS5, for screenshots only
+debug-guard | fi/madekivi/pleikkari/main/MainActivity.kt: ?.takeIf { BuildConfig.DEBUG && it in setOf(PREVIEW_WELCOME, PREVIEW_CONSOLES, PREVIEW_SUMMARY) } | debug-harness | PLE-219/PLE-240: renders a fixed onboarding step for layout-quality captures; the real onboarding path does not read it
+debug-guard | fi/madekivi/pleikkari/regist/RegistExecuteActivity.kt: if(BuildConfig.DEBUG && previewState != null) | debug-harness | PLE-219: renders the registration running/success state without a console, for layout-quality captures
+debug-guard | source set: android/app/src/debug/java/fi/madekivi/pleikkari/remote/PsnMockBanner.kt | debug-harness | PLE-284: on-screen banner shown only in a -PchiakiPsnMock build, so a mock-backed build is never mistaken for a real one
+debug-guard | source set: android/app/src/debug/java/fi/madekivi/pleikkari/remote/PsnMockBuild.kt | debug-harness | PLE-284: selects the mock PSN endpoints; debug source set only, so a release build cannot resolve to the mock

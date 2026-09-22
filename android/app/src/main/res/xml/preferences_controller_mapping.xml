@@ -1,42 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_cross"
         app:title="Cross (Select)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_circle"
         app:title="Circle (Back)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_square"
         app:title="Square" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_triangle"
         app:title="Triangle" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_l1"
         app:title="L1 (Left Bumper)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_r1"
         app:title="R1 (Right Bumper)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_l2"
         app:title="L2 (Left Trigger)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_r2"
         app:title="R2 (Right Trigger)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_l3"
         app:title="L3 (Left Stick Click)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_r3"
         app:title="R3 (Right Stick Click)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_options"
         app:title="Options (Start)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_share"
         app:title="Share (Select)" />
-    <com.metallic.chiaki.settings.KeyMappingPreference
+    <fi.madekivi.pleikkari.settings.KeyMappingPreference
         app:key="mapping_ps"
         app:title="PS Button" />
 </PreferenceScreen>

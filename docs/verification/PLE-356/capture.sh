@@ -114,7 +114,7 @@ connect_attempt(){
   "$ADB" logcat -v time > "$out" 2>/dev/null &
   LOGCAT_PID=$!
   log "launch (attempt $n)"
-  "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null
+  "$ADB" shell am start -n "$PKG/fi.madekivi.pleikkari.main.MainActivity" >/dev/null
   sleep 3
   PLEIKKARI_ALLOW_DANGEROUS=1 "$ADB" shell wm user-rotation lock 1
   sleep 3
@@ -160,7 +160,7 @@ for attempt in 1 2; do
     log "connect attempt $((attempt-1)) failed ($class); waiting 60s before retry (PLE-357 evidence: a bare retry ~60s later cleared the same wedge)"
     sleep 60
     exit_stream_gracefully || true
-    "$ADB" shell am start -n "$PKG/com.metallic.chiaki.main.MainActivity" >/dev/null 2>&1 || true
+    "$ADB" shell am start -n "$PKG/fi.madekivi.pleikkari.main.MainActivity" >/dev/null 2>&1 || true
     sleep 2
   fi
   attempt_log="$OUT/session_logcat_attempt${attempt}.txt"

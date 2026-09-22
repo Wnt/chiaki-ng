@@ -8,7 +8,7 @@
     android:clipChildren="false"
     tools:ignore="RtlHardcoded,RtlSymmetry">
 
-    <com.metallic.chiaki.touchcontrols.ControlsBackgroundView
+    <fi.madekivi.pleikkari.touchcontrols.ControlsBackgroundView
         android:id="@+id/controlsBackgroundView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -43,7 +43,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="1">
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/l2ButtonView"
             android:layout_width="64dp"
             android:layout_height="64dp"
@@ -56,7 +56,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/l1ButtonView"
             android:layout_width="56dp"
             android:layout_height="64dp"
@@ -67,7 +67,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/l3ButtonView"
             android:layout_width="56dp"
             android:layout_height="56dp"
@@ -80,7 +80,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/r3ButtonView"
             android:layout_width="56dp"
             android:layout_height="56dp"
@@ -93,7 +93,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/r1ButtonView"
             android:layout_width="56dp"
             android:layout_height="64dp"
@@ -104,7 +104,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/r2ButtonView"
             android:layout_width="64dp"
             android:layout_height="64dp"
@@ -117,7 +117,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.DPadView
+        <fi.madekivi.pleikkari.touchcontrols.DPadView
             android:id="@+id/dpadView"
             android:layout_width="120dp"
             android:layout_height="120dp"
@@ -134,7 +134,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent">
 
-            <com.metallic.chiaki.touchcontrols.ButtonView
+            <fi.madekivi.pleikkari.touchcontrols.ButtonView
                 android:id="@+id/crossButtonView"
                 android:layout_width="124dp"
                 android:layout_height="62dp"
@@ -148,7 +148,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent" />
 
-            <com.metallic.chiaki.touchcontrols.ButtonView
+            <fi.madekivi.pleikkari.touchcontrols.ButtonView
                 android:id="@+id/moonButtonView"
                 android:layout_width="62dp"
                 android:layout_height="124dp"
@@ -162,7 +162,7 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <com.metallic.chiaki.touchcontrols.ButtonView
+            <fi.madekivi.pleikkari.touchcontrols.ButtonView
                 android:id="@+id/pyramidButtonView"
                 android:layout_width="124dp"
                 android:layout_height="62dp"
@@ -176,7 +176,7 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
-            <com.metallic.chiaki.touchcontrols.ButtonView
+            <fi.madekivi.pleikkari.touchcontrols.ButtonView
                 android:id="@+id/boxButtonView"
                 android:layout_width="62dp"
                 android:layout_height="124dp"
@@ -191,7 +191,7 @@
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <com.metallic.chiaki.touchcontrols.TouchpadView
+        <fi.madekivi.pleikkari.touchcontrols.TouchpadView
             android:id="@+id/touchpadView"
             android:layout_width="104dp"
             android:layout_height="56dp"
@@ -202,7 +202,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/shareButtonView"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -215,7 +215,7 @@
             app:layout_constraintStart_toEndOf="@id/dpadView"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/optionsButtonView"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -228,7 +228,7 @@
             app:layout_constraintEnd_toStartOf="@id/faceButtonsLayout"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.ButtonView
+        <fi.madekivi.pleikkari.touchcontrols.ButtonView
             android:id="@+id/psButtonView"
             android:layout_width="48dp"
             android:layout_height="48dp"
@@ -241,7 +241,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.metallic.chiaki.touchcontrols.AnalogStickView
+        <fi.madekivi.pleikkari.touchcontrols.AnalogStickView
             android:id="@+id/leftAnalogStickView"
             android:layout_width="152dp"
             android:layout_height="136dp"
@@ -252,7 +252,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:radius="@dimen/control_analog_stick_radius" />
 
-        <com.metallic.chiaki.touchcontrols.AnalogStickView
+        <fi.madekivi.pleikkari.touchcontrols.AnalogStickView
             android:id="@+id/rightAnalogStickView"
             android:layout_width="152dp"
             android:layout_height="136dp"

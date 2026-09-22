@@ -8,7 +8,7 @@
 
 It checks three things, and fails if any does not hold:
   1. `-PchiakiPsnMock=... assembleRelease` is refused by Gradle (only with --build);
-  2. the release APK's package is com.metallic.chiaki, not the .psnmock twin;
+  2. the release APK's package is fi.madekivi.pleikkari, not the .psnmock twin;
   3. no entry of the release APK (dex, manifest, resources, native libs) contains a mock marker,
      searched as UTF-8 and UTF-16LE (binary XML), while Sony's production sign-in host is found,
      so the scan is known to be reading the code at all.
@@ -28,7 +28,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ANDROID = HERE.parent
 WORKSPACE = Path(os.environ.get("PLEIKKARI_WORKSPACE_ROOT", "/home/wnt/gta6"))
-MARKERS = ["madekivi", "pleikkari-psn", "psnmock", "PSN MOCK", "__mock"]
+# PLE-573: "lab.madekivi.fi", not "madekivi": the app package and every class is fi.madekivi.pleikkari.
+MARKERS = ["lab.madekivi.fi", "pleikkari-psn", "psnmock", "PSN MOCK", "__mock"]
 PRODUCTION = "auth.api.sonyentertainmentnetwork.com"
 
 
@@ -94,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
 
     package = package_of(args.apk)
     say(f"{args.apk}: package {package}")
-    if package != "com.metallic.chiaki":
+    if package != "fi.madekivi.pleikkari":
         failures.append(f"release package is {package}")
     hits, production = scan(args.apk)
     if hits:
