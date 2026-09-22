@@ -51,6 +51,7 @@ import fi.madekivi.pleikkari.remote.ConnectPhase
 import fi.madekivi.pleikkari.remote.applyTo
 import fi.madekivi.pleikkari.remote.connectProgress
 import fi.madekivi.pleikkari.remote.hideConnectBar
+import fi.madekivi.pleikkari.remote.streamConnectPhase
 import fi.madekivi.pleikkari.R
 import fi.madekivi.pleikkari.common.Preferences
 import fi.madekivi.pleikkari.common.ext.viewModelFactory
@@ -251,6 +252,10 @@ class StreamActivity : AppCompatActivity()
 		}
 
 		viewModel.session.state.observe(this, Observer { this.stateChanged(it) })
+		viewModel.remoteConnectPhase.observe(this, Observer {
+			remoteConnectPhase = it
+			updateConnectOverlay()
+		})
 		if(BuildConfig.DEBUG)
 			quitReasonInjector = registerQuitReasonInjector()
 		if(diagnosticsPreview || preferences.streamDiagnosticsOverlayEnabled)
@@ -1186,19 +1191,33 @@ class StreamActivity : AppCompatActivity()
 				dialogContents = null
 		}
 
-	private fun stateChanged(state: StreamState)
+	private var streamState: StreamState = StreamStateIdle
+	private var remoteConnectPhase: ConnectPhase? = null
+
+	/**
+	 * PLE-335/PLE-337: a console that has just been linked needs a moment before it accepts the
+	 * stream. Name that wait and keep a clock on it, rather than leaving a bare spinner or - as
+	 * before - raising "Session has quit". Before the session starts, a PSN remote connect's
+	 * control-plane steps are named the same way (see [streamConnectPhase]).
+	 */
+	private fun updateConnectOverlay()
 	{
-		val connecting = state == StreamStateConnecting || state == StreamStateLinkedStarting
-		binding.progressBar.visibility = if(connecting) View.VISIBLE else View.GONE
-		// PLE-335/PLE-337: a console that has just been linked needs a moment before it accepts the
-		// stream. Name that wait and keep a clock on it, rather than leaving a bare spinner or - as
-		// before - raising "Session has quit".
-		setConnectPhase(when(state)
+		val sessionPhase = when(streamState)
 		{
 			StreamStateLinkedStarting -> ConnectPhase.CONSOLE_NOT_READY
 			StreamStateConnecting -> ConnectPhase.STARTING_STREAM
 			else -> null
-		})
+		}
+		val phase = streamConnectPhase(sessionPhase, streamState == StreamStateIdle, remoteConnectPhase)
+		binding.progressBar.visibility = if(phase != null) View.VISIBLE else View.GONE
+		if(phase != connectPhase)
+			setConnectPhase(phase)
+	}
+
+	private fun stateChanged(state: StreamState)
+	{
+		streamState = state
+		updateConnectOverlay()
 		if(state == StreamStateConnected)
 			summaryAccumulator.connected(SystemClock.elapsedRealtime())
 

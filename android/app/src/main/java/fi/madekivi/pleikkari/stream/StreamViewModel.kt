@@ -14,6 +14,9 @@ import fi.madekivi.pleikkari.remote.AndroidPsnRemoteClient
 import fi.madekivi.pleikkari.remote.AndroidPsnRemoteNativeBridge
 import fi.madekivi.pleikkari.remote.PsnDevice
 import fi.madekivi.pleikkari.remote.PsnRemoteController
+import fi.madekivi.pleikkari.remote.ConnectPhase
+import fi.madekivi.pleikkari.remote.connectPhaseOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -54,6 +57,10 @@ class StreamViewModel(
 	}
 	private var remoteJob: Job? = null
 	private var remoteActive = false
+
+	/** The PSN control-plane phase while a remote connect runs in this screen; null otherwise. */
+	val remoteConnectPhase: LiveData<ConnectPhase?> =
+		remoteController?.state?.map(::connectPhaseOf)?.asLiveData() ?: MutableLiveData(null)
 
 	private val onScreenControlsPolicy = OnScreenControlsPolicy(preferences.onScreenControlsEnabled)
 	private var _onScreenControlsEnabled = MutableLiveData<Boolean>(onScreenControlsPolicy.visible)

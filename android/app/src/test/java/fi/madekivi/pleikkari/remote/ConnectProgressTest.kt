@@ -135,4 +135,19 @@ class ConnectProgressTest
 		}
 		assertEquals(1f, previousFraction, 1e-6f)
 	}
+
+	/** A PSN connect runs its control plane inside the stream screen: name each step there too. */
+	@Test
+	fun streamScreenNamesThePsnStepsBeforeTheSessionStarts()
+	{
+		assertEquals(ConnectPhase.REACHING_NETWORK, streamConnectPhase(null, true, ConnectPhase.REACHING_NETWORK))
+		assertEquals(ConnectPhase.OPENING_ROUTE, streamConnectPhase(null, true, ConnectPhase.OPENING_ROUTE))
+		// The session's own phases win once it runs.
+		assertEquals(ConnectPhase.STARTING_STREAM, streamConnectPhase(ConnectPhase.STARTING_STREAM, false, ConnectPhase.LINKING))
+		assertEquals(ConnectPhase.CONSOLE_NOT_READY, streamConnectPhase(ConnectPhase.CONSOLE_NOT_READY, false, ConnectPhase.STARTING_STREAM))
+		// Connected or quit: the controller stays in Streaming, but nothing is shown.
+		assertNull(streamConnectPhase(null, false, ConnectPhase.STARTING_STREAM))
+		// A LAN session has no control plane.
+		assertNull(streamConnectPhase(null, true, null))
+	}
 }

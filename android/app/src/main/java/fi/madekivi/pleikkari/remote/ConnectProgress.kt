@@ -81,6 +81,16 @@ fun connectPhaseOf(state: PsnRemoteState): ConnectPhase? = when(state)
 }
 
 /**
+ * The phase the stream screen's connect overlay shows. The stream session's own phases
+ * ([ConnectPhase.STARTING_STREAM], [ConnectPhase.CONSOLE_NOT_READY]) win. Before the session has
+ * started - a PSN remote connect runs its whole control plane ([sessionIdle], phases 1..4) inside
+ * the stream screen - the control-plane phase is shown instead, so the screen is never left black
+ * while the console is being reached. Once the session has moved on (connected, quit), neither is.
+ */
+fun streamConnectPhase(sessionPhase: ConnectPhase?, sessionIdle: Boolean, remotePhase: ConnectPhase?): ConnectPhase? =
+	sessionPhase ?: remotePhase.takeIf { sessionIdle }
+
+/**
  * PLE-340: the user asked twice for a bar with no digits - "a progress bar that is timed to fill
  * in about 45 seconds. and only if it takes longer than that it should say 'this is taking longer
  * than usual'". 45 s is the measured end-to-end first run above, rounded up slightly.
