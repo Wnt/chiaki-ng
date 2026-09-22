@@ -16,7 +16,7 @@ echo "serial $ANDROID_SERIAL"
 
 /home/wnt/gta6/scripts/dev/app-state.sh backup
 "$ADB" install -r "$apk"
-"$ADB" shell dumpsys package com.metallic.chiaki | grep -m2 -E 'versionName|lastUpdateTime'
+"$ADB" shell dumpsys package fi.madekivi.pleikkari | grep -m2 -E 'versionName|lastUpdateTime'
 
 python3 "$MKPREFS" --pull-base "$CAP/base_prefs.xml"
 # Every flag but the boost is pinned to its shipped default (the PLE-517 arm-A set),
