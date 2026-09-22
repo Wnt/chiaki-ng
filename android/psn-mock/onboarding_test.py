@@ -9,7 +9,7 @@
     android/psn-mock/onboarding_test.py --link nolink --fault settings-redirect   # must FAIL (PLE-302)
     android/psn-mock/onboarding_test.py --link nolink --exit x   # leave the tab by its X instead of Finish (PLE-323)
 
-It starts from a first-run state of com.metallic.chiaki.psnmock (a separate app from the
+It starts from a first-run state of fi.madekivi.pleikkari.psnmock (a separate app from the
 real one), taps Sign in, fills the mock's password form in the browser tab, taps the tab's
 Finish sign-in button on the blank redirect page and waits. With --play it then taps the
 listed console: the mock has no push service, so the link fails with HTTP 501, and the run
@@ -52,7 +52,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ANDROID = HERE.parent
 WORKSPACE = Path(os.environ.get("PLEIKKARI_WORKSPACE_ROOT", "/home/wnt/gta6"))
-PKG = "com.metallic.chiaki.psnmock"
+PKG = "fi.madekivi.pleikkari.psnmock"
 HOSTS = {"verified": "pleikkari-psn.lab.madekivi.fi", "nolink": "pleikkari-psn-nolink.lab.madekivi.fi"}
 BROWSERS = {"com.android.chrome", "com.chrome.beta", "com.chrome.dev", "org.mozilla.firefox", "com.sec.android.app.sbrowser"}
 FAULTS = ("redirect-dead-end", "settings-redirect", "instruction-paragraph", "exit-loses-code")  # PsnMockFault.kt

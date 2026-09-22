@@ -37,7 +37,7 @@ import com.metallic.chiaki.remote.PsnServiceEndpoints
  * the code and never logs it.
  *
  * ```
- * adb shell am start -n com.metallic.chiaki.psnmock/com.metallic.chiaki.regist.PsnMockWebAuthnProbe \
+ * adb shell am start -n fi.madekivi.pleikkari.psnmock/com.metallic.chiaki.regist.PsnMockWebAuthnProbe \
  *     --es mode browser|app|none --es target mock|sony
  * adb logcat -s PsnWebAuthnProbe
  * ```

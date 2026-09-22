@@ -95,14 +95,14 @@ system image, so it needs Android 14+. The versionName gets a `-address` or
 
 The applicationId is unchanged, so the APK installs over the registered app
 and can stream to the PS5. That also means you must reinstall a normal build
-afterwards. Check `dumpsys package com.metallic.chiaki | grep versionName` before
+afterwards. Check `dumpsys package fi.madekivi.pleikkari | grep versionName` before
 any A/B capture: a sanitized app is several times slower and would ruin the
 measurement. Follow AGENTS.md rule 11 (`app-state.sh backup`, `install -r`
 only). A sanitizer report lands in logcat under the `wrap.sh` tag and in the
 tombstone. The build writes the usual `app-debug.apk`, so rebuild before
 handing that path to `emu.sh install`.
 
-Proof it took effect: `adb shell run-as com.metallic.chiaki cat /proc/<pid>/environ`
+Proof it took effect: `adb shell run-as fi.madekivi.pleikkari cat /proc/<pid>/environ`
 shows `LD_PRELOAD=…libclang_rt.asan…` for ASan.
 
 ## Limits found so far
